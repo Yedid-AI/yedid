@@ -35,7 +35,7 @@ export function Sidebar() {
 
   return (
     <aside
-      className="bg-sidebar border-r border-sidebar-border flex flex-col h-screen shrink-0 transition-all duration-200"
+      className="bg-sidebar border-r border-sidebar-border shadow-soft-sm flex flex-col h-screen shrink-0 transition-all duration-200"
       style={{ width: collapsed ? 60 : 224 }}
     >
       {/* Header */}
@@ -66,7 +66,7 @@ export function Sidebar() {
               end={item.path === '/'}
               title={collapsed ? item.label : undefined}
               className={({ isActive }) =>
-                `flex items-center rounded-md transition-colors ${
+                `flex items-center rounded-md transition-all duration-150 ${
                   collapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2'
                 } text-[13px] ${
                   isActive

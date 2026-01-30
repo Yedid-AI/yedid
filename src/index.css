@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 @theme {
-  /* Background */
-  --color-background: #FFFFFF;
+  /* Background — off-white for depth contrast with white cards */
+  --color-background: #F9F9F8;
   --color-foreground: #37352F;
   --color-card: #FFFFFF;
   --color-card-foreground: #37352F;
@@ -25,9 +25,9 @@
   --color-destructive: #E03E3E;
   --color-destructive-foreground: #FFFFFF;
 
-  /* Border / Input / Ring */
-  --color-border: #E3E2E0;
-  --color-input: #E3E2E0;
+  /* Border / Input / Ring — softer borders, shadows do the separation */
+  --color-border: #EBEBEA;
+  --color-input: #EBEBEA;
   --color-ring: #2383E2;
 
   /* Sidebar (light) */
@@ -40,18 +40,25 @@
   --color-sidebar-accent-foreground: #37352F;
   --color-sidebar-ring: #2383E2;
 
-  /* Radius & Font */
-  --radius: 0.25rem;
+  /* Radius — rounder for soft modern feel */
+  --radius: 0.625rem;
   --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  /* Soft layered shadows — two-layer composite for depth */
+  --shadow-soft-sm: 0 1px 2px 0 rgba(0,0,0,0.03), 0 1px 3px 0 rgba(0,0,0,0.06);
+  --shadow-soft: 0 1px 3px 0 rgba(0,0,0,0.04), 0 4px 12px 0 rgba(0,0,0,0.06);
+  --shadow-soft-md: 0 2px 4px 0 rgba(0,0,0,0.04), 0 8px 24px 0 rgba(0,0,0,0.08);
+  --shadow-soft-lg: 0 4px 8px 0 rgba(0,0,0,0.04), 0 12px 40px 0 rgba(0,0,0,0.1);
+  --shadow-soft-xl: 0 8px 16px 0 rgba(0,0,0,0.06), 0 20px 56px 0 rgba(0,0,0,0.12);
 }
 
 /* Dark mode (activate by adding class="dark" on <html>) */
 .dark {
-  --color-background: #191919;
+  --color-background: #171717;
   --color-foreground: rgba(255, 255, 255, 0.9);
   --color-card: #202020;
   --color-card-foreground: rgba(255, 255, 255, 0.9);
-  --color-popover: #202020;
+  --color-popover: #252525;
   --color-popover-foreground: rgba(255, 255, 255, 0.9);
 
   --color-primary: #529CCA;
@@ -67,18 +74,25 @@
   --color-destructive: #FF7369;
   --color-destructive-foreground: #FFFFFF;
 
-  --color-border: #373737;
-  --color-input: #373737;
+  --color-border: #2E2E2E;
+  --color-input: #2E2E2E;
   --color-ring: #529CCA;
 
-  --color-sidebar: #202020;
+  --color-sidebar: #1C1C1C;
   --color-sidebar-foreground: rgba(255, 255, 255, 0.6);
   --color-sidebar-active: rgba(255, 255, 255, 0.9);
   --color-sidebar-hover: #2F3437;
-  --color-sidebar-border: #373737;
+  --color-sidebar-border: #2E2E2E;
   --color-sidebar-accent: #2F3437;
   --color-sidebar-accent-foreground: rgba(255, 255, 255, 0.9);
   --color-sidebar-ring: #529CCA;
+
+  /* Stronger shadows for dark backgrounds */
+  --shadow-soft-sm: 0 1px 2px 0 rgba(0,0,0,0.12), 0 1px 3px 0 rgba(0,0,0,0.18);
+  --shadow-soft: 0 1px 3px 0 rgba(0,0,0,0.16), 0 4px 12px 0 rgba(0,0,0,0.2);
+  --shadow-soft-md: 0 2px 4px 0 rgba(0,0,0,0.16), 0 8px 24px 0 rgba(0,0,0,0.24);
+  --shadow-soft-lg: 0 4px 8px 0 rgba(0,0,0,0.16), 0 12px 40px 0 rgba(0,0,0,0.28);
+  --shadow-soft-xl: 0 8px 16px 0 rgba(0,0,0,0.2), 0 20px 56px 0 rgba(0,0,0,0.32);
 }
 
 * {

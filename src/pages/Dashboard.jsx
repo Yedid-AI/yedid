@@ -64,7 +64,7 @@ export default function Dashboard() {
           {cards.map((card) => {
             const Icon = card.icon
             return (
-              <Card key={card.label}>
+              <Card key={card.label} className="hover:shadow-soft-md">
                 <CardHeader className="flex flex-row items-center justify-between pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">{card.label}</CardTitle>
                   <Icon size={16} className="text-muted-foreground" />
