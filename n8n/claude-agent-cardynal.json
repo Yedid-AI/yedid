@@ -1,0 +1,949 @@
+{
+  "name": "claude - Agent Cardynal",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "a5dce91f-6c49-42b1-bf4a-f14107281408",
+        "options": {}
+      },
+      "id": "e881d239-11bd-4924-917a-796675633290",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        200,
+        0
+      ],
+      "webhookId": "a5dce91f-6c49-42b1-bf4a-f14107281408"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "657ff45a-6e11-4ee6-9d8a-f7e6219b889d",
+              "leftValue": "={{ $json.body.message_type }}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "a184939b-2f6c-424a-9144-a3a2ecdfd072",
+              "leftValue": "={{ $json.body.conversation.messages[0].content }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "exists",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "d552c9bd-60b1-4ebb-8301-231177da384b",
+              "leftValue": "={{ $json.body.conversation.status }}",
+              "rightValue": "open",
+              "operator": {
+                "type": "string",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9a954375-9f4e-4fc1-8d3e-bad4fb321dd8",
+      "name": "Filter Incoming",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://app.cardynal.io/api/agent/config?inbox_id={{ $('Webhook').item.json.body.conversation.messages[0].inbox_id }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "={{ $env.AGENT_API_KEY }}"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "1335b450-c34c-4cd6-9ee3-2b50088077f3",
+      "name": "Get Agent Config",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $('Get Agent Config').first().json;\n\nconst agentConfig = config.agent_config || {};\nconst playbooks = config.playbooks || [];\nconst escalationRules = config.escalation_rules || [];\n\n// Build playbooks text for routing\nlet playbooksText = '';\nfor (const pb of playbooks) {\n  playbooksText += `ID: ${pb.id}\\n`;\n  playbooksText += `Title: ${pb.title}\\n`;\n  playbooksText += `Audience: ${pb.audience || 'N/A'}\\n`;\n  playbooksText += `Rules: ${pb.rules || 'N/A'}\\n`;\n  playbooksText += `---\\n`;\n}\n\n// Build escalation rules text for routing\nlet escalationRulesText = '';\nfor (const er of escalationRules) {\n  escalationRulesText += `ID: ${er.id}\\n`;\n  escalationRulesText += `Title: ${er.title}\\n`;\n  escalationRulesText += `Audience: ${er.audience || 'N/A'}\\n`;\n  escalationRulesText += `Trigger: ${er.trigger_description || 'N/A'}\\n`;\n  escalationRulesText += `Rules: ${er.rules || 'N/A'}\\n`;\n  escalationRulesText += `---\\n`;\n}\n\nreturn [{\n  json: {\n    agent_config: agentConfig,\n    playbooks,\n    escalation_rules: escalationRules,\n    playbooks_text: playbooksText,\n    escalation_rules_text: escalationRulesText\n  }\n}];"
+      },
+      "id": "b7a24aef-b711-40fe-b9e3-62ad058300bc",
+      "name": "Prepare Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=You are the Routing Agent.\n\nYour task is to analyze the user's message WITH CONVERSATION CONTEXT and classify it into one of two categories:\n\n1. Escalation - if ANY escalation rule matches\n2. Scenario - if an existing playbook is appropriate\n\nYou must ALWAYS return a JSON object with the following structure:\n{ \"type\": \"escalation\" | \"scenario\", \"id\": \"<id>\" }\n\nRULES:\n- Use CONVERSATION HISTORY to understand context (e.g. if user says \"oui\" or gives an email, check what was asked before)\n- If ANY escalation rule matches the user message, return \"type\": \"escalation\" with the matching rule id\n- If NO escalation rule matches, select the MOST relevant playbook and return \"type\": \"scenario\" with id\n- If multiple playbooks match, choose the MOST specific\n- If conversation is in progress with a playbook, CONTINUE with that same playbook unless escalation is triggered\n- NEVER return multiple items\n- NEVER return null\n- NEVER omit \"id\"\n- NEVER output text outside JSON\n- NEVER explain your reasoning\n\nPLAYBOOKS:\n{{ $json.playbooks_text }}\n\nESCALATION RULES:\n{{ $json.escalation_rules_text }}"
+        },
+        "promptType": "define",
+        "text": "={{ $('Webhook').item.json.body.conversation.messages[0].processed_message_content }}",
+        "hasOutputParser": true
+      },
+      "id": "3e6de623-8009-4433-90a8-7c585530ff91",
+      "name": "Routing Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        1600,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "673887c6-9eb8-45cd-adcf-5450757d6e93",
+      "name": "Routing LLM",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        1440,
+        240
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "w72DejHyJvEemirH",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body.account.id }}x{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}",
+        "contextWindowLength": 10
+      },
+      "id": "e0dd8a51-cf44-489b-9f06-9c2d00291af3",
+      "name": "Routing Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1600,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"\",\n  \"id\": \"\"\n}"
+      },
+      "id": "78bf7499-3197-4aba-89a0-9eaab3124060",
+      "name": "Routing Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "bc3f09ad-d092-45ed-a3e1-cf30705e9458",
+                    "leftValue": "={{ $json.output.type }}",
+                    "rightValue": "escalation",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "escalation"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "84fa19ca-d976-4611-ba43-1874c4c362f5",
+                    "leftValue": "={{ $json.output.type }}",
+                    "rightValue": "scenario",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "scenario"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3b63b564-242c-484f-9bbb-7c4cdc058db5",
+      "name": "Route Switch",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        2100,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $('Get Agent Config').first().json;\nconst playbooks = config.playbooks || [];\nconst routingOutput = $input.first().json.output;\nconst activeId = routingOutput.id;\n\n// Find by integer or string ID\nconst activePlaybook = playbooks.find(pb => String(pb.id) === String(activeId));\n\nif (!activePlaybook) {\n  return [{ json: {\n    activeType: \"scenario\",\n    activeId,\n    activePlaybook: null,\n    activeTool: null,\n    error: \"Playbook not found for ID: \" + activeId\n  } }];\n}\n\nreturn [{ json: {\n  activeType: \"scenario\",\n  activeId,\n  activePlaybook,\n  activeTool: activePlaybook.tool || null\n} }];"
+      },
+      "id": "35c5e6a0-518b-4f00-8747-05172d10c594",
+      "name": "Load Active Playbook",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=# Identity\nYou are {{ $('Get Agent Config').item.json.agent_config.name }}.\n\n# Global Instructions\n{{ $('Get Agent Config').item.json.agent_config.prompt }}\n\nYour mission is to respond STRICTLY according to the ACTIVE PLAYBOOK.\n\nYou must:\n- Follow the playbook's scenario and rules with absolute priority\n- Adapt tone and length according to the agent parameters\n- Never contradict or go outside the playbook\n- Never invent rules or features\n- Never mention that you are following a playbook\n\n# Tone: {{ $('Get Agent Config').item.json.agent_config.tone }}\n# Response Length: {{ $('Get Agent Config').item.json.agent_config.response_length }}\n\n# Knowledge Base Usage\nSearch the knowledge base before saying you don't know. Base answers on retrieved information. If no result, say so transparently. Do not invent facts.\n\n# Playbook Priority\nWhen a playbook is active, it overrides general behavior rules, tone defaults, and normal conversation flows.\n\n# Output Format\nWrite a natural-sounding assistant response.\nDo NOT output JSON.\nDo NOT mention system settings, agent parameters, or the existence of playbooks.\n\n# ACTIVE PLAYBOOK: {{ $('Load Active Playbook').item.json.activePlaybook.title }}\n- Audience: {{ $('Load Active Playbook').item.json.activePlaybook.audience }}\n- Scenario: {{ $('Load Active Playbook').item.json.activePlaybook.content }}\n- Rules: {{ $('Load Active Playbook').item.json.activePlaybook.rules }}",
+          "enableStreaming": false
+        },
+        "promptType": "define",
+        "text": "={{ $('Webhook').item.json.body.conversation.messages[0].processed_message_content }}"
+      },
+      "id": "6afe135d-7c04-4424-b775-4b68641b5618",
+      "name": "Playbook Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        3000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "9bff18bd-5f23-4d36-b453-d661c5dfcab5",
+      "name": "Playbook LLM",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2740,
+        540
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "w72DejHyJvEemirH",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body.account.id }}x{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}",
+        "contextWindowLength": 10
+      },
+      "id": "50994f97-46e8-444f-99d0-de98a26b6683",
+      "name": "Playbook Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        2920,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Search the company knowledge base to answer user questions. Contains product information, policies, procedures, FAQs, and support documentation. Use this tool before saying you don't have information. Query with specific keywords from the user's question.",
+        "tableName": {
+          "__rl": true,
+          "value": "vector_store",
+          "mode": "list",
+          "cachedResultName": "vector_store"
+        },
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "user_ID",
+                "value": "={{ $('Get Agent Config').item.json.user_id }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "c7909a35-3670-43ad-892e-5d5c94417bdb",
+      "name": "Knowledge Base",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreSupabase",
+      "typeVersion": 1,
+      "position": [
+        3100,
+        540
+      ],
+      "credentials": {
+        "supabaseApi": {
+          "id": "tQMGMR567EpxcMjf",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "18389b61-2b51-4e5d-a2fa-f6e907e7595a",
+      "name": "Embeddings OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        3100,
+        740
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "w72DejHyJvEemirH",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "={{ $('Load Active Playbook').item.json.activeTool.description }}",
+        "method": "={{ $('Load Active Playbook').item.json.activeTool.method }}",
+        "url": "={{ $('Load Active Playbook').item.json.activeTool.url }}",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($('Load Active Playbook').item.json.activeTool.query_parameters || {}) }}",
+        "sendHeaders": true,
+        "specifyHeaders": "json",
+        "jsonHeaders": "={{ JSON.stringify($('Load Active Playbook').item.json.activeTool.headers || {}) }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $fromAI('body', 'Generate JSON matching this schema: ' + JSON.stringify($('Load Active Playbook').item.json.activeTool.body_schema || {}), 'json') }}",
+        "options": {}
+      },
+      "id": "809e6c39-d77d-414d-9ec7-fa6bfc2bed04",
+      "name": "Dynamic API Tool",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 1.1,
+      "position": [
+        3280,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.cardynal.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "={{ $('Get Agent Config').item.json.bot_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.output }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "191e39f9-cd48-461c-a03b-14be8f4456e4",
+      "name": "Send Playbook Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3500,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const config = $('Get Agent Config').first().json;\nconst escalationRules = config.escalation_rules || [];\nconst routingOutput = $input.first().json.output;\nconst activeId = routingOutput.id;\n\nconst activeRule = escalationRules.find(er => String(er.id) === String(activeId));\n\nif (!activeRule) {\n  return [{ json: {\n    activeType: \"escalation\",\n    activeId,\n    activeRule: null,\n    error: \"Escalation rule not found for ID: \" + activeId\n  } }];\n}\n\nreturn [{ json: {\n  activeType: \"escalation\",\n  activeId,\n  activeRule\n} }];"
+      },
+      "id": "21e0548f-6c11-40f4-8fe2-995ac6d1b895",
+      "name": "Load Escalation Rule",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2500,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=You are the Escalation Agent.\n\nYour purpose is to respond politely to the user while acknowledging the issue and escalating to a human operator.\n\nYou must:\n- Avoid technical details or speculative fixes\n- Avoid committing to deadlines or promises\n- Clarify the issue briefly if necessary\n- Reassure the user that the team will intervene\n\nDynamic context:\n- Escalation Title: {{ $json.activeRule.title }}\n- Audience: {{ $json.activeRule.audience }}\n- Trigger: {{ $json.activeRule.trigger_description }}\n- Rules: {{ $json.activeRule.rules }}\n\nUser message: {{ $('Webhook').item.json.body.conversation.messages[0].processed_message_content }}\n\nExpected output (STRICT JSON):\n{ \"reponse\": \"<message for the user>\", \"resume\": \"<summary for the human agent>\" }\n\n- reponse: short, empathetic, no technical details\n- resume: clear explanation of the problem, context, severity\nNo markdown, no text outside JSON."
+        },
+        "promptType": "define",
+        "text": "={{ $('Webhook').item.json.body.conversation.messages[0].processed_message_content }}",
+        "hasOutputParser": true
+      },
+      "id": "ba99f81c-7e34-4f97-85c0-66fb70a52348",
+      "name": "Escalation Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [
+        3000,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "fbf3b62e-20ec-4c34-93e2-803cec98007c",
+      "name": "Escalation LLM",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        2840,
+        -540
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "w72DejHyJvEemirH",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Webhook').item.json.body.account.id }}x{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}",
+        "contextWindowLength": 10
+      },
+      "id": "ff87d460-ac18-4cb2-b01d-2ab2384882cd",
+      "name": "Escalation Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        3000,
+        -540
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \n  \"reponse\": \"\", \n  \"resume\": \"\" }"
+      },
+      "id": "25125cdf-7642-4cc7-be40-4830f90a0335",
+      "name": "Escalation Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.2,
+      "position": [
+        3160,
+        -540
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.cardynal.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "={{ $('Get Agent Config').item.json.bot_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $json.output.reponse }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "66d84478-2396-42d4-bf8e-e4b4f5f3b671",
+      "name": "Send Escalation Response",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3500,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.cardynal.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.id }}/assignments",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "={{ $('Get Agent Config').item.json.bot_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ assignee_id: $('Load Escalation Rule').item.json.activeRule.assign_to_agent }) }}",
+        "options": {}
+      },
+      "id": "6f33eac4-9138-44e3-8504-25c8a4797f61",
+      "name": "Assign Conversation",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3900,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://chat.cardynal.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "={{ $('Get Agent Config').item.json.bot_token }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $('Escalation Agent').item.json.output.resume }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            },
+            {
+              "name": "private",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2aa11ca0-6b2b-4d7d-a05f-eb3cf2cf1c3e",
+      "name": "Send Private Note",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        4300,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create or find session, then log user input + agent output\nconst webhook = $('Webhook').first().json.body;\nconst config = $('Get Agent Config').first().json;\nconst playbook = $('Load Active Playbook').first().json;\nconst agentOutput = $('Playbook Agent').first().json.output;\nconst apiKey = $env.AGENT_API_KEY;\nconst baseUrl = 'https://app.cardynal.io';\n\n// 1. Create or find session\nconst sessionRes = await fetch(`${baseUrl}/api/agent/sessions`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    user_id: config.user_id,\n    inbox_id: null,\n    chatwoot_account_id: webhook.account?.id,\n    chatwoot_inbox_id: webhook.conversation?.messages?.[0]?.inbox_id,\n    chatwoot_conversation_id: webhook.conversation?.messages?.[0]?.conversation_id,\n  })\n});\nconst sessionData = await sessionRes.json();\nconst sessionId = sessionData.session?.id;\n\nif (!sessionId) {\n  return [{ json: { error: 'Failed to create session', details: sessionData } }];\n}\n\n// 2. Log user message\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'user',\n    content: webhook.conversation?.messages?.[0]?.content || '',\n    playbook_id: playbook.activeId ? parseInt(playbook.activeId) : null,\n  })\n});\n\n// 3. Log agent response\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'assistant',\n    content: agentOutput,\n    playbook_id: playbook.activeId ? parseInt(playbook.activeId) : null,\n  })\n});\n\nreturn [{ json: { session_id: sessionId, logged: true } }];"
+      },
+      "id": "28d69c42-4dff-4169-89f4-96265b339685",
+      "name": "Log Playbook Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Create session + log messages for escalation\nconst webhook = $('Webhook').first().json.body;\nconst config = $('Get Agent Config').first().json;\nconst escalation = $('Load Escalation Rule').first().json;\nconst agentOutput = $('Escalation Agent').first().json.output;\nconst apiKey = $env.AGENT_API_KEY;\nconst baseUrl = 'https://app.cardynal.io';\n\n// 1. Create or find session\nconst sessionRes = await fetch(`${baseUrl}/api/agent/sessions`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    user_id: config.user_id,\n    inbox_id: null,\n    chatwoot_account_id: webhook.account?.id,\n    chatwoot_inbox_id: webhook.conversation?.messages?.[0]?.inbox_id,\n    chatwoot_conversation_id: webhook.conversation?.messages?.[0]?.conversation_id,\n  })\n});\nconst sessionData = await sessionRes.json();\nconst sessionId = sessionData.session?.id;\n\nif (!sessionId) {\n  return [{ json: { error: 'Failed to create session', details: sessionData } }];\n}\n\n// 2. Log user message\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'user',\n    content: webhook.conversation?.messages?.[0]?.content || '',\n    escalation_id: escalation.activeId ? parseInt(escalation.activeId) : null,\n  })\n});\n\n// 3. Log escalation response\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'assistant',\n    content: agentOutput.reponse || '',\n    escalation_id: escalation.activeId ? parseInt(escalation.activeId) : null,\n    metadata: { resume: agentOutput.resume || '' },\n  })\n});\n\n// 4. Mark session as closed + escalated\nawait fetch(`${baseUrl}/api/agent/sessions/${sessionId}`, {\n  method: 'PUT',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    status: 'closed',\n    ai_reason: 'ESCALATION: ' + (agentOutput.resume || ''),\n    billable: false,\n    closed_at: new Date().toISOString(),\n  })\n});\n\nreturn [{ json: { session_id: sessionId, escalated: true } }];"
+      },
+      "id": "5185c6ea-5139-42cd-ad54-a969b7919269",
+      "name": "Log Escalation Session",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4700,
+        -300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Filter Incoming",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filter Incoming": {
+      "main": [
+        [
+          {
+            "node": "Get Agent Config",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Get Agent Config": {
+      "main": [
+        [
+          {
+            "node": "Prepare Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Data": {
+      "main": [
+        [
+          {
+            "node": "Routing Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Routing Agent": {
+      "main": [
+        [
+          {
+            "node": "Route Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Routing LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Routing Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Routing Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Routing Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Routing Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Routing Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Switch": {
+      "main": [
+        [
+          {
+            "node": "Load Escalation Rule",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Load Active Playbook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Active Playbook": {
+      "main": [
+        [
+          {
+            "node": "Playbook Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Playbook Agent": {
+      "main": [
+        [
+          {
+            "node": "Send Playbook Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Playbook Response": {
+      "main": [
+        [
+          {
+            "node": "Log Playbook Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Playbook LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Playbook Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Playbook Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Playbook Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Knowledge Base": {
+      "ai_tool": [
+        [
+          {
+            "node": "Playbook Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dynamic API Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Playbook Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Knowledge Base",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load Escalation Rule": {
+      "main": [
+        [
+          {
+            "node": "Escalation Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation Agent": {
+      "main": [
+        [
+          {
+            "node": "Send Escalation Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Escalation Response": {
+      "main": [
+        [
+          {
+            "node": "Assign Conversation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Assign Conversation": {
+      "main": [
+        [
+          {
+            "node": "Send Private Note",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Private Note": {
+      "main": [
+        [
+          {
+            "node": "Log Escalation Session",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation LLM": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Escalation Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Escalation Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Escalation Agent",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "efe2adda-1708-4323-a31c-fb7192a36069",
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

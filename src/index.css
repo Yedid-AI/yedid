@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+@theme {
+  /* Background */
+  --color-background: #FFFFFF;
+  --color-foreground: #37352F;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #37352F;
+  --color-popover: #FFFFFF;
+  --color-popover-foreground: #37352F;
+
+  /* Primary (blue) */
+  --color-primary: #2383E2;
+  --color-primary-foreground: #FFFFFF;
+
+  /* Secondary / Muted / Accent */
+  --color-secondary: #F7F6F3;
+  --color-secondary-foreground: #37352F;
+  --color-muted: #F7F6F3;
+  --color-muted-foreground: #787774;
+  --color-accent: #EBECED;
+  --color-accent-foreground: #37352F;
+
+  /* Destructive */
+  --color-destructive: #E03E3E;
+  --color-destructive-foreground: #FFFFFF;
+
+  /* Border / Input / Ring */
+  --color-border: #E3E2E0;
+  --color-input: #E3E2E0;
+  --color-ring: #2383E2;
+
+  /* Sidebar (light) */
+  --color-sidebar: #F7F6F3;
+  --color-sidebar-foreground: #787774;
+  --color-sidebar-active: #37352F;
+  --color-sidebar-hover: #EBECED;
+  --color-sidebar-border: #E3E2E0;
+  --color-sidebar-accent: #EBECED;
+  --color-sidebar-accent-foreground: #37352F;
+  --color-sidebar-ring: #2383E2;
+
+  /* Radius & Font */
+  --radius: 0.25rem;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+/* Dark mode (activate by adding class="dark" on <html>) */
+.dark {
+  --color-background: #191919;
+  --color-foreground: rgba(255, 255, 255, 0.9);
+  --color-card: #202020;
+  --color-card-foreground: rgba(255, 255, 255, 0.9);
+  --color-popover: #202020;
+  --color-popover-foreground: rgba(255, 255, 255, 0.9);
+
+  --color-primary: #529CCA;
+  --color-primary-foreground: #FFFFFF;
+
+  --color-secondary: #202020;
+  --color-secondary-foreground: rgba(255, 255, 255, 0.9);
+  --color-muted: #202020;
+  --color-muted-foreground: rgba(255, 255, 255, 0.6);
+  --color-accent: #2F3437;
+  --color-accent-foreground: rgba(255, 255, 255, 0.9);
+
+  --color-destructive: #FF7369;
+  --color-destructive-foreground: #FFFFFF;
+
+  --color-border: #373737;
+  --color-input: #373737;
+  --color-ring: #529CCA;
+
+  --color-sidebar: #202020;
+  --color-sidebar-foreground: rgba(255, 255, 255, 0.6);
+  --color-sidebar-active: rgba(255, 255, 255, 0.9);
+  --color-sidebar-hover: #2F3437;
+  --color-sidebar-border: #373737;
+  --color-sidebar-accent: #2F3437;
+  --color-sidebar-accent-foreground: rgba(255, 255, 255, 0.9);
+  --color-sidebar-ring: #529CCA;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  margin: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Softer focus rings */
+@layer base {
+  *:focus-visible {
+    @apply outline-none ring-2 ring-ring/40 ring-offset-0;
+  }
+}
