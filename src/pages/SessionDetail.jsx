@@ -1,7 +1,6 @@
-import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useI18n } from '../lib/i18n'
-import { api } from '../lib/api'
+import { useSession, useSessionMessages } from '../hooks/queries'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,22 +10,10 @@ export default function SessionDetail() {
   const { id } = useParams()
   const { t, dateLocale } = useI18n()
   const navigate = useNavigate()
-  const [session, setSession] = useState(null)
-  const [messages, setMessages] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { data: session, isLoading: sessionLoading } = useSession(id)
+  const { data: messages = [], isLoading: messagesLoading } = useSessionMessages(id)
 
-  useEffect(() => {
-    Promise.all([
-      api.get(`/sessions/${id}`),
-      api.get(`/sessions/${id}/messages`),
-    ])
-      .then(([s, m]) => {
-        setSession(s.session)
-        setMessages(m.messages || [])
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false))
-  }, [id])
+  const loading = sessionLoading || messagesLoading
 
   if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
   if (!session) return <div className="text-muted-foreground">{t('sessions.notFound')}</div>

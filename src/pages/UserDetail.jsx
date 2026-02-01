@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api } from '../lib/api'
+import { useUser } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,40 +10,25 @@ import { ArrowLeft, User, MessageSquare, BarChart3, FileText, Bot, Inbox, Messag
 
 function maskToken(token) {
   if (!token) return '-'
-  if (token.length <= 8) return '••••••••'
-  return token.slice(0, 4) + '••••••••' + token.slice(-4)
+  if (token.length <= 8) return '--------'
+  return token.slice(0, 4) + '--------' + token.slice(-4)
 }
 
 export default function UserDetail() {
   const { t, dateLocale } = useI18n()
   const { id } = useParams()
   const navigate = useNavigate()
-  const [data, setData] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
 
-  useEffect(() => {
-    const fetchDetail = async () => {
-      try {
-        const result = await api.get(`/users/${id}`)
-        setData(result)
-      } catch (err) {
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchDetail()
-  }, [id])
+  const { data, isLoading, error } = useUser(id)
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
   if (error) return (
     <div>
       <Button variant="ghost" onClick={() => navigate('/users')} className="mb-4">
         <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
       </Button>
       <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">
-        {error}
+        {error.message}
       </div>
     </div>
   )

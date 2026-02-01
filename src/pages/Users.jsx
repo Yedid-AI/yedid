@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../lib/api'
+import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, useProvisionChat } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,8 +14,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 export default function Users() {
   const { t } = useI18n()
-  const [users, setUsers] = useState([])
-  const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
   const [provisioningId, setProvisioningId] = useState(null)
@@ -23,18 +21,11 @@ export default function Users() {
   const [error, setError] = useState('')
   const navigate = useNavigate()
 
-  const fetchUsers = async () => {
-    try {
-      const data = await api.get('/users')
-      setUsers(data.users)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchUsers() }, [])
+  const { data: users = [], isLoading } = useUsers()
+  const createUser = useCreateUser()
+  const updateUser = useUpdateUser()
+  const deleteUser = useDeleteUser()
+  const provisionChat = useProvisionChat()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -44,14 +35,13 @@ export default function Users() {
         const updates = { ...form }
         if (!updates.password) delete updates.password
         delete updates.email
-        await api.put(`/users/${editUser.id}`, updates)
+        await updateUser.mutateAsync({ id: editUser.id, body: updates })
       } else {
-        await api.post('/register', form)
+        await createUser.mutateAsync(form)
       }
       setDialogOpen(false)
       setEditUser(null)
       resetForm()
-      fetchUsers()
     } catch (err) {
       setError(err.message)
     }
@@ -74,8 +64,7 @@ export default function Users() {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`/users/${id}`)
-      fetchUsers()
+      await deleteUser.mutateAsync(id)
     } catch (err) {
       setError(err.message)
     }
@@ -85,8 +74,7 @@ export default function Users() {
     setProvisioningId(userId)
     setError('')
     try {
-      await api.post('/provision-chat', { user_id: userId })
-      fetchUsers()
+      await provisionChat.mutateAsync(userId)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -94,7 +82,7 @@ export default function Users() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>

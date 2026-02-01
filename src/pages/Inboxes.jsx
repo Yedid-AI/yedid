@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../lib/api'
+import { useInboxes, useAgents, useCreateInbox, useDeleteInbox, useAssignAgent } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,40 +13,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default function Inboxes() {
-  const [inboxes, setInboxes] = useState([])
-  const [agents, setAgents] = useState([])
-  const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' })
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const { t, dateLocale } = useI18n()
 
-  const fetchData = async () => {
-    try {
-      const [inboxData, agentData] = await Promise.all([
-        api.get('/inboxes'),
-        api.get('/agent-bots'),
-      ])
-      setInboxes(inboxData.inboxes)
-      setAgents(agentData.agent_bots)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
+  const { data: inboxes = [], isLoading: inboxesLoading } = useInboxes()
+  const { data: agents = [], isLoading: agentsLoading } = useAgents()
+  const createInbox = useCreateInbox()
+  const deleteInbox = useDeleteInbox()
+  const assignAgent = useAssignAgent()
 
-  useEffect(() => { fetchData() }, [])
+  const isLoading = inboxesLoading || agentsLoading
 
   const handleCreate = async (e) => {
     e.preventDefault()
     setError('')
     try {
-      await api.post('/inboxes', form)
+      await createInbox.mutateAsync(form)
       setDialogOpen(false)
       setForm({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' })
-      fetchData()
     } catch (err) {
       setError(err.message)
     }
@@ -54,10 +41,7 @@ export default function Inboxes() {
 
   const handleAssignAgent = async (inboxId, agentBotId) => {
     try {
-      await api.put(`/inboxes/${inboxId}/assign-agent`, {
-        agent_bot_id: agentBotId === 'none' ? null : parseInt(agentBotId),
-      })
-      fetchData()
+      await assignAgent.mutateAsync({ inboxId, agentBotId })
     } catch (err) {
       setError(err.message)
     }
@@ -65,14 +49,13 @@ export default function Inboxes() {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`/inboxes/${id}`)
-      fetchData()
+      await deleteInbox.mutateAsync(id)
     } catch (err) {
       setError(err.message)
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>

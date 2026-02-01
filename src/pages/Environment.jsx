@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
 import { useI18n } from '../lib/i18n'
-import { api } from '../lib/api'
+import { useSettings, useUpdateSettings } from '../hooks/queries'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Separator } from '@/components/ui/separator'
 import { Eye, EyeOff, Save, Check } from 'lucide-react'
 
 const GROUPS = [
@@ -60,28 +59,23 @@ const GROUPS = [
 
 export default function Environment() {
   const { t } = useI18n()
-  const [settings, setSettings] = useState({})
+  const { data: settings = {}, isLoading } = useSettings()
+  const updateSettings = useUpdateSettings()
   const [values, setValues] = useState({})
   const [revealed, setRevealed] = useState({})
-  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState('')
 
+  // Initialize values state when settings load
   useEffect(() => {
-    api.get('/settings')
-      .then((data) => {
-        setSettings(data.settings)
-        // Initialize values — empty string means "not changed"
-        const initial = {}
-        for (const key of Object.keys(data.settings)) {
-          initial[key] = ''
-        }
-        setValues(initial)
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [])
+    if (!settings || Object.keys(settings).length === 0) return
+    const initial = {}
+    for (const key of Object.keys(settings)) {
+      initial[key] = ''
+    }
+    setValues(initial)
+  }, [settings])
 
   const handleSave = async () => {
     setError('')
@@ -97,13 +91,11 @@ export default function Environment() {
         setSaving(false)
         return
       }
-      await api.put('/settings', { settings: changed })
+      await updateSettings.mutateAsync(changed)
 
-      // Refresh
-      const data = await api.get('/settings')
-      setSettings(data.settings)
+      // Reset input values after successful save
       const reset = {}
-      for (const key of Object.keys(data.settings)) {
+      for (const key of Object.keys(settings)) {
         reset[key] = ''
       }
       setValues(reset)
@@ -116,7 +108,7 @@ export default function Environment() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api } from '../lib/api'
+import { useInbox, useAgents, useSessions, useAssignAgent } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -14,45 +14,26 @@ import { ArrowLeft, Info, MessageSquare } from 'lucide-react'
 export default function InboxDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [inbox, setInbox] = useState(null)
-  const [agents, setAgents] = useState([])
-  const [sessions, setSessions] = useState([])
-  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const { t, dateLocale } = useI18n()
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [inboxData, agentData, sessionData] = await Promise.all([
-          api.get(`/inboxes/${id}`),
-          api.get('/agent-bots'),
-          api.get(`/sessions?inbox_id=${id}`),
-        ])
-        setInbox(inboxData.inbox)
-        setAgents(agentData.agent_bots)
-        setSessions(sessionData.sessions)
-      } catch (err) {
-        setError(err.message)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchData()
-  }, [id])
+  const { data: inbox, isLoading: inboxLoading } = useInbox(id)
+  const { data: agents = [], isLoading: agentsLoading } = useAgents()
+  const { data: sessionData, isLoading: sessionsLoading } = useSessions({ inbox_id: id })
+  const assignAgent = useAssignAgent()
+
+  const sessions = sessionData?.sessions || []
+  const isLoading = inboxLoading || agentsLoading || sessionsLoading
 
   const handleAssignAgent = async (agentBotId) => {
     try {
-      const data = await api.put(`/inboxes/${id}/assign-agent`, {
-        agent_bot_id: agentBotId === 'none' ? null : parseInt(agentBotId),
-      })
-      setInbox(data.inbox)
+      await assignAgent.mutateAsync({ inboxId: id, agentBotId })
     } catch (err) {
       setError(err.message)
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
   if (error) return (
     <div>
       <Button variant="ghost" onClick={() => navigate('/inboxes')} className="mb-4">

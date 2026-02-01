@@ -1,4 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { queryClient } from './lib/query'
 import { ThemeProvider } from './lib/theme'
 import { I18nProvider } from './lib/i18n'
 import { AuthProvider } from './lib/auth'
@@ -35,6 +37,7 @@ export default function App() {
   return (
     <ThemeProvider>
     <I18nProvider>
+    <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <AuthProvider>
         <Routes>
@@ -103,6 +106,7 @@ export default function App() {
         </Routes>
       </AuthProvider>
     </BrowserRouter>
+    </QueryClientProvider>
     </I18nProvider>
     </ThemeProvider>
   )

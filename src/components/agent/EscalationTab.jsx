@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { api } from '../../lib/api'
+import { useState } from 'react'
+import { useEscalationRules, useCreateEscalation, useUpdateEscalation, useDeleteEscalation } from '../../hooks/queries'
 import { useI18n } from '../../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,27 +14,14 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 export default function EscalationTab({ agentBotId }) {
   const { t } = useI18n()
-  const [rules, setRules] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { data: rules = [], isLoading } = useEscalationRules(agentBotId)
+  const createEscalation = useCreateEscalation(agentBotId)
+  const updateEscalation = useUpdateEscalation(agentBotId)
+  const deleteEscalation = useDeleteEscalation(agentBotId)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [form, setForm] = useState({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', is_active: true })
   const [error, setError] = useState('')
-
-  const basePath = `/agent-bots/${agentBotId}`
-
-  const fetchRules = async () => {
-    try {
-      const data = await api.get(`${basePath}/escalation-rules`)
-      setRules(data.rules)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchRules() }, [agentBotId])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -42,14 +29,13 @@ export default function EscalationTab({ agentBotId }) {
     try {
       const body = { ...form, assign_to_agent: form.assign_to_agent ? parseInt(form.assign_to_agent) : null }
       if (editItem) {
-        await api.put(`${basePath}/escalation-rules/${editItem.id}`, body)
+        await updateEscalation.mutateAsync({ id: editItem.id, body })
       } else {
-        await api.post(`${basePath}/escalation-rules`, body)
+        await createEscalation.mutateAsync(body)
       }
       setDialogOpen(false)
       setEditItem(null)
       resetForm()
-      fetchRules()
     } catch (err) {
       setError(err.message)
     }
@@ -72,8 +58,7 @@ export default function EscalationTab({ agentBotId }) {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`${basePath}/escalation-rules/${id}`)
-      fetchRules()
+      await deleteEscalation.mutateAsync(id)
     } catch (err) {
       setError(err.message)
     }
@@ -81,14 +66,13 @@ export default function EscalationTab({ agentBotId }) {
 
   const toggleActive = async (item) => {
     try {
-      await api.put(`${basePath}/escalation-rules/${item.id}`, { is_active: !item.is_active })
-      fetchRules()
+      await updateEscalation.mutateAsync({ id: item.id, body: { is_active: !item.is_active } })
     } catch (err) {
       setError(err.message)
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>

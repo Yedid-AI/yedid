@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import { api } from '../lib/api'
+import { useState } from 'react'
+import { useSources, useCreateSource, useDeleteSource } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -19,41 +19,17 @@ const statusVariant = {
 
 export default function Sources() {
   const { t, dateLocale } = useI18n()
-  const [sources, setSources] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { data: sources = [], isLoading, error: queryError } = useSources()
+  const createSource = useCreateSource()
+  const deleteSource = useDeleteSource()
   const [tab, setTab] = useState('file')
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [file, setFile] = useState(null)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
-  const pollRef = useRef(null)
 
-  const fetchSources = async () => {
-    try {
-      const data = await api.get('/sources')
-      setSources(data.sources)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchSources()
-    return () => clearInterval(pollRef.current)
-  }, [])
-
-  useEffect(() => {
-    const hasProcessing = sources.some((s) => s.status === 'pending' || s.status === 'processing')
-    if (hasProcessing) {
-      pollRef.current = setInterval(fetchSources, 5000)
-    } else {
-      clearInterval(pollRef.current)
-    }
-    return () => clearInterval(pollRef.current)
-  }, [sources])
+  const displayError = error || queryError?.message || ''
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -69,11 +45,10 @@ export default function Sources() {
           new Uint8Array(buffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
         )
       }
-      await api.post('/sources', body)
+      await createSource.mutateAsync(body)
       setName('')
       setUrl('')
       setFile(null)
-      fetchSources()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -83,14 +58,13 @@ export default function Sources() {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`/sources/${id}`)
-      fetchSources()
+      await deleteSource.mutateAsync(id)
     } catch (err) {
       setError(err.message)
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>
@@ -99,9 +73,9 @@ export default function Sources() {
         <p className="text-sm text-muted-foreground mt-1">{t('sources.subtitle')}</p>
       </div>
 
-      {error && (
+      {displayError && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">
-          {error}
+          {displayError}
         </div>
       )}
 

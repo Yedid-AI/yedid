@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { api } from '../../lib/api'
+import { useState } from 'react'
+import { usePlaybooks, useTools, useCreatePlaybook, useUpdatePlaybook, useDeletePlaybook } from '../../hooks/queries'
 import { useI18n } from '../../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -15,32 +15,18 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 export default function PlaybooksTab({ agentBotId }) {
   const { t } = useI18n()
-  const [playbooks, setPlaybooks] = useState([])
-  const [tools, setTools] = useState([])
-  const [loading, setLoading] = useState(true)
+  const playbooksQuery = usePlaybooks(agentBotId)
+  const toolsQuery = useTools(agentBotId)
+  const createPlaybook = useCreatePlaybook(agentBotId)
+  const updatePlaybook = useUpdatePlaybook(agentBotId)
+  const deletePlaybook = useDeletePlaybook(agentBotId)
+  const playbooks = playbooksQuery.data || []
+  const tools = toolsQuery.data || []
+  const isLoading = playbooksQuery.isLoading || toolsQuery.isLoading
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [form, setForm] = useState({ title: '', content: '', audience: '', rules: '', tool_id: '', is_active: true })
   const [error, setError] = useState('')
-
-  const basePath = `/agent-bots/${agentBotId}`
-
-  const fetchData = async () => {
-    try {
-      const [pbData, toolsData] = await Promise.all([
-        api.get(`${basePath}/playbooks`),
-        api.get(`${basePath}/tools`),
-      ])
-      setPlaybooks(pbData.playbooks)
-      setTools(toolsData.tools)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchData() }, [agentBotId])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -48,14 +34,13 @@ export default function PlaybooksTab({ agentBotId }) {
     try {
       const body = { ...form, tool_id: form.tool_id ? parseInt(form.tool_id) : null }
       if (editItem) {
-        await api.put(`${basePath}/playbooks/${editItem.id}`, body)
+        await updatePlaybook.mutateAsync({ id: editItem.id, body })
       } else {
-        await api.post(`${basePath}/playbooks`, body)
+        await createPlaybook.mutateAsync(body)
       }
       setDialogOpen(false)
       setEditItem(null)
       resetForm()
-      fetchData()
     } catch (err) {
       setError(err.message)
     }
@@ -78,8 +63,7 @@ export default function PlaybooksTab({ agentBotId }) {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`${basePath}/playbooks/${id}`)
-      fetchData()
+      await deletePlaybook.mutateAsync(id)
     } catch (err) {
       setError(err.message)
     }
@@ -87,14 +71,13 @@ export default function PlaybooksTab({ agentBotId }) {
 
   const toggleActive = async (item) => {
     try {
-      await api.put(`${basePath}/playbooks/${item.id}`, { is_active: !item.is_active })
-      fetchData()
+      await updatePlaybook.mutateAsync({ id: item.id, body: { is_active: !item.is_active } })
     } catch (err) {
       setError(err.message)
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>

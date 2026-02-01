@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { api } from '../../lib/api'
+import { useState } from 'react'
+import { useTools, useCreateTool, useUpdateTool, useDeleteTool } from '../../hooks/queries'
 import { useI18n } from '../../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,8 +16,10 @@ const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
 export default function ToolsTab({ agentBotId }) {
   const { t } = useI18n()
-  const [tools, setTools] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { data: tools = [], isLoading } = useTools(agentBotId)
+  const createTool = useCreateTool(agentBotId)
+  const updateTool = useUpdateTool(agentBotId)
+  const deleteTool = useDeleteTool(agentBotId)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [form, setForm] = useState({
@@ -25,21 +27,6 @@ export default function ToolsTab({ agentBotId }) {
     query_parameters: '{}', headers: '{}', body_schema: '',
   })
   const [error, setError] = useState('')
-
-  const basePath = `/agent-bots/${agentBotId}`
-
-  const fetchTools = async () => {
-    try {
-      const data = await api.get(`${basePath}/tools`)
-      setTools(data.tools)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchTools() }, [agentBotId])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -54,14 +41,13 @@ export default function ToolsTab({ agentBotId }) {
         url: form.url, query_parameters: qp, headers: hd, body_schema: form.body_schema || null,
       }
       if (editItem) {
-        await api.put(`${basePath}/tools/${editItem.id}`, body)
+        await updateTool.mutateAsync({ id: editItem.id, body })
       } else {
-        await api.post(`${basePath}/tools`, body)
+        await createTool.mutateAsync(body)
       }
       setDialogOpen(false)
       setEditItem(null)
       resetForm()
-      fetchTools()
     } catch (err) {
       setError(err.message)
     }
@@ -85,14 +71,13 @@ export default function ToolsTab({ agentBotId }) {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`${basePath}/tools/${id}`)
-      fetchTools()
+      await deleteTool.mutateAsync(id)
     } catch (err) {
       setError(err.message)
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>

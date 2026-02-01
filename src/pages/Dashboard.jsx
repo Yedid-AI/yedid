@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
-import { api } from '../lib/api'
+import { useAgents, useInboxes, useSources, useSessions, useSessionMessages, useUsers } from '../hooks/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,78 +12,25 @@ import { Database, Bot, Inbox, Users, MessageSquare, CheckCircle, CircleDot, Rec
 export default function Dashboard() {
   const { user } = useAuth()
   const { t, dateLocale } = useI18n()
-  const [stats, setStats] = useState({})
-  const [sessions, setSessions] = useState([])
-  const [sessionStats, setSessionStats] = useState({})
-  const [inboxes, setInboxes] = useState([])
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterInbox, setFilterInbox] = useState('all')
-  const [ready, setReady] = useState(false)
   const [selectedSession, setSelectedSession] = useState(null)
-  const [sessionMessages, setSessionMessages] = useState([])
-  const [sessionLoading, setSessionLoading] = useState(false)
 
-  useEffect(() => {
-    if (user?.role === 'agent') {
-      setReady(true)
-      return
-    }
+  // Data hooks — called unconditionally (React rules of hooks)
+  const { data: agents = [], isLoading: agentsLoading } = useAgents()
+  const { data: inboxes = [], isLoading: inboxesLoading } = useInboxes()
+  const { data: sourcesData = [], isLoading: sourcesLoading } = useSources()
+  const { data: usersData = [], isLoading: usersLoading } = useUsers()
+  const { data: sessionData } = useSessions({ status: filterStatus, inbox_id: filterInbox })
+  const { data: panelMessages = [], isLoading: messagesLoading } = useSessionMessages(selectedSession?.id)
 
-    if (user?.role === 'admin') {
-      Promise.all([
-        api.get('/agent-bots').catch(() => ({ agent_bots: [] })),
-        api.get('/inboxes').catch(() => ({ inboxes: [] })),
-        api.get('/sources').catch(() => ({ sources: [] })),
-      ]).then(([a, i, s]) => {
-        setStats({
-          agents: a.agent_bots?.length || 0,
-          inboxes: i.inboxes?.length || 0,
-          sources: s.sources?.length || 0,
-        })
-        setInboxes(i.inboxes || [])
-        setReady(true)
-      })
-    }
-
-    if (user?.role === 'super_admin') {
-      api.get('/users').then((data) => {
-        const users = data.users || []
-        const withChatwoot = users.filter((u) => u.chatwoot_accounts).length
-        setStats({
-          users: users.length,
-          comptes_chatwoot: withChatwoot,
-        })
-        setReady(true)
-      }).catch(() => setReady(true))
-    }
-  }, [user])
-
-  useEffect(() => {
-    if (user?.role !== 'admin' || !ready) return
-    const params = new URLSearchParams()
-    if (filterStatus !== 'all') params.set('status', filterStatus)
-    if (filterInbox !== 'all') params.set('inbox_id', filterInbox)
-    const qs = params.toString()
-    api.get(`/sessions${qs ? '?' + qs : ''}`).then((data) => {
-      setSessions(data.sessions || [])
-      setSessionStats(data.stats || {})
-    }).catch(() => {})
-  }, [user, filterStatus, filterInbox, ready])
+  const sessions = sessionData?.sessions || []
+  const sessionStats = sessionData?.stats || {}
 
   const inboxMap = Object.fromEntries(inboxes.map((i) => [i.inbox_id, i.name]))
 
-  const openSession = (session) => {
-    setSelectedSession(session)
-    setSessionLoading(true)
-    api.get(`/sessions/${session.id}/messages`)
-      .then((data) => setSessionMessages(data.messages || []))
-      .catch(() => setSessionMessages([]))
-      .finally(() => setSessionLoading(false))
-  }
-
   const closeSession = () => {
     setSelectedSession(null)
-    setSessionMessages([])
   }
 
   useEffect(() => {
@@ -101,6 +48,13 @@ export default function Dashboard() {
     const m = Math.floor((seconds % 3600) / 60)
     return `${h}h ${m}m`
   }
+
+  // Compute stats from hook data
+  const stats = user?.role === 'admin'
+    ? { agents: agents.length, inboxes: inboxes.length, sources: sourcesData.length }
+    : user?.role === 'super_admin'
+      ? { users: usersData.length, comptes_chatwoot: usersData.filter((u) => u.chatwoot_accounts).length }
+      : {}
 
   const adminCards = [
     { labelKey: 'dashboard.agents', value: stats.agents, icon: Bot },
@@ -216,13 +170,13 @@ export default function Dashboard() {
 
               <div>
                 <h3 className="text-sm font-semibold mb-3">{t('sessions.conversation')}</h3>
-                {sessionLoading ? (
+                {messagesLoading ? (
                   <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
-                ) : sessionMessages.length === 0 ? (
+                ) : panelMessages.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t('sessions.noMessages')}</p>
                 ) : (
                   <div className="space-y-4">
-                    {sessionMessages.map((m) => (
+                    {panelMessages.map((m) => (
                       <div key={m.id} className="flex gap-2.5">
                         <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${m.role === 'user' ? 'bg-muted' : 'bg-primary/10'}`}>
                           {m.role === 'user' ? <User size={12} /> : <Bot size={12} />}
@@ -343,7 +297,7 @@ export default function Dashboard() {
                   </TableRow>
                 ) : (
                   sessions.map((s) => (
-                    <TableRow key={s.id} className="cursor-pointer" onClick={() => openSession(s)}>
+                    <TableRow key={s.id} className="cursor-pointer" onClick={() => setSelectedSession(s)}>
                       <TableCell className="font-medium">{inboxMap[s.chatwoot_inbox_id] || '-'}</TableCell>
                       <TableCell>
                         <Badge variant={s.status === 'open' ? 'default' : 'secondary'}>

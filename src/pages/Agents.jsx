@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useAgents, useDeleteAgent } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,26 +13,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default function Agents() {
-  const [agents, setAgents] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { data: agents = [], isLoading, error: queryError } = useAgents()
+  const deleteAgent = useDeleteAgent()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const { t, dateLocale } = useI18n()
 
-  const fetchAgents = async () => {
-    try {
-      const data = await api.get('/agent-bots')
-      setAgents(data.agent_bots)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchAgents() }, [])
+  const displayError = error || queryError?.message || ''
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -48,14 +38,13 @@ export default function Agents() {
 
   const handleDelete = async (id) => {
     try {
-      await api.delete(`/agent-bots/${id}`)
-      fetchAgents()
+      await deleteAgent.mutateAsync(id)
     } catch (err) {
       setError(err.message)
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>
@@ -86,8 +75,8 @@ export default function Agents() {
         </Dialog>
       </div>
 
-      {error && (
-        <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
+      {displayError && (
+        <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{displayError}</div>
       )}
 
       <Card>

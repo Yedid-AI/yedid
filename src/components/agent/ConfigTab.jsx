@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { api } from '../../lib/api'
+import { useAgent, useUpdateAgentConfig } from '../../hooks/queries'
 import { useI18n } from '../../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -10,28 +10,25 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 export default function ConfigTab({ agentBotId }) {
   const { t } = useI18n()
-  const [config, setConfig] = useState(null)
+  const { data: agent } = useAgent(agentBotId)
+  const updateConfig = useUpdateAgentConfig(agentBotId)
   const [form, setForm] = useState({ name: '', prompt: '', tone: '', response_length: '', llm_provider: 'openai', llm_model: 'gpt-4.1-mini' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
 
   useEffect(() => {
-    api.get(`/agent-bots/${agentBotId}`)
-      .then((data) => {
-        const cfg = data.agent_bot?.agent_config?.[0] || data.agent_bot?.agent_config || {}
-        setConfig(cfg)
-        setForm({
-          name: cfg.name || '',
-          prompt: cfg.prompt || '',
-          tone: cfg.tone || '',
-          response_length: cfg.response_length || '',
-          llm_provider: cfg.llm_provider || 'openai',
-          llm_model: cfg.llm_model || 'gpt-4.1-mini',
-        })
-      })
-      .catch((err) => setError(err.message))
-  }, [agentBotId])
+    if (!agent) return
+    const cfg = agent.agent_config?.[0] || agent.agent_config || {}
+    setForm({
+      name: cfg.name || '',
+      prompt: cfg.prompt || '',
+      tone: cfg.tone || '',
+      response_length: cfg.response_length || '',
+      llm_provider: cfg.llm_provider || 'openai',
+      llm_model: cfg.llm_model || 'gpt-4.1-mini',
+    })
+  }, [agent])
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -39,7 +36,7 @@ export default function ConfigTab({ agentBotId }) {
     setSaving(true)
     setSuccess(false)
     try {
-      await api.put(`/agent-bots/${agentBotId}/config`, form)
+      await updateConfig.mutateAsync(form)
       setSuccess(true)
       setTimeout(() => setSuccess(false), 2000)
     } catch (err) {

@@ -1,6 +1,5 @@
-import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { api } from '../lib/api'
+import { useAgent } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,24 +14,15 @@ export default function AgentDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { t, dateLocale } = useI18n()
-  const [agent, setAgent] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const { data: agent, isLoading, error: queryError } = useAgent(id)
 
-  useEffect(() => {
-    api.get(`/agent-bots/${id}`)
-      .then((data) => setAgent(data.agent_bot))
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
-  }, [id])
-
-  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
-  if (error) return (
+  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+  if (queryError) return (
     <div>
       <Button variant="ghost" onClick={() => navigate('/agents')} className="mb-4">
         <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
       </Button>
-      <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
+      <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{queryError.message}</div>
     </div>
   )
 
