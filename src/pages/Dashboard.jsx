@@ -68,7 +68,7 @@ export default function Dashboard() {
     }).catch(() => {})
   }, [user, filterStatus, filterInbox, ready])
 
-  const inboxMap = Object.fromEntries(inboxes.map((i) => [i.id, i.name]))
+  const inboxMap = Object.fromEntries(inboxes.map((i) => [i.inbox_id, i.name]))
 
   const formatDuration = (seconds) => {
     if (seconds == null) return '-'
@@ -168,7 +168,7 @@ export default function Dashboard() {
               <SelectContent>
                 <SelectItem value="all">{t('sessions.allInboxes')}</SelectItem>
                 {inboxes.map((inbox) => (
-                  <SelectItem key={inbox.id} value={String(inbox.id)}>{inbox.name}</SelectItem>
+                  <SelectItem key={inbox.id} value={String(inbox.inbox_id)}>{inbox.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -197,7 +197,7 @@ export default function Dashboard() {
                 ) : (
                   sessions.map((s) => (
                     <TableRow key={s.id} className="cursor-pointer" onClick={() => navigate(`/sessions/${s.id}`)}>
-                      <TableCell className="font-medium">{inboxMap[s.inbox_id] || '-'}</TableCell>
+                      <TableCell className="font-medium">{inboxMap[s.chatwoot_inbox_id] || '-'}</TableCell>
                       <TableCell>
                         <Badge variant={s.status === 'open' ? 'default' : 'secondary'}>
                           {s.status === 'open' ? t('sessions.statusOpen') : t('sessions.statusClosed')}

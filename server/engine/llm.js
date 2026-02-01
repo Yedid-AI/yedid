@@ -50,7 +50,12 @@ async function openaiCompletion({ model, systemPrompt, messages, tools, response
     apiMessages.push({ role: 'system', content: systemPrompt })
   }
   for (const msg of messages) {
-    apiMessages.push({ role: msg.role, content: msg.content })
+    // Pass through tool-related messages as-is (they have tool_calls / tool_call_id)
+    if (msg.tool_calls || msg.role === 'tool') {
+      apiMessages.push(msg)
+    } else {
+      apiMessages.push({ role: msg.role, content: msg.content })
+    }
   }
 
   const params = {

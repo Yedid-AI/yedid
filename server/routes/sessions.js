@@ -31,7 +31,7 @@ router.get('/sessions', checkRole('admin'), async (req, res) => {
     // Apply filters for table view
     let filtered = allData
     if (req.query.inbox_id) {
-      filtered = filtered.filter((s) => s.inbox_id === req.query.inbox_id)
+      filtered = filtered.filter((s) => String(s.chatwoot_inbox_id) === req.query.inbox_id)
     }
     if (req.query.status) {
       filtered = filtered.filter((s) => s.status === req.query.status)

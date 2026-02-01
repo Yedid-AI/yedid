@@ -36,7 +36,7 @@ export async function handleWebhook(webhookBody, supabase) {
     return
   }
 
-  const { userId, botToken, agentConfig, playbooks, escalationRules } = config
+  const { userId, inboxDbId, botToken, agentConfig, playbooks, escalationRules } = config
 
   if (!agentConfig || !botToken) {
     console.log(`[Engine] Missing agent config or bot token for inbox ${inboxId}`)
@@ -46,6 +46,7 @@ export async function handleWebhook(webhookBody, supabase) {
   // --- 3. Session + Memory ---
   const { session } = await createOrFindSession(supabase, {
     user_id: userId,
+    inbox_id: inboxDbId,
     chatwoot_account_id: accountId,
     chatwoot_inbox_id: inboxId,
     chatwoot_conversation_id: conversationId,
@@ -94,13 +95,13 @@ async function loadAgentConfig(supabase, inboxId) {
   // Lookup inbox → agent_bot_id
   const { data: inboxes, error: inError } = await supabase
     .from('inboxes')
-    .select('user_id, agent_bot_id')
+    .select('id, user_id, agent_bot_id')
     .eq('inbox_id', parseInt(inboxId))
     .limit(1)
 
   if (inError || !inboxes || inboxes.length === 0) return null
 
-  const { user_id: userId, agent_bot_id: agentBotId } = inboxes[0]
+  const { id: inboxDbId, user_id: userId, agent_bot_id: agentBotId } = inboxes[0]
   if (!agentBotId) return null
 
   // Fetch bot token
@@ -151,6 +152,7 @@ async function loadAgentConfig(supabase, inboxId) {
 
   return {
     userId,
+    inboxDbId,
     botToken,
     agentConfig,
     playbooks: formattedPlaybooks,
@@ -180,6 +182,11 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     supabase,
     userId,
   })
+
+  if (!response) {
+    console.error(`[Engine] Empty response from playbook agent for conversation ${conversationId}`)
+    return
+  }
 
   // Send response to Chatwoot
   await sendMessage(accountId, conversationId, response, botToken)
