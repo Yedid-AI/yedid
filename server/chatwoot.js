@@ -18,7 +18,7 @@ async function platformApi(path, method = 'GET', body = null) {
 }
 
 // Account API — /api/v1/accounts/{id}/... (uses user access token or fallback to CHATWOOT_ADMIN_TOKEN)
-async function accountApi(path, method = 'GET', body = null, accessToken = null) {
+export async function accountApi(path, method = 'GET', body = null, accessToken = null) {
   const url = getSetting('CHATWOOT_PLATFORM_URL')
   const token = accessToken || getSetting('CHATWOOT_ADMIN_TOKEN')
   if (!token) {
@@ -133,7 +133,8 @@ export async function addInboxMember(accountId, inboxId, chatUserId, accessToken
 
 // Legacy: full provisioning (kept for backward compat during transition)
 export async function provisionChatwoot(user, supabase) {
-  const N8N_WEBHOOK_URL = getSetting('N8N_AGENT_WEBHOOK_URL')
+  const appBaseUrl = getSetting('APP_BASE_URL')
+  const webhookUrl = appBaseUrl ? `${appBaseUrl}/api/webhook/chatwoot` : ''
 
   const { accountId, chatUserId } = await provisionAccount(user, supabase)
 
@@ -151,13 +152,13 @@ export async function provisionChatwoot(user, supabase) {
   // 7. Create agent bot
   let botId = null
   let botToken = null
-  if (N8N_WEBHOOK_URL) {
-    const bot = await createAgentBot(accountId, user.enterprise || user.email, N8N_WEBHOOK_URL)
+  if (webhookUrl) {
+    const bot = await createAgentBot(accountId, user.enterprise || user.email, webhookUrl)
     botId = bot.id
     botToken = bot.access_token
     console.log(`Provision [${user.email}] step 7: bot ${botId}`)
   } else {
-    console.log(`Provision [${user.email}] step 7: bot skipped (no N8N_AGENT_WEBHOOK_URL)`)
+    console.log(`Provision [${user.email}] step 7: bot skipped (no APP_BASE_URL)`)
   }
 
   // 8. Attach bot to inbox

@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 
 export default function ConfigTab({ agentBotId }) {
   const [config, setConfig] = useState(null)
-  const [form, setForm] = useState({ name: '', prompt: '', tone: '', response_length: '' })
+  const [form, setForm] = useState({ name: '', prompt: '', tone: '', response_length: '', llm_provider: 'openai', llm_model: 'gpt-4.1-mini' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
@@ -24,6 +24,8 @@ export default function ConfigTab({ agentBotId }) {
           prompt: cfg.prompt || '',
           tone: cfg.tone || '',
           response_length: cfg.response_length || '',
+          llm_provider: cfg.llm_provider || 'openai',
+          llm_model: cfg.llm_model || 'gpt-4.1-mini',
         })
       })
       .catch((err) => setError(err.message))
@@ -67,6 +69,40 @@ export default function ConfigTab({ agentBotId }) {
               rows={6}
               placeholder="Instructions generales pour l'agent..."
             />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label>Fournisseur LLM</Label>
+              <Select value={form.llm_provider} onValueChange={(v) => setForm({ ...form, llm_provider: v, llm_model: v === 'openai' ? 'gpt-4.1-mini' : 'claude-sonnet-4-20250514' })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai">OpenAI</SelectItem>
+                  <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Modele</Label>
+              {form.llm_provider === 'anthropic' ? (
+                <Select value={form.llm_model} onValueChange={(v) => setForm({ ...form, llm_model: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="claude-sonnet-4-20250514">Claude Sonnet 4</SelectItem>
+                    <SelectItem value="claude-haiku-4-20250414">Claude Haiku 4</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Select value={form.llm_model} onValueChange={(v) => setForm({ ...form, llm_model: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="gpt-4.1-mini">GPT-4.1 Mini</SelectItem>
+                    <SelectItem value="gpt-4.1">GPT-4.1</SelectItem>
+                    <SelectItem value="gpt-4o">GPT-4o</SelectItem>
+                    <SelectItem value="gpt-4o-mini">GPT-4o Mini</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">

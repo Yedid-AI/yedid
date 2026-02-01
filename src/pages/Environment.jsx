@@ -11,9 +11,16 @@ import { Eye, EyeOff, Save, Check } from 'lucide-react'
 const GROUPS = [
   {
     title: 'OpenAI',
-    description: 'Embeddings pour la base de connaissances',
+    description: 'LLM et embeddings (base de connaissances)',
     keys: [
       { key: 'OPENAI_API_KEY', label: 'API Key', placeholder: 'sk-...' },
+    ],
+  },
+  {
+    title: 'Anthropic',
+    description: 'LLM Claude (alternatif a OpenAI)',
+    keys: [
+      { key: 'ANTHROPIC_API_KEY', label: 'API Key', placeholder: 'sk-ant-...' },
     ],
   },
   {
@@ -33,15 +40,15 @@ const GROUPS = [
     ],
   },
   {
-    title: 'n8n',
-    description: 'Webhook agent IA',
+    title: 'Application',
+    description: 'URL de base pour les webhooks Chatwoot',
     keys: [
-      { key: 'N8N_AGENT_WEBHOOK_URL', label: 'Agent Webhook URL', placeholder: 'https://...' },
+      { key: 'APP_BASE_URL', label: 'URL de base', placeholder: 'https://app.cardynal.io' },
     ],
   },
   {
     title: 'Agent API',
-    description: 'Authentification n8n → Cardynal',
+    description: 'Authentification pour les appels agent',
     keys: [
       { key: 'AGENT_API_KEY', label: 'API Key', placeholder: 'Cle secrete...' },
     ],

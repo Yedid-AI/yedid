@@ -60,7 +60,8 @@ router.post('/agent-bots', checkRole('admin'), async (req, res) => {
     }
 
     const accountId = accounts[0].account_id
-    const outgoingUrl = getSetting('N8N_AGENT_WEBHOOK_URL')
+    const appBaseUrl = getSetting('APP_BASE_URL')
+    const outgoingUrl = appBaseUrl ? `${appBaseUrl}/api/webhook/chatwoot` : ''
 
     // Create bot on Chatwoot
     let botId = null
@@ -146,12 +147,14 @@ router.put('/agent-bots/:id/config', checkRole('admin'), async (req, res) => {
 
     if (!bot) return res.status(404).json({ error: 'Agent introuvable' })
 
-    const { name, prompt, tone, response_length } = req.body
+    const { name, prompt, tone, response_length, llm_provider, llm_model } = req.body
     const updates = { updated_at: new Date().toISOString() }
     if (name !== undefined) updates.name = name
     if (prompt !== undefined) updates.prompt = prompt
     if (tone !== undefined) updates.tone = tone
     if (response_length !== undefined) updates.response_length = response_length
+    if (llm_provider !== undefined) updates.llm_provider = llm_provider
+    if (llm_model !== undefined) updates.llm_model = llm_model
 
     const { data, error } = await req.supabase
       .from('agent_config')

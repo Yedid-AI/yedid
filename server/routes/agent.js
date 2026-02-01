@@ -2,8 +2,21 @@ import { Router } from 'express'
 import { checkApiKey } from '../middleware.js'
 import { provisionAccount } from '../chatwoot.js'
 import { checkAuth, checkRole } from '../middleware.js'
+import { handleWebhook } from '../engine/index.js'
 
 const router = Router()
+
+// POST /api/webhook/chatwoot — receives Chatwoot agent_bot webhooks
+// Responds 200 immediately, processes async (fire-and-forget)
+router.post('/webhook/chatwoot', (req, res) => {
+  res.status(200).json({ ok: true })
+
+  // Process asynchronously — don't await
+  const supabase = req.supabaseAdmin || req.supabase
+  handleWebhook(req.body, supabase).catch(err => {
+    console.error('[Webhook] Error processing:', err.message)
+  })
+})
 
 // GET /api/agent/config (authenticated via API key - called by n8n)
 // Supports: ?chatwoot_account_id=X or ?inbox_id=X
