@@ -159,7 +159,7 @@ export default function Dashboard() {
               <div>
                 <h2 className="text-lg font-semibold">{t('sessions.detail')}</h2>
                 <p className="text-xs text-muted-foreground">
-                  {t('sessions.sessionId', { id: selectedSession.id.slice(0, 8) })} — {new Date(selectedSession.created_at).toLocaleString(dateLocale)}
+                  {t('sessions.sessionId', { id: String(selectedSession.id).slice(0, 8) })} — {new Date(selectedSession.created_at).toLocaleString(dateLocale)}
                 </p>
               </div>
               <Button variant="ghost" size="icon" onClick={closeSession}>

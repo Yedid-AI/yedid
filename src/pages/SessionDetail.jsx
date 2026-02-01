@@ -40,7 +40,7 @@ export default function SessionDetail() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t('sessions.detail')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {t('sessions.sessionId', { id: session.id.slice(0, 8) })} — {new Date(session.created_at).toLocaleString(dateLocale)}
+            {t('sessions.sessionId', { id: String(session.id).slice(0, 8) })} — {new Date(session.created_at).toLocaleString(dateLocale)}
           </p>
         </div>
       </div>
