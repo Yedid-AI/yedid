@@ -21,6 +21,13 @@ export async function runPlaybookAgent({ agentConfig, playbook, userMessage, con
   const provider = agentConfig.llm_provider || 'openai'
   const model = agentConfig.llm_model || 'gpt-4.1-mini'
 
+  // Track metadata during tool-use loop
+  const metadata = {
+    tool_calls: [],
+    kb_searches: [],
+    tool_rounds: 0,
+  }
+
   // Build system prompt — ported from n8n Playbook Agent node
   const systemPrompt = `# Identity
 You are ${agentConfig.name}.
@@ -83,8 +90,10 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
 
     // No tool calls — we have the final response
     if (!result.toolCalls || result.toolCalls.length === 0) {
-      return result.content
+      return { content: result.content, metadata }
     }
+
+    metadata.tool_rounds = round + 1
 
     // Process tool calls
     // First, add the assistant's tool-call message to conversation
@@ -98,9 +107,11 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
         const query = toolCall.arguments.query
         const kbResults = await searchKnowledgeBase(supabase, query, userId)
         toolResult = formatKBResults(kbResults) || 'No relevant information found in the knowledge base.'
+        metadata.kb_searches.push({ query, results_count: kbResults.length })
       } else if (toolCall.name.startsWith('api_tool_') && apiTool) {
         // Dynamic API tool
         toolResult = await executeTool(apiTool, toolCall.arguments.body || toolCall.arguments)
+        metadata.tool_calls.push({ name: apiTool.name, arguments: toolCall.arguments })
       } else {
         toolResult = `Unknown tool: ${toolCall.name}`
       }
@@ -117,5 +128,5 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
     messages,
   })
 
-  return finalResult.content
+  return { content: finalResult.content, metadata }
 }

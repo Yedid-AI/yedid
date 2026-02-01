@@ -170,6 +170,8 @@ export default {
   'sessions.conversation': 'שיחה',
   'sessions.noMessages': 'אין הודעות',
   'sessions.notFound': 'סשן לא נמצא',
+  'sessions.metaResults': 'תוצאות',
+  'sessions.metaSummary': 'סיכום',
 
   // sources
   'sources.title': 'בסיס ידע',

@@ -107,7 +107,37 @@ router.get('/sessions/:id/messages', checkRole('admin'), async (req, res) => {
       .order('created_at', { ascending: true })
 
     if (error) throw error
-    res.json({ messages: data })
+
+    // Collect unique playbook_ids and escalation_ids to resolve titles
+    const playbookIds = [...new Set((data || []).map((m) => m.playbook_id).filter(Boolean))]
+    const escalationIds = [...new Set((data || []).map((m) => m.escalation_id).filter(Boolean))]
+
+    const playbookMap = {}
+    const escalationMap = {}
+
+    if (playbookIds.length > 0) {
+      const { data: pbs } = await req.supabase
+        .from('playbooks')
+        .select('id, title')
+        .in('id', playbookIds)
+      for (const pb of pbs || []) playbookMap[pb.id] = pb.title
+    }
+
+    if (escalationIds.length > 0) {
+      const { data: ers } = await req.supabase
+        .from('escalation_rules')
+        .select('id, title')
+        .in('id', escalationIds)
+      for (const er of ers || []) escalationMap[er.id] = er.title
+    }
+
+    const messages = (data || []).map((m) => ({
+      ...m,
+      playbook_title: playbookMap[m.playbook_id] || null,
+      escalation_title: escalationMap[m.escalation_id] || null,
+    }))
+
+    res.json({ messages })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }

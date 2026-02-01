@@ -174,7 +174,7 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
   }
 
   // Run playbook agent
-  const response = await runPlaybookAgent({
+  const result = await runPlaybookAgent({
     agentConfig,
     playbook,
     userMessage,
@@ -183,10 +183,12 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     userId,
   })
 
-  if (!response) {
+  if (!result || !result.content) {
     console.error(`[Engine] Empty response from playbook agent for conversation ${conversationId}`)
     return
   }
+
+  const { content: response, metadata: agentMetadata } = result
 
   // Send response to Chatwoot
   await sendMessage(accountId, conversationId, response, botToken)
@@ -206,6 +208,7 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     role: 'assistant',
     content: response,
     playbook_id: playbook.id,
+    metadata: agentMetadata,
   })
 
   console.log(`[Engine] Playbook response sent for conversation ${conversationId}`)

@@ -170,6 +170,8 @@ export default {
   'sessions.conversation': 'Conversation',
   'sessions.noMessages': 'No messages',
   'sessions.notFound': 'Session not found',
+  'sessions.metaResults': 'results',
+  'sessions.metaSummary': 'Summary',
 
   // sources
   'sources.title': 'Knowledge Base',

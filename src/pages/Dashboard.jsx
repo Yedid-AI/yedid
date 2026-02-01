@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Database, Bot, Inbox, Users, MessageSquare, CheckCircle, CircleDot, Receipt, Brain, User, X } from 'lucide-react'
+import { Database, Bot, Inbox, Users, MessageSquare, CheckCircle, CircleDot, Receipt, Brain, User, X, BookOpen, Wrench, Search, AlertTriangle } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -221,7 +221,7 @@ export default function Dashboard() {
                 ) : sessionMessages.length === 0 ? (
                   <p className="text-sm text-muted-foreground">{t('sessions.noMessages')}</p>
                 ) : (
-                  <div className="space-y-3">
+                  <div className="space-y-4">
                     {sessionMessages.map((m) => (
                       <div key={m.id} className="flex gap-2.5">
                         <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${m.role === 'user' ? 'bg-muted' : 'bg-primary/10'}`}>
@@ -233,6 +233,37 @@ export default function Dashboard() {
                             <span className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString(dateLocale)}</span>
                           </div>
                           <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+
+                          {/* Metadata badges — only on assistant messages */}
+                          {m.role === 'assistant' && (m.playbook_title || m.escalation_title || m.metadata) && (
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              {m.playbook_title && (
+                                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                                  <BookOpen size={10} /> {m.playbook_title}
+                                </span>
+                              )}
+                              {m.escalation_title && (
+                                <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600 dark:text-orange-400">
+                                  <AlertTriangle size={10} /> {m.escalation_title}
+                                </span>
+                              )}
+                              {m.metadata?.kb_searches?.map((kb, i) => (
+                                <span key={`kb-${i}`} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                                  <Search size={10} /> KB: "{kb.query}" ({kb.results_count} {t('sessions.metaResults')})
+                                </span>
+                              ))}
+                              {m.metadata?.tool_calls?.map((tc, i) => (
+                                <span key={`tc-${i}`} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400">
+                                  <Wrench size={10} /> {tc.name}
+                                </span>
+                              ))}
+                              {m.metadata?.resume && (
+                                <div className="w-full text-[11px] mt-1 p-2 rounded bg-orange-500/5 text-orange-600 dark:text-orange-400 border border-orange-500/10">
+                                  <span className="font-medium">{t('sessions.metaSummary')}:</span> {m.metadata.resume}
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
