@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { api } from '../lib/api'
+import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,6 +18,7 @@ const statusVariant = {
 }
 
 export default function Sources() {
+  const { t, dateLocale } = useI18n()
   const [sources, setSources] = useState([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState('file')
@@ -88,13 +90,13 @@ export default function Sources() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Chargement...</div>
+  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Base de connaissances</h1>
-        <p className="text-sm text-muted-foreground mt-1">Gerez vos sources de donnees pour l'agent IA</p>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('sources.title')}</h1>
+        <p className="text-sm text-muted-foreground mt-1">{t('sources.subtitle')}</p>
       </div>
 
       {error && (
@@ -106,24 +108,24 @@ export default function Sources() {
       <Card className="p-4 mb-6">
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList>
-            <TabsTrigger value="file">Upload PDF</TabsTrigger>
-            <TabsTrigger value="webpage">Page web</TabsTrigger>
+            <TabsTrigger value="file">{t('sources.uploadPdf')}</TabsTrigger>
+            <TabsTrigger value="webpage">{t('sources.webpage')}</TabsTrigger>
           </TabsList>
           <form onSubmit={handleSubmit} className="mt-4 flex gap-3 items-end">
             <div className="flex-1 space-y-2">
-              <Label>Nom</Label>
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Nom de la source" required />
+              <Label>{t('sources.nameLabel')}</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('sources.namePlaceholder')} required />
             </div>
             <TabsContent value="file" className="flex-1 mt-0 space-y-2">
-              <Label>Fichier PDF</Label>
+              <Label>{t('sources.fileLabel')}</Label>
               <Input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files[0])} required={tab === 'file'} />
             </TabsContent>
             <TabsContent value="webpage" className="flex-1 mt-0 space-y-2">
-              <Label>URL</Label>
+              <Label>{t('sources.urlLabel')}</Label>
               <Input type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." required={tab === 'webpage'} />
             </TabsContent>
             <Button type="submit" disabled={submitting}>
-              {submitting ? 'Envoi...' : 'Ajouter'}
+              {submitting ? t('sources.submitting') : t('sources.submit')}
             </Button>
           </form>
         </Tabs>
@@ -133,17 +135,17 @@ export default function Sources() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nom</TableHead>
-              <TableHead>Type</TableHead>
-              <TableHead>Statut</TableHead>
-              <TableHead>Chunks</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>{t('common.name')}</TableHead>
+              <TableHead>{t('sources.type')}</TableHead>
+              <TableHead>{t('common.status')}</TableHead>
+              <TableHead>{t('sources.chunks')}</TableHead>
+              <TableHead>{t('common.date')}</TableHead>
+              <TableHead>{t('common.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {sources.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">Aucune source</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">{t('sources.empty')}</TableCell></TableRow>
             ) : (
               sources.map((s) => (
                 <TableRow key={s.id}>
@@ -154,24 +156,24 @@ export default function Sources() {
                       {s.status}
                     </Badge>
                     {s.error_message && (
-                      <span className="ml-2 text-xs text-destructive" title={s.error_message}>(?)</span>
+                      <span className="ms-2 text-xs text-destructive" title={s.error_message}>(?)</span>
                     )}
                   </TableCell>
                   <TableCell>{s.chunk_count}</TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(s.created_at).toLocaleDateString('fr-FR')}</TableCell>
+                  <TableCell className="text-muted-foreground">{new Date(s.created_at).toLocaleDateString(dateLocale)}</TableCell>
                   <TableCell>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">Supprimer</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer cette source ?</AlertDialogTitle>
-                          <AlertDialogDescription>Les vecteurs associes seront aussi supprimes.</AlertDialogDescription>
+                          <AlertDialogTitle>{t('sources.deleteTitle')}</AlertDialogTitle>
+                          <AlertDialogDescription>{t('sources.deleteDescription')}</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(s.id)}>Supprimer</AlertDialogAction>
+                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(s.id)}>{t('common.delete')}</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
+import { useI18n } from '../../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +15,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
 export default function ToolsTab({ agentBotId }) {
+  const { t } = useI18n()
   const [tools, setTools] = useState([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -90,28 +92,28 @@ export default function ToolsTab({ agentBotId }) {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Chargement...</div>
+  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted-foreground">APIs externes accessibles par l'agent</p>
+        <p className="text-sm text-muted-foreground">{t('tools.subtitle')}</p>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
           <DialogTrigger asChild>
-            <Button>+ Nouveau</Button>
+            <Button>{t('common.new')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>{editItem ? 'Modifier' : 'Nouveau tool'}</DialogTitle>
+              <DialogTitle>{editItem ? t('common.edit') : t('tools.dialogTitle')}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Nom</Label>
+                  <Label>{t('common.name')}</Label>
                   <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
                 </div>
                 <div className="space-y-2">
-                  <Label>Methode</Label>
+                  <Label>{t('tools.method')}</Label>
                   <Select value={form.method} onValueChange={(v) => setForm({ ...form, method: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -121,36 +123,36 @@ export default function ToolsTab({ agentBotId }) {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>URL</Label>
+                <Label>{t('tools.url')}</Label>
                 <Input type="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} required />
               </div>
               <div className="space-y-2">
-                <Label>Description (pour le LLM)</Label>
+                <Label>{t('tools.description')}</Label>
                 <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} required />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Query Parameters (JSON)</Label>
+                  <Label>{t('tools.queryParams')}</Label>
                   <Textarea value={form.query_parameters} onChange={(e) => setForm({ ...form, query_parameters: e.target.value })} rows={3} className="font-mono text-xs" />
                 </div>
                 <div className="space-y-2">
-                  <Label>Headers (JSON)</Label>
+                  <Label>{t('tools.headers')}</Label>
                   <Textarea value={form.headers} onChange={(e) => setForm({ ...form, headers: e.target.value })} rows={3} className="font-mono text-xs" />
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Body Schema (pour $fromAI)</Label>
+                <Label>{t('tools.bodySchema')}</Label>
                 <Textarea
                   value={form.body_schema}
                   onChange={(e) => setForm({ ...form, body_schema: e.target.value })}
                   rows={3}
                   className="font-mono text-xs"
-                  placeholder='{ "customer_id": "string", "amount": "number" }'
+                  placeholder={t('tools.bodyPlaceholder')}
                 />
               </div>
               <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-                <Button type="submit">{editItem ? 'Enregistrer' : 'Creer'}</Button>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+                <Button type="submit">{editItem ? t('common.save') : t('common.create')}</Button>
               </div>
             </form>
           </DialogContent>
@@ -165,37 +167,37 @@ export default function ToolsTab({ agentBotId }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nom</TableHead>
-              <TableHead>Methode</TableHead>
-              <TableHead>URL</TableHead>
+              <TableHead>{t('common.name')}</TableHead>
+              <TableHead>{t('tools.method')}</TableHead>
+              <TableHead>{t('tools.url')}</TableHead>
               <TableHead>Description</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>{t('common.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {tools.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">Aucun tool</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('tools.empty')}</TableCell></TableRow>
             ) : (
-              tools.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="font-medium">{t.name}</TableCell>
-                  <TableCell><Badge variant="outline" className="font-mono">{t.method}</Badge></TableCell>
-                  <TableCell className="text-muted-foreground truncate max-w-[200px]">{t.url}</TableCell>
-                  <TableCell className="truncate max-w-[250px]">{t.description}</TableCell>
-                  <TableCell className="space-x-2">
-                    <Button size="sm" variant="ghost" onClick={() => handleEdit(t)}>Modifier</Button>
+              tools.map((tool) => (
+                <TableRow key={tool.id}>
+                  <TableCell className="font-medium">{tool.name}</TableCell>
+                  <TableCell><Badge variant="outline" className="font-mono">{tool.method}</Badge></TableCell>
+                  <TableCell className="text-muted-foreground truncate max-w-[200px]">{tool.url}</TableCell>
+                  <TableCell className="truncate max-w-[250px]">{tool.description}</TableCell>
+                  <TableCell className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => handleEdit(tool)}>{t('common.edit')}</Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">Supprimer</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer ce tool ?</AlertDialogTitle>
-                          <AlertDialogDescription>Les playbooks lies perdront leur tool.</AlertDialogDescription>
+                          <AlertDialogTitle>{t('tools.deleteTitle')}</AlertDialogTitle>
+                          <AlertDialogDescription>{t('tools.deleteDescription')}</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(t.id)}>Supprimer</AlertDialogAction>
+                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(tool.id)}>{t('common.delete')}</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

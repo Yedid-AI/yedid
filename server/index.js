@@ -16,6 +16,7 @@ import agentBotsRoutes from './routes/agent-bots.js'
 import inboxesRoutes from './routes/inboxes.js'
 import sessionsRoutes from './routes/sessions.js'
 import { loadSettings } from './settings.js'
+import { startClosingCron } from './engine/closing-cron.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -111,4 +112,5 @@ app.listen(PORT, async () => {
   }
   await loadSettings(supabase)
   await seedAdmin()
+  startClosingCron(supabaseAdmin)
 })

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
+import { useI18n } from '../../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default function EscalationTab({ agentBotId }) {
+  const { t } = useI18n()
   const [rules, setRules] = useState([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -86,50 +88,50 @@ export default function EscalationTab({ agentBotId }) {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Chargement...</div>
+  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted-foreground">Regles de transfert vers un agent humain</p>
+        <p className="text-sm text-muted-foreground">{t('escalation.subtitle')}</p>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
           <DialogTrigger asChild>
-            <Button>+ Nouveau</Button>
+            <Button>{t('common.new')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>{editItem ? 'Modifier' : 'Nouvelle regle'}</DialogTitle>
+              <DialogTitle>{editItem ? t('common.edit') : t('escalation.dialogTitle')}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label>Titre</Label>
+                <Label>{t('common.title')}</Label>
                 <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
               </div>
               <div className="space-y-2">
-                <Label>Trigger description</Label>
+                <Label>{t('escalation.trigger')}</Label>
                 <Textarea value={form.trigger_description} onChange={(e) => setForm({ ...form, trigger_description: e.target.value })} rows={3} />
               </div>
               <div className="space-y-2">
-                <Label>Rules (instructions pour l'agent)</Label>
+                <Label>{t('escalation.rules')}</Label>
                 <Textarea value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} rows={3} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Audience</Label>
+                  <Label>{t('common.audience')}</Label>
                   <Input value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Assigner a l'agent (ID)</Label>
+                  <Label>{t('escalation.assignTo')}</Label>
                   <Input type="number" value={form.assign_to_agent} onChange={(e) => setForm({ ...form, assign_to_agent: e.target.value })} />
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} id="esc-active" />
-                <Label htmlFor="esc-active">Actif</Label>
+                <Label htmlFor="esc-active">{t('common.active')}</Label>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-                <Button type="submit">{editItem ? 'Enregistrer' : 'Creer'}</Button>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+                <Button type="submit">{editItem ? t('common.save') : t('common.create')}</Button>
               </div>
             </form>
           </DialogContent>
@@ -144,16 +146,16 @@ export default function EscalationTab({ agentBotId }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Titre</TableHead>
+              <TableHead>{t('common.title')}</TableHead>
               <TableHead>Trigger</TableHead>
-              <TableHead>Audience</TableHead>
-              <TableHead>Actif</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>{t('common.audience')}</TableHead>
+              <TableHead>{t('common.active')}</TableHead>
+              <TableHead>{t('common.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rules.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">Aucune regle</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('escalation.empty')}</TableCell></TableRow>
             ) : (
               rules.map((r) => (
                 <TableRow key={r.id}>
@@ -166,23 +168,23 @@ export default function EscalationTab({ agentBotId }) {
                       className="cursor-pointer"
                       onClick={() => toggleActive(r)}
                     >
-                      {r.is_active ? 'Actif' : 'Inactif'}
+                      {r.is_active ? t('common.active') : t('common.inactive')}
                     </Badge>
                   </TableCell>
-                  <TableCell className="space-x-2">
-                    <Button size="sm" variant="ghost" onClick={() => handleEdit(r)}>Modifier</Button>
+                  <TableCell className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => handleEdit(r)}>{t('common.edit')}</Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">Supprimer</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer cette regle ?</AlertDialogTitle>
-                          <AlertDialogDescription>Cette action est irreversible.</AlertDialogDescription>
+                          <AlertDialogTitle>{t('escalation.deleteTitle')}</AlertDialogTitle>
+                          <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(r.id)}>Supprimer</AlertDialogAction>
+                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(r.id)}>{t('common.delete')}</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

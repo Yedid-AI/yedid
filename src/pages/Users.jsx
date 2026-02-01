@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -12,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default function Users() {
+  const { t } = useI18n()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -92,26 +94,26 @@ export default function Users() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Chargement...</div>
+  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Utilisateurs</h1>
-          <p className="text-sm text-muted-foreground mt-1">Gerez les comptes et les acces</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('users.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('users.subtitle')}</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditUser(null); resetForm() } }}>
           <DialogTrigger asChild>
-            <Button>+ Nouveau</Button>
+            <Button>{t('common.new')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>{editUser ? 'Modifier' : 'Nouvel utilisateur'}</DialogTitle>
+              <DialogTitle>{editUser ? t('users.editTitle') : t('users.dialogTitle')}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label>Email</Label>
+                <Label>{t('common.email')}</Label>
                 <Input
                   type="email"
                   value={form.email}
@@ -121,7 +123,7 @@ export default function Users() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>{editUser ? 'Nouveau mot de passe (optionnel)' : 'Mot de passe'}</Label>
+                <Label>{editUser ? t('users.newPasswordLabel') : t('common.password')}</Label>
                 <Input
                   type="password"
                   value={form.password}
@@ -131,17 +133,17 @@ export default function Users() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Prenom</Label>
+                  <Label>{t('users.firstName')}</Label>
                   <Input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Nom</Label>
+                  <Label>{t('users.lastName')}</Label>
                   <Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Role</Label>
+                  <Label>{t('users.role')}</Label>
                   <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -152,13 +154,13 @@ export default function Users() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label>Entreprise</Label>
+                  <Label>{t('users.enterprise')}</Label>
                   <Input value={form.enterprise} onChange={(e) => setForm({ ...form, enterprise: e.target.value })} />
                 </div>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-                <Button type="submit">{editUser ? 'Enregistrer' : 'Creer'}</Button>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+                <Button type="submit">{editUser ? t('common.save') : t('common.create')}</Button>
               </div>
             </form>
           </DialogContent>
@@ -175,12 +177,12 @@ export default function Users() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Email</TableHead>
-              <TableHead>Nom</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Entreprise</TableHead>
-              <TableHead>Chat</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>{t('common.email')}</TableHead>
+              <TableHead>{t('common.name')}</TableHead>
+              <TableHead>{t('users.role')}</TableHead>
+              <TableHead>{t('users.enterprise')}</TableHead>
+              <TableHead>{t('users.chat')}</TableHead>
+              <TableHead>{t('common.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -192,7 +194,7 @@ export default function Users() {
                 <TableCell>{u.enterprise || '-'}</TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
                   {u.chatwoot_accounts ? (
-                    <Badge variant="default" className="bg-emerald-600/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border-0">Actif</Badge>
+                    <Badge variant="default" className="bg-emerald-600/15 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 border-0">{t('common.active')}</Badge>
                   ) : (
                     <Button
                       size="sm"
@@ -200,27 +202,27 @@ export default function Users() {
                       onClick={() => handleProvision(u.id)}
                       disabled={provisioningId === u.id}
                     >
-                      {provisioningId === u.id ? 'Activation...' : 'Activer Chat'}
+                      {provisioningId === u.id ? t('users.activating') : t('users.activateChat')}
                     </Button>
                   )}
                 </TableCell>
-                <TableCell className="space-x-2" onClick={(e) => e.stopPropagation()}>
-                  <Button size="sm" variant="ghost" onClick={() => handleEdit(u)}>Modifier</Button>
+                <TableCell className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                  <Button size="sm" variant="ghost" onClick={() => handleEdit(u)}>{t('common.edit')}</Button>
                   {u.role !== 'super_admin' && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">Supprimer</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer cet utilisateur ?</AlertDialogTitle>
+                          <AlertDialogTitle>{t('users.deleteTitle')}</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Cette action est irreversible. L'utilisateur {u.email} sera supprime.
+                            {t('users.deleteDescription', { email: u.email })}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(u.id)}>Supprimer</AlertDialogAction>
+                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(u.id)}>{t('common.delete')}</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

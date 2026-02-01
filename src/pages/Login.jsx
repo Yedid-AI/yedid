@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +12,7 @@ export default function Login() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const { login } = useAuth()
+  const { t } = useI18n()
   const navigate = useNavigate()
 
   const handleSubmit = async (e) => {
@@ -32,7 +34,7 @@ export default function Login() {
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-semibold tracking-tight">cardynal</h1>
-          <p className="text-sm text-muted-foreground mt-1">Connectez-vous a votre compte</p>
+          <p className="text-sm text-muted-foreground mt-1">{t('login.subtitle')}</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
@@ -41,18 +43,18 @@ export default function Login() {
             </div>
           )}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t('common.email')}</Label>
             <Input
               id="email"
               type="email"
-              placeholder="nom@entreprise.com"
+              placeholder={t('login.emailPlaceholder')}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="password">Mot de passe</Label>
+            <Label htmlFor="password">{t('common.password')}</Label>
             <Input
               id="password"
               type="password"
@@ -62,7 +64,7 @@ export default function Login() {
             />
           </div>
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? 'Connexion...' : 'Se connecter'}
+            {loading ? t('login.submitting') : t('login.submit')}
           </Button>
         </form>
       </div>

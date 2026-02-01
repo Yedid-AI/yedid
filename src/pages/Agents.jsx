@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,6 +18,7 @@ export default function Agents() {
   const [name, setName] = useState('')
   const [error, setError] = useState('')
   const navigate = useNavigate()
+  const { t, dateLocale } = useI18n()
 
   const fetchAgents = async () => {
     try {
@@ -53,31 +55,31 @@ export default function Agents() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Chargement...</div>
+  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Agents</h1>
-          <p className="text-sm text-muted-foreground mt-1">Gerez vos agents IA et leur configuration</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('agents.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('agents.subtitle')}</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setName('') }}>
           <DialogTrigger asChild>
-            <Button>+ Nouvel agent</Button>
+            <Button>{t('agents.newAgent')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-sm">
             <DialogHeader>
-              <DialogTitle>Nouvel agent</DialogTitle>
+              <DialogTitle>{t('agents.dialogTitle')}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
-                <Label>Nom de l'agent</Label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex: Support Client" required />
+                <Label>{t('agents.nameLabel')}</Label>
+                <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('agents.namePlaceholder')} required />
               </div>
               <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-                <Button type="submit">Creer</Button>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+                <Button type="submit">{t('common.create')}</Button>
               </div>
             </form>
           </DialogContent>
@@ -92,43 +94,43 @@ export default function Agents() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nom</TableHead>
-              <TableHead>Statut</TableHead>
-              <TableHead>Cree le</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>{t('common.name')}</TableHead>
+              <TableHead>{t('common.status')}</TableHead>
+              <TableHead>{t('common.createdAt')}</TableHead>
+              <TableHead>{t('common.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {agents.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">Aucun agent</TableCell></TableRow>
+              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">{t('agents.empty')}</TableCell></TableRow>
             ) : (
               agents.map((a) => (
                 <TableRow key={a.id} className="cursor-pointer" onClick={() => navigate(`/agents/${a.id}`)}>
                   <TableCell className="font-medium">{a.name}</TableCell>
                   <TableCell>
                     <Badge variant={a.is_active ? 'default' : 'secondary'}>
-                      {a.is_active ? 'Actif' : 'Inactif'}
+                      {a.is_active ? t('common.active') : t('common.inactive')}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(a.created_at).toLocaleDateString('fr-FR')}
+                    {new Date(a.created_at).toLocaleDateString(dateLocale)}
                   </TableCell>
-                  <TableCell className="space-x-2" onClick={(e) => e.stopPropagation()}>
-                    <Button size="sm" variant="ghost" onClick={() => navigate(`/agents/${a.id}`)}>Configurer</Button>
+                  <TableCell className="gap-2 flex" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="ghost" onClick={() => navigate(`/agents/${a.id}`)}>{t('common.configure')}</Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">Supprimer</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer cet agent ?</AlertDialogTitle>
+                          <AlertDialogTitle>{t('agents.deleteTitle')}</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Cette action supprimera aussi les playbooks, tools et regles d'escalation associes.
+                            {t('agents.deleteDescription')}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(a.id)}>Supprimer</AlertDialogAction>
+                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(a.id)}>{t('common.delete')}</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

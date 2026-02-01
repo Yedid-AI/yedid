@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,6 +16,7 @@ function maskToken(token) {
 }
 
 export default function UserDetail() {
+  const { t, dateLocale } = useI18n()
   const { id } = useParams()
   const navigate = useNavigate()
   const [data, setData] = useState(null)
@@ -35,11 +37,11 @@ export default function UserDetail() {
     fetchDetail()
   }, [id])
 
-  if (loading) return <div className="text-muted-foreground">Chargement...</div>
+  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
   if (error) return (
     <div>
       <Button variant="ghost" onClick={() => navigate('/users')} className="mb-4">
-        <ArrowLeft className="mr-2 h-4 w-4" /> Retour
+        <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
       </Button>
       <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">
         {error}
@@ -53,7 +55,7 @@ export default function UserDetail() {
     <div>
       <div className="flex items-center gap-4 mb-8">
         <Button variant="ghost" size="sm" onClick={() => navigate('/users')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Retour
+          <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
         </Button>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
@@ -61,47 +63,47 @@ export default function UserDetail() {
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">{user.email}</p>
         </div>
-        <Badge variant="secondary" className="ml-auto">{user.role}</Badge>
+        <Badge variant="secondary" className="ms-auto">{user.role}</Badge>
       </div>
 
       <Tabs defaultValue="profil">
         <TabsList>
-          <TabsTrigger value="profil"><User className="mr-1.5 h-4 w-4" />Profil</TabsTrigger>
-          <TabsTrigger value="chatwoot"><MessageSquare className="mr-1.5 h-4 w-4" />Chatwoot</TabsTrigger>
-          <TabsTrigger value="stats"><BarChart3 className="mr-1.5 h-4 w-4" />Statistiques</TabsTrigger>
+          <TabsTrigger value="profil"><User className="me-1.5 h-4 w-4" />{t('users.profile')}</TabsTrigger>
+          <TabsTrigger value="chatwoot"><MessageSquare className="me-1.5 h-4 w-4" />{t('users.chatwootTab')}</TabsTrigger>
+          <TabsTrigger value="stats"><BarChart3 className="me-1.5 h-4 w-4" />{t('users.statsTab')}</TabsTrigger>
         </TabsList>
 
         {/* Onglet Profil */}
         <TabsContent value="profil" className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Informations</CardTitle>
+              <CardTitle className="text-base">{t('users.info')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
-                  <span className="text-muted-foreground">Prenom</span>
+                  <span className="text-muted-foreground">{t('users.firstName')}</span>
                   <p className="font-medium mt-0.5">{user.first_name || '-'}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Nom</span>
+                  <span className="text-muted-foreground">{t('users.lastName')}</span>
                   <p className="font-medium mt-0.5">{user.last_name || '-'}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Email</span>
+                  <span className="text-muted-foreground">{t('common.email')}</span>
                   <p className="font-medium mt-0.5">{user.email}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Role</span>
+                  <span className="text-muted-foreground">{t('users.role')}</span>
                   <p className="mt-0.5"><Badge variant="secondary">{user.role}</Badge></p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Entreprise</span>
+                  <span className="text-muted-foreground">{t('users.enterprise')}</span>
                   <p className="font-medium mt-0.5">{user.enterprise || '-'}</p>
                 </div>
                 <div>
-                  <span className="text-muted-foreground">Cree le</span>
-                  <p className="font-medium mt-0.5">{new Date(user.created_at).toLocaleDateString('fr-FR')}</p>
+                  <span className="text-muted-foreground">{t('common.createdAt')}</span>
+                  <p className="font-medium mt-0.5">{new Date(user.created_at).toLocaleDateString(dateLocale)}</p>
                 </div>
               </div>
             </CardContent>
@@ -114,7 +116,7 @@ export default function UserDetail() {
             <>
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Compte Chatwoot</CardTitle>
+                  <CardTitle className="text-base">{t('users.chatwootAccount')}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4 text-sm">
@@ -141,14 +143,14 @@ export default function UserDetail() {
               {agent_bots && agent_bots.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Agents</CardTitle>
+                    <CardTitle className="text-base">{t('dashboard.agents')}</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Nom</TableHead>
-                          <TableHead>Statut</TableHead>
+                          <TableHead>{t('common.name')}</TableHead>
+                          <TableHead>{t('common.status')}</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -157,7 +159,7 @@ export default function UserDetail() {
                             <TableCell className="font-medium">{bot.name}</TableCell>
                             <TableCell>
                               <Badge variant={bot.is_active ? 'default' : 'secondary'}>
-                                {bot.is_active ? 'Actif' : 'Inactif'}
+                                {bot.is_active ? t('common.active') : t('common.inactive')}
                               </Badge>
                             </TableCell>
                           </TableRow>
@@ -171,13 +173,13 @@ export default function UserDetail() {
               {inboxes.length > 0 && (
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Inboxes</CardTitle>
+                    <CardTitle className="text-base">{t('dashboard.inboxes')}</CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Nom</TableHead>
+                          <TableHead>{t('common.name')}</TableHead>
                           <TableHead>Inbox ID</TableHead>
                           <TableHead>Website Token</TableHead>
                           <TableHead>Agent</TableHead>
@@ -204,7 +206,7 @@ export default function UserDetail() {
           ) : (
             <Card>
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                Chatwoot non provisionne pour cet utilisateur.
+                {t('users.chatwootNotProvisioned')}
               </CardContent>
             </Card>
           )}
@@ -215,7 +217,7 @@ export default function UserDetail() {
           <div className="grid grid-cols-2 gap-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Sources</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">{t('dashboard.sources')}</CardTitle>
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -224,7 +226,7 @@ export default function UserDetail() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Agents</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">{t('dashboard.agents')}</CardTitle>
                 <Bot className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -233,7 +235,7 @@ export default function UserDetail() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Inboxes</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">{t('dashboard.inboxes')}</CardTitle>
                 <Inbox className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
@@ -242,7 +244,7 @@ export default function UserDetail() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">Sessions</CardTitle>
+                <CardTitle className="text-sm font-medium text-muted-foreground">{t('inboxes.sessions')}</CardTitle>
                 <MessageCircle className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>

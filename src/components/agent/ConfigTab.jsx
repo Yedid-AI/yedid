@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
+import { useI18n } from '../../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -8,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 export default function ConfigTab({ agentBotId }) {
+  const { t } = useI18n()
   const [config, setConfig] = useState(null)
   const [form, setForm] = useState({ name: '', prompt: '', tone: '', response_length: '', llm_provider: 'openai', llm_model: 'gpt-4.1-mini' })
   const [saving, setSaving] = useState(false)
@@ -50,7 +52,7 @@ export default function ConfigTab({ agentBotId }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Configuration de l'agent</CardTitle>
+        <CardTitle className="text-base">{t('config.title')}</CardTitle>
       </CardHeader>
       <CardContent>
         {error && (
@@ -58,21 +60,21 @@ export default function ConfigTab({ agentBotId }) {
         )}
         <form onSubmit={handleSave} className="space-y-4">
           <div className="space-y-2">
-            <Label>Nom</Label>
+            <Label>{t('common.name')}</Label>
             <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
           </div>
           <div className="space-y-2">
-            <Label>Prompt systeme</Label>
+            <Label>{t('config.prompt')}</Label>
             <Textarea
               value={form.prompt}
               onChange={(e) => setForm({ ...form, prompt: e.target.value })}
               rows={6}
-              placeholder="Instructions generales pour l'agent..."
+              placeholder={t('config.promptPlaceholder')}
             />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Fournisseur LLM</Label>
+              <Label>{t('config.llmProvider')}</Label>
               <Select value={form.llm_provider} onValueChange={(v) => setForm({ ...form, llm_provider: v, llm_model: v === 'openai' ? 'gpt-4.1-mini' : 'claude-sonnet-4-20250514' })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -82,7 +84,7 @@ export default function ConfigTab({ agentBotId }) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Modele</Label>
+              <Label>{t('config.model')}</Label>
               {form.llm_provider === 'anthropic' ? (
                 <Select value={form.llm_model} onValueChange={(v) => setForm({ ...form, llm_model: v })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -106,34 +108,34 @@ export default function ConfigTab({ agentBotId }) {
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label>Ton</Label>
+              <Label>{t('config.tone')}</Label>
               <Select value={form.tone} onValueChange={(v) => setForm({ ...form, tone: v === 'none' ? '' : v })}>
-                <SelectTrigger><SelectValue placeholder="Par defaut" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('config.toneDefault')} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Par defaut</SelectItem>
-                  <SelectItem value="professionnel">Professionnel</SelectItem>
-                  <SelectItem value="amical">Amical</SelectItem>
-                  <SelectItem value="formel">Formel</SelectItem>
-                  <SelectItem value="decontracte">Decontracte</SelectItem>
+                  <SelectItem value="none">{t('config.toneDefault')}</SelectItem>
+                  <SelectItem value="professionnel">{t('config.toneProfessional')}</SelectItem>
+                  <SelectItem value="amical">{t('config.toneFriendly')}</SelectItem>
+                  <SelectItem value="formel">{t('config.toneFormal')}</SelectItem>
+                  <SelectItem value="decontracte">{t('config.toneCasual')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Longueur des reponses</Label>
+              <Label>{t('config.responseLength')}</Label>
               <Select value={form.response_length} onValueChange={(v) => setForm({ ...form, response_length: v === 'none' ? '' : v })}>
-                <SelectTrigger><SelectValue placeholder="Par defaut" /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={t('config.lengthDefault')} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Par defaut</SelectItem>
-                  <SelectItem value="courte">Courte</SelectItem>
-                  <SelectItem value="moyenne">Moyenne</SelectItem>
-                  <SelectItem value="longue">Longue</SelectItem>
+                  <SelectItem value="none">{t('config.lengthDefault')}</SelectItem>
+                  <SelectItem value="courte">{t('config.lengthShort')}</SelectItem>
+                  <SelectItem value="moyenne">{t('config.lengthMedium')}</SelectItem>
+                  <SelectItem value="longue">{t('config.lengthLong')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
           </div>
           <div className="flex gap-2 justify-end">
             <Button type="submit" disabled={saving}>
-              {success ? 'Enregistre' : saving ? 'Enregistrement...' : 'Enregistrer'}
+              {success ? t('common.saved') : saving ? t('common.saving') : t('common.save')}
             </Button>
           </div>
         </form>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { api } from '../../lib/api'
+import { useI18n } from '../../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default function PlaybooksTab({ agentBotId }) {
+  const { t } = useI18n()
   const [playbooks, setPlaybooks] = useState([])
   const [tools, setTools] = useState([])
   const [loading, setLoading] = useState(true)
@@ -92,56 +94,56 @@ export default function PlaybooksTab({ agentBotId }) {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Chargement...</div>
+  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm text-muted-foreground">Instructions et comportements de l'agent</p>
+        <p className="text-sm text-muted-foreground">{t('playbooks.subtitle')}</p>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
           <DialogTrigger asChild>
-            <Button>+ Nouveau</Button>
+            <Button>{t('common.new')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>{editItem ? 'Modifier' : 'Nouveau playbook'}</DialogTitle>
+              <DialogTitle>{editItem ? t('common.edit') : t('playbooks.dialogTitle')}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
-                <Label>Titre</Label>
+                <Label>{t('common.title')}</Label>
                 <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
               </div>
               <div className="space-y-2">
-                <Label>Contenu (instructions pour l'agent)</Label>
+                <Label>{t('playbooks.content')}</Label>
                 <Textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={6} required />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Audience</Label>
+                  <Label>{t('common.audience')}</Label>
                   <Input value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} />
                 </div>
                 <div className="space-y-2">
-                  <Label>Tool</Label>
+                  <Label>{t('playbooks.tool')}</Label>
                   <Select value={form.tool_id} onValueChange={(v) => setForm({ ...form, tool_id: v === 'none' ? '' : v })}>
-                    <SelectTrigger><SelectValue placeholder="Aucun tool" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={t('playbooks.noTool')} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Aucun tool</SelectItem>
+                      <SelectItem value="none">{t('playbooks.noTool')}</SelectItem>
                       {tools.map((t) => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Rules</Label>
+                <Label>{t('common.rules')}</Label>
                 <Textarea value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} rows={3} />
               </div>
               <div className="flex items-center gap-2">
                 <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} id="pb-active" />
-                <Label htmlFor="pb-active">Actif</Label>
+                <Label htmlFor="pb-active">{t('common.active')}</Label>
               </div>
               <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-                <Button type="submit">{editItem ? 'Enregistrer' : 'Creer'}</Button>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+                <Button type="submit">{editItem ? t('common.save') : t('common.create')}</Button>
               </div>
             </form>
           </DialogContent>
@@ -156,16 +158,16 @@ export default function PlaybooksTab({ agentBotId }) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Titre</TableHead>
-              <TableHead>Audience</TableHead>
-              <TableHead>Tool</TableHead>
-              <TableHead>Actif</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>{t('common.title')}</TableHead>
+              <TableHead>{t('common.audience')}</TableHead>
+              <TableHead>{t('playbooks.tool')}</TableHead>
+              <TableHead>{t('common.active')}</TableHead>
+              <TableHead>{t('common.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {playbooks.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">Aucun playbook</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('playbooks.empty')}</TableCell></TableRow>
             ) : (
               playbooks.map((pb) => (
                 <TableRow key={pb.id}>
@@ -178,23 +180,23 @@ export default function PlaybooksTab({ agentBotId }) {
                       className="cursor-pointer"
                       onClick={() => toggleActive(pb)}
                     >
-                      {pb.is_active ? 'Actif' : 'Inactif'}
+                      {pb.is_active ? t('common.active') : t('common.inactive')}
                     </Badge>
                   </TableCell>
-                  <TableCell className="space-x-2">
-                    <Button size="sm" variant="ghost" onClick={() => handleEdit(pb)}>Modifier</Button>
+                  <TableCell className="flex gap-2">
+                    <Button size="sm" variant="ghost" onClick={() => handleEdit(pb)}>{t('common.edit')}</Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">Supprimer</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer ce playbook ?</AlertDialogTitle>
-                          <AlertDialogDescription>Cette action est irreversible.</AlertDialogDescription>
+                          <AlertDialogTitle>{t('playbooks.deleteTitle')}</AlertDialogTitle>
+                          <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(pb.id)}>Supprimer</AlertDialogAction>
+                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(pb.id)}>{t('common.delete')}</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

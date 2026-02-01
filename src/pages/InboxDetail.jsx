@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,6 +19,7 @@ export default function InboxDetail() {
   const [sessions, setSessions] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const { t, dateLocale } = useI18n()
 
   useEffect(() => {
     const fetchData = async () => {
@@ -50,11 +52,11 @@ export default function InboxDetail() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Chargement...</div>
+  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
   if (error) return (
     <div>
       <Button variant="ghost" onClick={() => navigate('/inboxes')} className="mb-4">
-        <ArrowLeft className="mr-2 h-4 w-4" /> Retour
+        <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
       </Button>
       <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
     </div>
@@ -64,42 +66,42 @@ export default function InboxDetail() {
     <div>
       <div className="flex items-center gap-4 mb-8">
         <Button variant="ghost" size="sm" onClick={() => navigate('/inboxes')}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Retour
+          <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
         </Button>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{inbox.name || 'Inbox'}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Cree le {new Date(inbox.created_at).toLocaleDateString('fr-FR')}
+            {t('common.createdAt')} {new Date(inbox.created_at).toLocaleDateString(dateLocale)}
           </p>
         </div>
         {inbox.agent_bots && (
-          <Badge variant="default" className="ml-auto">{inbox.agent_bots.name}</Badge>
+          <Badge variant="default" className="ms-auto">{inbox.agent_bots.name}</Badge>
         )}
       </div>
 
       <Tabs defaultValue="info">
         <TabsList>
-          <TabsTrigger value="info"><Info className="mr-1.5 h-4 w-4" />Informations</TabsTrigger>
-          <TabsTrigger value="sessions"><MessageSquare className="mr-1.5 h-4 w-4" />Sessions</TabsTrigger>
+          <TabsTrigger value="info"><Info className="me-1.5 h-4 w-4" />{t('inboxes.info')}</TabsTrigger>
+          <TabsTrigger value="sessions"><MessageSquare className="me-1.5 h-4 w-4" />{t('inboxes.sessions')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="info" className="mt-6 space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Agent assigne</CardTitle>
+              <CardTitle className="text-base">{t('inboxes.assignedAgent')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                <Label>Choisir un agent</Label>
+                <Label>{t('inboxes.chooseAgent')}</Label>
                 <Select
                   value={inbox.agent_bot_id ? String(inbox.agent_bot_id) : 'none'}
                   onValueChange={handleAssignAgent}
                 >
                   <SelectTrigger className="w-[240px]">
-                    <SelectValue placeholder="Aucun agent" />
+                    <SelectValue placeholder={t('inboxes.noAgent')} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Aucun agent</SelectItem>
+                    <SelectItem value="none">{t('inboxes.noAgent')}</SelectItem>
                     {agents.map((a) => (
                       <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
                     ))}
@@ -111,7 +113,7 @@ export default function InboxDetail() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">Details</CardTitle>
+              <CardTitle className="text-base">{t('common.details')}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 gap-4 text-sm">
@@ -134,7 +136,7 @@ export default function InboxDetail() {
           {inbox.website_token && (
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Widget Embed</CardTitle>
+                <CardTitle className="text-base">{t('inboxes.widgetEmbed')}</CardTitle>
               </CardHeader>
               <CardContent>
                 <pre className="p-3 bg-muted rounded-md text-xs font-mono overflow-x-auto">
@@ -166,16 +168,16 @@ export default function InboxDetail() {
               <TableHeader>
                 <TableRow>
                   <TableHead>ID</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead>Facturable</TableHead>
-                  <TableHead>Cree le</TableHead>
+                  <TableHead>{t('common.status')}</TableHead>
+                  <TableHead>{t('inboxes.billable')}</TableHead>
+                  <TableHead>{t('common.createdAt')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {sessions.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={4} className="text-center text-muted-foreground py-6">
-                      Aucune session
+                      {t('inboxes.noSession')}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -184,12 +186,12 @@ export default function InboxDetail() {
                       <TableCell className="font-mono text-sm">{s.id}</TableCell>
                       <TableCell>
                         <Badge variant={s.status === 'open' ? 'default' : 'secondary'}>
-                          {s.status === 'open' ? 'Ouverte' : 'Fermee'}
+                          {s.status === 'open' ? t('inboxes.sessionOpen') : t('inboxes.sessionClosed')}
                         </Badge>
                       </TableCell>
-                      <TableCell>{s.billable ? 'Oui' : 'Non'}</TableCell>
+                      <TableCell>{s.billable ? t('common.yes') : t('common.no')}</TableCell>
                       <TableCell className="text-muted-foreground">
-                        {new Date(s.created_at).toLocaleString('fr-FR')}
+                        {new Date(s.created_at).toLocaleString(dateLocale)}
                       </TableCell>
                     </TableRow>
                   ))

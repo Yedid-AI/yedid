@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ThemeProvider } from './lib/theme'
+import { I18nProvider } from './lib/i18n'
 import { AuthProvider } from './lib/auth'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { Sidebar } from './components/layout/Sidebar'
@@ -14,6 +15,7 @@ import Users from './pages/Users'
 import UserDetail from './pages/UserDetail'
 import Settings from './pages/Settings'
 import Environment from './pages/Environment'
+import Closing from './pages/Closing'
 
 function AppLayout({ children }) {
   return (
@@ -31,6 +33,7 @@ function AppLayout({ children }) {
 export default function App() {
   return (
     <ThemeProvider>
+    <I18nProvider>
     <BrowserRouter>
       <AuthProvider>
         <Routes>
@@ -85,10 +88,16 @@ export default function App() {
               <AppLayout><Environment /></AppLayout>
             </ProtectedRoute>
           } />
+          <Route path="/closing" element={
+            <ProtectedRoute roles={['super_admin']}>
+              <AppLayout><Closing /></AppLayout>
+            </ProtectedRoute>
+          } />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>
+    </I18nProvider>
     </ThemeProvider>
   )
 }

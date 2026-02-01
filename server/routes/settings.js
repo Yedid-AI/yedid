@@ -35,6 +35,13 @@ router.put('/settings', checkRole('super_admin'), async (req, res) => {
     const supabase = req.supabaseAdmin || req.supabase
     await upsertSettings(settings, supabase)
 
+    // Restart closing cron if schedule/enabled settings changed
+    const closingScheduleKeys = ['CLOSING_ENABLED', 'CLOSING_INTERVAL_MINUTES']
+    if (Object.keys(settings).some((k) => closingScheduleKeys.includes(k))) {
+      const { restartClosingCron } = await import('../engine/closing-cron.js')
+      restartClosingCron(req.supabaseAdmin || req.supabase)
+    }
+
     res.json({ success: true })
   } catch (err) {
     res.status(500).json({ error: err.message })

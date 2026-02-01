@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
+import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +20,7 @@ export default function Inboxes() {
   const [form, setForm] = useState({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' })
   const [error, setError] = useState('')
   const navigate = useNavigate()
+  const { t, dateLocale } = useI18n()
 
   const fetchData = async () => {
     try {
@@ -70,43 +72,43 @@ export default function Inboxes() {
     }
   }
 
-  if (loading) return <div className="text-muted-foreground">Chargement...</div>
+  if (loading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Inboxes</h1>
-          <p className="text-sm text-muted-foreground mt-1">Canaux de communication et widget chat</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('inboxes.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('inboxes.subtitle')}</p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setForm({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' }) }}>
           <DialogTrigger asChild>
-            <Button>+ Nouvelle inbox</Button>
+            <Button>{t('inboxes.newInbox')}</Button>
           </DialogTrigger>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Nouvelle inbox</DialogTitle>
+              <DialogTitle>{t('inboxes.dialogTitle')}</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleCreate} className="space-y-4">
               <div className="space-y-2">
-                <Label>Nom</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Ex: Site principal" required />
+                <Label>{t('common.name')}</Label>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('inboxes.namePlaceholder')} required />
               </div>
               <div className="space-y-2">
-                <Label>URL du site</Label>
-                <Input value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder="https://monsite.com" />
+                <Label>{t('inboxes.websiteUrl')}</Label>
+                <Input value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder={t('inboxes.websiteUrlPlaceholder')} />
               </div>
               <div className="space-y-2">
-                <Label>Titre d'accueil</Label>
-                <Input value={form.welcome_title} onChange={(e) => setForm({ ...form, welcome_title: e.target.value })} placeholder="Bienvenue" />
+                <Label>{t('inboxes.welcomeTitle')}</Label>
+                <Input value={form.welcome_title} onChange={(e) => setForm({ ...form, welcome_title: e.target.value })} placeholder={t('inboxes.welcomeTitlePlaceholder')} />
               </div>
               <div className="space-y-2">
-                <Label>Sous-titre d'accueil</Label>
-                <Input value={form.welcome_tagline} onChange={(e) => setForm({ ...form, welcome_tagline: e.target.value })} placeholder="Comment puis-je vous aider ?" />
+                <Label>{t('inboxes.welcomeTagline')}</Label>
+                <Input value={form.welcome_tagline} onChange={(e) => setForm({ ...form, welcome_tagline: e.target.value })} placeholder={t('inboxes.welcomeTaglinePlaceholder')} />
               </div>
               <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-                <Button type="submit">Creer</Button>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+                <Button type="submit">{t('common.create')}</Button>
               </div>
             </form>
           </DialogContent>
@@ -121,15 +123,15 @@ export default function Inboxes() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Nom</TableHead>
-              <TableHead>Agent</TableHead>
-              <TableHead>Cree le</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead>{t('common.name')}</TableHead>
+              <TableHead>{t('inboxes.agent')}</TableHead>
+              <TableHead>{t('common.createdAt')}</TableHead>
+              <TableHead>{t('common.actions')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {inboxes.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">Aucune inbox</TableCell></TableRow>
+              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">{t('inboxes.empty')}</TableCell></TableRow>
             ) : (
               inboxes.map((inbox) => (
                 <TableRow key={inbox.id} className="cursor-pointer" onClick={() => navigate(`/inboxes/${inbox.id}`)}>
@@ -140,10 +142,10 @@ export default function Inboxes() {
                       onValueChange={(v) => handleAssignAgent(inbox.id, v)}
                     >
                       <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder="Aucun agent" />
+                        <SelectValue placeholder={t('inboxes.noAgent')} />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Aucun agent</SelectItem>
+                        <SelectItem value="none">{t('inboxes.noAgent')}</SelectItem>
                         {agents.map((a) => (
                           <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
                         ))}
@@ -151,22 +153,22 @@ export default function Inboxes() {
                     </Select>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {new Date(inbox.created_at).toLocaleDateString('fr-FR')}
+                    {new Date(inbox.created_at).toLocaleDateString(dateLocale)}
                   </TableCell>
-                  <TableCell className="space-x-2" onClick={(e) => e.stopPropagation()}>
-                    <Button size="sm" variant="ghost" onClick={() => navigate(`/inboxes/${inbox.id}`)}>Details</Button>
+                  <TableCell className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+                    <Button size="sm" variant="ghost" onClick={() => navigate(`/inboxes/${inbox.id}`)}>{t('common.details')}</Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">Supprimer</Button>
+                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Supprimer cette inbox ?</AlertDialogTitle>
-                          <AlertDialogDescription>Cette action est irreversible.</AlertDialogDescription>
+                          <AlertDialogTitle>{t('inboxes.deleteTitle')}</AlertDialogTitle>
+                          <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
-                          <AlertDialogCancel>Annuler</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(inbox.id)}>Supprimer</AlertDialogAction>
+                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(inbox.id)}>{t('common.delete')}</AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>

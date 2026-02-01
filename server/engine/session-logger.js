@@ -89,13 +89,14 @@ export async function logMessage(supabase, data) {
  * @param {string} reason - e.g. "ESCALATION: <summary>"
  * @param {boolean} [billable=false]
  */
-export async function closeSession(supabase, sessionId, reason, billable = false) {
+export async function closeSession(supabase, sessionId, reason, billable = false, confidence = null) {
   const { error } = await supabase
     .from('sessions')
     .update({
       status: 'closed',
       ai_reason: reason,
       billable,
+      ai_confidence: confidence,
       closed_at: new Date().toISOString(),
     })
     .eq('id', sessionId)

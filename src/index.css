@@ -108,6 +108,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* RTL: flip directional icons (arrows, etc.) */
+[dir="rtl"] .icon-directional {
+  transform: scaleX(-1);
+}
+
 /* Softer focus rings */
 @layer base {
   *:focus-visible {
