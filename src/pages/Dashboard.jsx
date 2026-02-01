@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { api } from '../lib/api'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Database, Bot, Inbox, Users, MessageSquare, CheckCircle, CircleDot, Receipt, Brain } from 'lucide-react'
+import { Database, Bot, Inbox, Users, MessageSquare, CheckCircle, CircleDot, Receipt, Brain, User, X } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuth()
   const { t, dateLocale } = useI18n()
-  const navigate = useNavigate()
   const [stats, setStats] = useState({})
   const [sessions, setSessions] = useState([])
   const [sessionStats, setSessionStats] = useState({})
@@ -20,6 +19,9 @@ export default function Dashboard() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterInbox, setFilterInbox] = useState('all')
   const [ready, setReady] = useState(false)
+  const [selectedSession, setSelectedSession] = useState(null)
+  const [sessionMessages, setSessionMessages] = useState([])
+  const [sessionLoading, setSessionLoading] = useState(false)
 
   useEffect(() => {
     if (user?.role === 'agent') {
@@ -69,6 +71,27 @@ export default function Dashboard() {
   }, [user, filterStatus, filterInbox, ready])
 
   const inboxMap = Object.fromEntries(inboxes.map((i) => [i.inbox_id, i.name]))
+
+  const openSession = (session) => {
+    setSelectedSession(session)
+    setSessionLoading(true)
+    api.get(`/sessions/${session.id}/messages`)
+      .then((data) => setSessionMessages(data.messages || []))
+      .catch(() => setSessionMessages([]))
+      .finally(() => setSessionLoading(false))
+  }
+
+  const closeSession = () => {
+    setSelectedSession(null)
+    setSessionMessages([])
+  }
+
+  useEffect(() => {
+    if (!selectedSession) return
+    const handleEscape = (e) => { if (e.key === 'Escape') closeSession() }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [selectedSession])
 
   const formatDuration = (seconds) => {
     if (seconds == null) return '-'
@@ -125,6 +148,99 @@ export default function Dashboard() {
               </Card>
             )
           })}
+        </div>
+      )}
+
+      {selectedSession && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/30" onClick={closeSession} />
+          <div className="absolute right-0 top-0 h-full w-full max-w-lg bg-background border-l shadow-soft-xl overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
+              <div>
+                <h2 className="text-lg font-semibold">{t('sessions.detail')}</h2>
+                <p className="text-xs text-muted-foreground">
+                  {t('sessions.sessionId', { id: selectedSession.id.slice(0, 8) })} — {new Date(selectedSession.created_at).toLocaleString(dateLocale)}
+                </p>
+              </div>
+              <Button variant="ghost" size="icon" onClick={closeSession}>
+                <X size={16} />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-auto px-6 py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Card>
+                  <CardContent className="pt-3 pb-3">
+                    <div className="text-xs text-muted-foreground">{t('common.status')}</div>
+                    <Badge variant={selectedSession.status === 'open' ? 'default' : 'secondary'} className="mt-1">
+                      {selectedSession.status === 'open' ? t('sessions.statusOpen') : t('sessions.statusClosed')}
+                    </Badge>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-3 pb-3">
+                    <div className="text-xs text-muted-foreground">{t('sessions.billableCol')}</div>
+                    <div className="text-sm font-semibold mt-1">{selectedSession.billable ? t('common.yes') : t('common.no')}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-3 pb-3">
+                    <div className="text-xs text-muted-foreground">{t('sessions.confidence')}</div>
+                    <div className="text-sm font-semibold mt-1">
+                      {selectedSession.ai_confidence != null ? `${Math.round(selectedSession.ai_confidence * 100)}%` : '-'}
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-3 pb-3">
+                    <div className="text-xs text-muted-foreground">{t('sessions.duration')}</div>
+                    <div className="text-sm font-semibold mt-1">{formatDuration(selectedSession.duration_seconds)}</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {inboxMap[selectedSession.chatwoot_inbox_id] && (
+                <div className="text-xs text-muted-foreground">
+                  {t('sessions.inbox')} : <span className="font-medium text-foreground">{inboxMap[selectedSession.chatwoot_inbox_id]}</span>
+                </div>
+              )}
+
+              {selectedSession.ai_reason && (
+                <Card>
+                  <CardContent className="pt-3 pb-3">
+                    <div className="text-xs text-muted-foreground mb-1">{t('sessions.aiReason')}</div>
+                    <p className="text-sm">{selectedSession.ai_reason}</p>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div>
+                <h3 className="text-sm font-semibold mb-3">{t('sessions.conversation')}</h3>
+                {sessionLoading ? (
+                  <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
+                ) : sessionMessages.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">{t('sessions.noMessages')}</p>
+                ) : (
+                  <div className="space-y-3">
+                    {sessionMessages.map((m) => (
+                      <div key={m.id} className="flex gap-2.5">
+                        <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${m.role === 'user' ? 'bg-muted' : 'bg-primary/10'}`}>
+                          {m.role === 'user' ? <User size={12} /> : <Bot size={12} />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-0.5">
+                            <span className="text-xs font-medium">{m.role === 'user' ? 'Client' : 'Agent'}</span>
+                            <span className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString(dateLocale)}</span>
+                          </div>
+                          <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -196,7 +312,7 @@ export default function Dashboard() {
                   </TableRow>
                 ) : (
                   sessions.map((s) => (
-                    <TableRow key={s.id} className="cursor-pointer" onClick={() => navigate(`/sessions/${s.id}`)}>
+                    <TableRow key={s.id} className="cursor-pointer" onClick={() => openSession(s)}>
                       <TableCell className="font-medium">{inboxMap[s.chatwoot_inbox_id] || '-'}</TableCell>
                       <TableCell>
                         <Badge variant={s.status === 'open' ? 'default' : 'secondary'}>
