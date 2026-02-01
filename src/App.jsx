@@ -16,6 +16,7 @@ import UserDetail from './pages/UserDetail'
 import Settings from './pages/Settings'
 import Environment from './pages/Environment'
 import Closing from './pages/Closing'
+import SessionDetail from './pages/SessionDetail'
 
 function AppLayout({ children }) {
   return (
@@ -61,6 +62,11 @@ export default function App() {
           <Route path="/inboxes/:id" element={
             <ProtectedRoute roles={['admin']}>
               <AppLayout><InboxDetail /></AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/sessions/:id" element={
+            <ProtectedRoute roles={['admin']}>
+              <AppLayout><SessionDetail /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/sources" element={

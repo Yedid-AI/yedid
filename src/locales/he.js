@@ -164,6 +164,12 @@ export default {
   'sessions.statusOpen': 'פתוח',
   'sessions.statusClosed': 'סגור',
   'sessions.empty': 'אין סשנים',
+  'sessions.detail': 'פרטי סשן',
+  'sessions.sessionId': 'סשן #{id}',
+  'sessions.aiReason': 'סיבת AI',
+  'sessions.conversation': 'שיחה',
+  'sessions.noMessages': 'אין הודעות',
+  'sessions.notFound': 'סשן לא נמצא',
 
   // sources
   'sources.title': 'בסיס ידע',

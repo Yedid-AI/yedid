@@ -164,6 +164,12 @@ export default {
   'sessions.statusOpen': 'Open',
   'sessions.statusClosed': 'Closed',
   'sessions.empty': 'No sessions',
+  'sessions.detail': 'Session detail',
+  'sessions.sessionId': 'Session #{id}',
+  'sessions.aiReason': 'AI reason',
+  'sessions.conversation': 'Conversation',
+  'sessions.noMessages': 'No messages',
+  'sessions.notFound': 'Session not found',
 
   // sources
   'sources.title': 'Knowledge Base',

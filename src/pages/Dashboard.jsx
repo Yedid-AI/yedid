@@ -19,9 +19,13 @@ export default function Dashboard() {
   const [inboxes, setInboxes] = useState([])
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterInbox, setFilterInbox] = useState('all')
+  const [ready, setReady] = useState(false)
 
   useEffect(() => {
-    if (user?.role === 'agent') return
+    if (user?.role === 'agent') {
+      setReady(true)
+      return
+    }
 
     if (user?.role === 'admin') {
       Promise.all([
@@ -35,6 +39,7 @@ export default function Dashboard() {
           sources: s.sources?.length || 0,
         })
         setInboxes(i.inboxes || [])
+        setReady(true)
       })
     }
 
@@ -46,12 +51,13 @@ export default function Dashboard() {
           users: users.length,
           comptes_chatwoot: withChatwoot,
         })
-      }).catch(() => {})
+        setReady(true)
+      }).catch(() => setReady(true))
     }
   }, [user])
 
   useEffect(() => {
-    if (user?.role !== 'admin') return
+    if (user?.role !== 'admin' || !ready) return
     const params = new URLSearchParams()
     if (filterStatus !== 'all') params.set('status', filterStatus)
     if (filterInbox !== 'all') params.set('inbox_id', filterInbox)
@@ -60,7 +66,7 @@ export default function Dashboard() {
       setSessions(data.sessions || [])
       setSessionStats(data.stats || {})
     }).catch(() => {})
-  }, [user, filterStatus, filterInbox])
+  }, [user, filterStatus, filterInbox, ready])
 
   const inboxMap = Object.fromEntries(inboxes.map((i) => [i.id, i.name]))
 
@@ -89,7 +95,7 @@ export default function Dashboard() {
     { labelKey: 'sessions.open', value: sessionStats.open, icon: CircleDot },
     { labelKey: 'sessions.closed', value: sessionStats.closed, icon: CheckCircle },
     { labelKey: 'sessions.billable', value: sessionStats.billable, icon: Receipt },
-    { labelKey: 'sessions.avgConfidence', value: sessionStats.avg_confidence, icon: Brain },
+    { labelKey: 'sessions.avgConfidence', value: sessionStats.avg_confidence != null ? `${Math.round(sessionStats.avg_confidence * 100)}%` : '-', icon: Brain },
   ]
 
   const cards = user?.role === 'super_admin' ? superAdminCards : adminCards
@@ -190,7 +196,7 @@ export default function Dashboard() {
                   </TableRow>
                 ) : (
                   sessions.map((s) => (
-                    <TableRow key={s.id} className="cursor-pointer" onClick={() => navigate(`/inboxes/${s.inbox_id}`)}>
+                    <TableRow key={s.id} className="cursor-pointer" onClick={() => navigate(`/sessions/${s.id}`)}>
                       <TableCell className="font-medium">{inboxMap[s.inbox_id] || '-'}</TableCell>
                       <TableCell>
                         <Badge variant={s.status === 'open' ? 'default' : 'secondary'}>
