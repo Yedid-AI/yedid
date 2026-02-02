@@ -19,6 +19,9 @@ import Settings from './pages/Settings'
 import Environment from './pages/Environment'
 import Closing from './pages/Closing'
 import SessionDetail from './pages/SessionDetail'
+import PlaybooksLibrary from './pages/PlaybooksLibrary'
+import ToolsLibrary from './pages/ToolsLibrary'
+import EscalationLibrary from './pages/EscalationLibrary'
 
 function AppLayout({ children }) {
   return (
@@ -70,6 +73,21 @@ export default function App() {
           <Route path="/sessions/:id" element={
             <ProtectedRoute roles={['admin']}>
               <AppLayout><SessionDetail /></AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/playbooks" element={
+            <ProtectedRoute roles={['admin']}>
+              <AppLayout><PlaybooksLibrary /></AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/tools" element={
+            <ProtectedRoute roles={['admin']}>
+              <AppLayout><ToolsLibrary /></AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/escalation" element={
+            <ProtectedRoute roles={['admin']}>
+              <AppLayout><EscalationLibrary /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/sources" element={

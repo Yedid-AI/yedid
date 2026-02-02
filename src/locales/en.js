@@ -30,11 +30,15 @@ export default {
   'common.title': 'Title',
   'common.audience': 'Audience',
   'common.rules': 'Rules',
+  'common.selected': 'selected',
 
   // nav
   'nav.dashboard': 'Dashboard',
   'nav.agents': 'Agents',
   'nav.inboxes': 'Inboxes',
+  'nav.playbooks': 'Playbooks',
+  'nav.tools': 'Tools',
+  'nav.escalation': 'Escalation',
   'nav.knowledge': 'Knowledge Base',
   'nav.settings': 'Settings',
   'nav.users': 'Users',
@@ -72,7 +76,7 @@ export default {
   // config
   'config.title': 'Agent configuration',
   'config.prompt': 'System prompt',
-  'config.promptPlaceholder': 'General instructions for the agent...',
+  'config.promptPlaceholder': 'Instructions for the agent... Type / to format',
   'config.llmProvider': 'LLM Provider',
   'config.model': 'Model',
   'config.tone': 'Tone',
@@ -88,6 +92,12 @@ export default {
   'config.lengthLong': 'Long',
 
   // playbooks
+  'playbooks.libraryTitle': 'Playbooks',
+  'playbooks.librarySubtitle': 'Manage reusable playbooks across all agents',
+  'playbooks.selectionSubtitle': 'Select which playbooks this agent can use',
+  'playbooks.manageLibrary': 'Manage Library',
+  'playbooks.emptyLibrary': 'No playbooks in your library yet',
+  'playbooks.createFirst': 'Create your first playbook',
   'playbooks.subtitle': 'Agent instructions and behaviors',
   'playbooks.dialogTitle': 'New playbook',
   'playbooks.content': 'Content (instructions for the agent)',
@@ -95,8 +105,12 @@ export default {
   'playbooks.noTool': 'No tool',
   'playbooks.empty': 'No playbooks',
   'playbooks.deleteTitle': 'Delete this playbook?',
+  'playbooks.contentPlaceholder': 'Describe the scenario... Type / to format',
+  'playbooks.rulesPlaceholder': 'Define the rules... Type / to format',
 
   // tools
+  'tools.libraryTitle': 'Tools',
+  'tools.librarySubtitle': 'Manage API tools that playbooks can use',
   'tools.subtitle': 'External APIs accessible by the agent',
   'tools.dialogTitle': 'New tool',
   'tools.method': 'Method',
@@ -111,6 +125,12 @@ export default {
   'tools.deleteDescription': 'Linked playbooks will lose their tool.',
 
   // escalation
+  'escalation.libraryTitle': 'Escalation Rules',
+  'escalation.librarySubtitle': 'Manage escalation rules across all agents',
+  'escalation.selectionSubtitle': 'Select which escalation rules this agent uses',
+  'escalation.manageLibrary': 'Manage Library',
+  'escalation.emptyLibrary': 'No escalation rules in your library yet',
+  'escalation.createFirst': 'Create your first escalation rule',
   'escalation.subtitle': 'Rules for transferring to a human agent',
   'escalation.dialogTitle': 'New rule',
   'escalation.trigger': 'Trigger description',
@@ -118,6 +138,8 @@ export default {
   'escalation.assignTo': 'Assign to agent (ID)',
   'escalation.empty': 'No rules',
   'escalation.deleteTitle': 'Delete this rule?',
+  'escalation.triggerPlaceholder': 'Describe the trigger... Type / to format',
+  'escalation.rulesPlaceholder': 'Define the rules... Type / to format',
 
   // inboxes
   'inboxes.title': 'Inboxes',
@@ -250,4 +272,23 @@ export default {
   'closing.promptTitle': 'Billing Analysis Prompt',
   'closing.promptDesc': 'Instructions for the AI that determines whether a conversation is billable. The prompt receives conversation messages and must return JSON.',
   'closing.promptPlaceholder': 'Enter the billing analysis prompt...',
+
+  // editor (rich text)
+  'editor.placeholder': 'Write here... Type / for commands',
+  'editor.slashH1': 'Heading 1',
+  'editor.slashH1Desc': 'Large heading',
+  'editor.slashH2': 'Heading 2',
+  'editor.slashH2Desc': 'Medium heading',
+  'editor.slashH3': 'Heading 3',
+  'editor.slashH3Desc': 'Small heading',
+  'editor.slashBullet': 'Bullet list',
+  'editor.slashBulletDesc': 'Unordered list',
+  'editor.slashNumbered': 'Numbered list',
+  'editor.slashNumberedDesc': 'Ordered list',
+  'editor.slashQuote': 'Quote',
+  'editor.slashQuoteDesc': 'Block quote',
+  'editor.slashCode': 'Code block',
+  'editor.slashCodeDesc': 'Formatted code',
+  'editor.slashDivider': 'Divider',
+  'editor.slashDividerDesc': 'Horizontal line',
 }

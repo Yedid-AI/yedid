@@ -6,10 +6,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
-import { Textarea } from '@/components/ui/textarea'
+import { RichEditor } from '@/components/ui/rich-editor'
 import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default function EscalationTab({ agentBotId }) {
@@ -78,36 +78,35 @@ export default function EscalationTab({ agentBotId }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-muted-foreground">{t('escalation.subtitle')}</p>
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
-          <DialogTrigger asChild>
+        <Sheet open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
+          <SheetTrigger asChild>
             <Button>{t('common.new')}</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editItem ? t('common.edit') : t('escalation.dialogTitle')}</DialogTitle>
-            </DialogHeader>
+          </SheetTrigger>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>{editItem ? t('common.edit') : t('escalation.dialogTitle')}</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto px-6 py-4">
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label>{t('common.title')}</Label>
                 <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
               </div>
               <div className="space-y-2">
+                <Label>{t('common.audience')}</Label>
+                <Input value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} />
+              </div>
+              <div className="space-y-2">
                 <Label>{t('escalation.trigger')}</Label>
-                <Textarea value={form.trigger_description} onChange={(e) => setForm({ ...form, trigger_description: e.target.value })} rows={3} />
+                <RichEditor value={form.trigger_description} onChange={(md) => setForm({ ...form, trigger_description: md })} placeholder={t('escalation.triggerPlaceholder')} minHeight="100px" />
               </div>
               <div className="space-y-2">
                 <Label>{t('escalation.rules')}</Label>
-                <Textarea value={form.rules} onChange={(e) => setForm({ ...form, rules: e.target.value })} rows={3} />
+                <RichEditor value={form.rules} onChange={(md) => setForm({ ...form, rules: md })} placeholder={t('escalation.rulesPlaceholder')} minHeight="100px" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>{t('common.audience')}</Label>
-                  <Input value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('escalation.assignTo')}</Label>
-                  <Input type="number" value={form.assign_to_agent} onChange={(e) => setForm({ ...form, assign_to_agent: e.target.value })} />
-                </div>
+              <div className="space-y-2">
+                <Label>{t('escalation.assignTo')}</Label>
+                <Input type="number" value={form.assign_to_agent} onChange={(e) => setForm({ ...form, assign_to_agent: e.target.value })} />
               </div>
               <div className="flex items-center gap-2">
                 <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} id="esc-active" />
@@ -118,8 +117,9 @@ export default function EscalationTab({ agentBotId }) {
                 <Button type="submit">{editItem ? t('common.save') : t('common.create')}</Button>
               </div>
             </form>
-          </DialogContent>
-        </Dialog>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
 
       {error && (

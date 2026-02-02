@@ -30,11 +30,15 @@ export default {
   'common.title': 'כותרת',
   'common.audience': 'קהל יעד',
   'common.rules': 'כללים',
+  'common.selected': 'נבחרו',
 
   // nav
   'nav.dashboard': 'לוח בקרה',
   'nav.agents': 'סוכנים',
   'nav.inboxes': 'תיבות דואר',
+  'nav.playbooks': 'Playbooks',
+  'nav.tools': 'Tools',
+  'nav.escalation': 'הסלמה',
   'nav.knowledge': 'בסיס ידע',
   'nav.settings': 'הגדרות',
   'nav.users': 'משתמשים',
@@ -72,7 +76,7 @@ export default {
   // config
   'config.title': 'תצורת הסוכן',
   'config.prompt': 'פרומפט מערכת',
-  'config.promptPlaceholder': '...הוראות כלליות לסוכן',
+  'config.promptPlaceholder': 'הוראות לסוכן... הקלד / לעיצוב',
   'config.llmProvider': 'ספק LLM',
   'config.model': 'מודל',
   'config.tone': 'טון',
@@ -88,6 +92,12 @@ export default {
   'config.lengthLong': 'ארוכה',
 
   // playbooks
+  'playbooks.libraryTitle': 'Playbooks',
+  'playbooks.librarySubtitle': 'נהל playbooks לשימוש חוזר בכל הסוכנים',
+  'playbooks.selectionSubtitle': 'בחר אילו playbooks סוכן זה יכול להשתמש',
+  'playbooks.manageLibrary': 'נהל ספריה',
+  'playbooks.emptyLibrary': 'אין playbooks בספריה שלך',
+  'playbooks.createFirst': 'צור את ה-playbook הראשון שלך',
   'playbooks.subtitle': 'הוראות והתנהגויות הסוכן',
   'playbooks.dialogTitle': 'Playbook חדש',
   'playbooks.content': 'תוכן (הוראות לסוכן)',
@@ -95,8 +105,12 @@ export default {
   'playbooks.noTool': 'ללא כלי',
   'playbooks.empty': 'אין playbooks',
   'playbooks.deleteTitle': 'למחוק playbook זה?',
+  'playbooks.contentPlaceholder': 'תאר את התרחיש... הקלד / לעיצוב',
+  'playbooks.rulesPlaceholder': 'הגדר את הכללים... הקלד / לעיצוב',
 
   // tools
+  'tools.libraryTitle': 'Tools',
+  'tools.librarySubtitle': 'נהל כלי API שניתן להשתמש בהם ב-playbooks',
   'tools.subtitle': 'APIs חיצוניים הנגישים לסוכן',
   'tools.dialogTitle': 'כלי חדש',
   'tools.method': 'שיטה',
@@ -111,6 +125,12 @@ export default {
   'tools.deleteDescription': 'Playbooks מקושרים יאבדו את הכלי שלהם.',
 
   // escalation
+  'escalation.libraryTitle': 'כללי הסלמה',
+  'escalation.librarySubtitle': 'נהל כללי הסלמה לשימוש חוזר בכל הסוכנים',
+  'escalation.selectionSubtitle': 'בחר אילו כללי הסלמה סוכן זה משתמש',
+  'escalation.manageLibrary': 'נהל ספריה',
+  'escalation.emptyLibrary': 'אין כללי הסלמה בספריה שלך',
+  'escalation.createFirst': 'צור את כלל ההסלמה הראשון שלך',
   'escalation.subtitle': 'כללי העברה לסוכן אנושי',
   'escalation.dialogTitle': 'כלל חדש',
   'escalation.trigger': 'תיאור טריגר',
@@ -118,6 +138,8 @@ export default {
   'escalation.assignTo': 'הקצה לסוכן (ID)',
   'escalation.empty': 'אין כללים',
   'escalation.deleteTitle': 'למחוק כלל זה?',
+  'escalation.triggerPlaceholder': 'תאר את הטריגר... הקלד / לעיצוב',
+  'escalation.rulesPlaceholder': 'הגדר את הכללים... הקלד / לעיצוב',
 
   // inboxes
   'inboxes.title': 'תיבות דואר',
@@ -250,4 +272,23 @@ export default {
   'closing.promptTitle': 'פרומפט ניתוח חיוב',
   'closing.promptDesc': 'הוראות ל-AI שקובע אם שיחה ניתנת לחיוב. הפרומפט מקבל הודעות שיחה ומחזיר JSON.',
   'closing.promptPlaceholder': '...הזן את פרומפט ניתוח החיוב',
+
+  // editor (rich text)
+  'editor.placeholder': 'הקלד כאן... הקלד / לפקודות',
+  'editor.slashH1': 'כותרת 1',
+  'editor.slashH1Desc': 'כותרת גדולה',
+  'editor.slashH2': 'כותרת 2',
+  'editor.slashH2Desc': 'כותרת בינונית',
+  'editor.slashH3': 'כותרת 3',
+  'editor.slashH3Desc': 'כותרת קטנה',
+  'editor.slashBullet': 'רשימת תבליטים',
+  'editor.slashBulletDesc': 'רשימה לא מסודרת',
+  'editor.slashNumbered': 'רשימה ממוספרת',
+  'editor.slashNumberedDesc': 'רשימה מסודרת',
+  'editor.slashQuote': 'ציטוט',
+  'editor.slashQuoteDesc': 'בלוק ציטוט',
+  'editor.slashCode': 'בלוק קוד',
+  'editor.slashCodeDesc': 'קוד מעוצב',
+  'editor.slashDivider': 'מפריד',
+  'editor.slashDividerDesc': 'קו אופקי',
 }

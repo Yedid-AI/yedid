@@ -2,9 +2,19 @@ export const queryKeys = {
   agents: ['agents'],
   agent: (id) => ['agents', id],
 
+  // Legacy (agent-scoped) — kept for backward compatibility
   playbooks: (agentBotId) => ['agents', agentBotId, 'playbooks'],
   tools: (agentBotId) => ['agents', agentBotId, 'tools'],
   escalationRules: (agentBotId) => ['agents', agentBotId, 'escalation-rules'],
+
+  // Shared libraries (user-scoped)
+  playbooksLibrary: ['playbooks-library'],
+  toolsLibrary: ['tools-library'],
+  escalationRulesLibrary: ['escalation-rules-library'],
+
+  // Agent ↔ library associations
+  agentPlaybooks: (id) => ['agents', id, 'assoc-playbooks'],
+  agentEscalationRules: (id) => ['agents', id, 'assoc-escalation'],
 
   inboxes: ['inboxes'],
   inbox: (id) => ['inboxes', id],

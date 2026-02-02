@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { useI18n } from '../../lib/i18n'
 import {
-  LayoutDashboard, Database, Bot, Inbox,
+  LayoutDashboard, Database, Bot, Inbox, BookOpen, Wrench, Zap,
   Users, Settings, LogOut, PanelLeftClose, PanelLeftOpen, KeyRound,
   Moon, Sun, Globe, CalendarClock,
 } from 'lucide-react'
@@ -13,9 +13,12 @@ import { Button } from '@/components/ui/button'
 
 const navItems = [
   { path: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'agent'] },
-  { path: '/agents', labelKey: 'nav.agents', icon: Bot, roles: ['admin'] },
   { path: '/inboxes', labelKey: 'nav.inboxes', icon: Inbox, roles: ['admin'] },
+  { path: '/agents', labelKey: 'nav.agents', icon: Bot, roles: ['admin'] },
   { path: '/sources', labelKey: 'nav.knowledge', icon: Database, roles: ['admin'] },
+  { path: '/playbooks', labelKey: 'nav.playbooks', icon: BookOpen, roles: ['admin'] },
+  { path: '/escalation', labelKey: 'nav.escalation', icon: Zap, roles: ['admin'] },
+  { path: '/tools', labelKey: 'nav.tools', icon: Wrench, roles: ['admin'] },
   { path: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['admin'] },
   { path: '/users', labelKey: 'nav.users', icon: Users, roles: ['super_admin'] },
   { path: '/environment', labelKey: 'nav.environment', icon: KeyRound, roles: ['super_admin'] },

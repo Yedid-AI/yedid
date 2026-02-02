@@ -13,14 +13,20 @@ async function request(path, options = {}) {
     headers,
   })
 
-  if (res.status === 401) {
+  // Session expired — redirect to login (skip for login/register endpoints)
+  if (res.status === 401 && path !== '/login' && path !== '/register') {
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     window.location.href = '/login'
     throw new Error('Session expiree')
   }
 
-  const data = await res.json()
+  let data
+  try {
+    data = await res.json()
+  } catch {
+    throw new Error('Erreur serveur')
+  }
   if (!res.ok) throw new Error(data.error || 'Erreur serveur')
   return data
 }

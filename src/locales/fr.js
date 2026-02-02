@@ -30,11 +30,15 @@ export default {
   'common.title': 'Titre',
   'common.audience': 'Audience',
   'common.rules': 'Rules',
+  'common.selected': 'selectionne(s)',
 
   // nav
   'nav.dashboard': 'Dashboard',
   'nav.agents': 'Agents',
   'nav.inboxes': 'Inboxes',
+  'nav.playbooks': 'Playbooks',
+  'nav.tools': 'Tools',
+  'nav.escalation': 'Escalation',
   'nav.knowledge': 'Connaissances',
   'nav.settings': 'Settings',
   'nav.users': 'Utilisateurs',
@@ -72,7 +76,7 @@ export default {
   // config
   'config.title': "Configuration de l'agent",
   'config.prompt': 'Prompt systeme',
-  'config.promptPlaceholder': "Instructions generales pour l'agent...",
+  'config.promptPlaceholder': "Instructions pour l'agent... Tapez / pour formater",
   'config.llmProvider': 'Fournisseur LLM',
   'config.model': 'Modele',
   'config.tone': 'Ton',
@@ -88,6 +92,12 @@ export default {
   'config.lengthLong': 'Longue',
 
   // playbooks
+  'playbooks.libraryTitle': 'Playbooks',
+  'playbooks.librarySubtitle': 'Gerez vos playbooks reutilisables sur tous les agents',
+  'playbooks.selectionSubtitle': 'Selectionnez les playbooks que cet agent peut utiliser',
+  'playbooks.manageLibrary': 'Gerer la bibliotheque',
+  'playbooks.emptyLibrary': 'Aucun playbook dans votre bibliotheque',
+  'playbooks.createFirst': 'Creer votre premier playbook',
   'playbooks.subtitle': "Instructions et comportements de l'agent",
   'playbooks.dialogTitle': 'Nouveau playbook',
   'playbooks.content': "Contenu (instructions pour l'agent)",
@@ -95,8 +105,12 @@ export default {
   'playbooks.noTool': 'Aucun tool',
   'playbooks.empty': 'Aucun playbook',
   'playbooks.deleteTitle': 'Supprimer ce playbook ?',
+  'playbooks.contentPlaceholder': 'Decrivez le scenario... Tapez / pour formater',
+  'playbooks.rulesPlaceholder': 'Definissez les regles... Tapez / pour formater',
 
   // tools
+  'tools.libraryTitle': 'Tools',
+  'tools.librarySubtitle': 'Gerez les outils API utilisables dans les playbooks',
   'tools.subtitle': "APIs externes accessibles par l'agent",
   'tools.dialogTitle': 'Nouveau tool',
   'tools.method': 'Methode',
@@ -111,6 +125,12 @@ export default {
   'tools.deleteDescription': 'Les playbooks lies perdront leur tool.',
 
   // escalation
+  'escalation.libraryTitle': 'Escalation',
+  'escalation.librarySubtitle': "Gerez vos regles d'escalation reutilisables sur tous les agents",
+  'escalation.selectionSubtitle': "Selectionnez les regles d'escalation pour cet agent",
+  'escalation.manageLibrary': 'Gerer la bibliotheque',
+  'escalation.emptyLibrary': "Aucune regle d'escalation dans votre bibliotheque",
+  'escalation.createFirst': "Creer votre premiere regle d'escalation",
   'escalation.subtitle': "Regles de transfert vers un agent humain",
   'escalation.dialogTitle': 'Nouvelle regle',
   'escalation.trigger': 'Trigger description',
@@ -118,6 +138,8 @@ export default {
   'escalation.assignTo': "Assigner a l'agent (ID)",
   'escalation.empty': 'Aucune regle',
   'escalation.deleteTitle': 'Supprimer cette regle ?',
+  'escalation.triggerPlaceholder': 'Decrivez le declencheur... Tapez / pour formater',
+  'escalation.rulesPlaceholder': 'Definissez les regles... Tapez / pour formater',
 
   // inboxes
   'inboxes.title': 'Inboxes',
@@ -250,4 +272,23 @@ export default {
   'closing.promptTitle': "Prompt d'analyse de facturation",
   'closing.promptDesc': "Instructions pour l'IA qui determine si une conversation est facturable. Le prompt recoit les messages de la conversation et doit retourner du JSON.",
   'closing.promptPlaceholder': "Entrez le prompt d'analyse de facturation...",
+
+  // editor (rich text)
+  'editor.placeholder': 'Ecrivez ici... Tapez / pour les commandes',
+  'editor.slashH1': 'Titre 1',
+  'editor.slashH1Desc': 'Grand titre',
+  'editor.slashH2': 'Titre 2',
+  'editor.slashH2Desc': 'Titre moyen',
+  'editor.slashH3': 'Titre 3',
+  'editor.slashH3Desc': 'Petit titre',
+  'editor.slashBullet': 'Liste a puces',
+  'editor.slashBulletDesc': 'Liste non ordonnee',
+  'editor.slashNumbered': 'Liste numerotee',
+  'editor.slashNumberedDesc': 'Liste ordonnee',
+  'editor.slashQuote': 'Citation',
+  'editor.slashQuoteDesc': 'Bloc de citation',
+  'editor.slashCode': 'Bloc de code',
+  'editor.slashCodeDesc': 'Code formate',
+  'editor.slashDivider': 'Separateur',
+  'editor.slashDividerDesc': 'Ligne horizontale',
 }

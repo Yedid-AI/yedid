@@ -4,11 +4,10 @@ import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Settings, BookOpen, Wrench, Zap } from 'lucide-react'
+import { ArrowLeft, Settings, BookOpen, Zap } from 'lucide-react'
 import ConfigTab from '../components/agent/ConfigTab'
-import PlaybooksTab from '../components/agent/PlaybooksTab'
-import ToolsTab from '../components/agent/ToolsTab'
-import EscalationTab from '../components/agent/EscalationTab'
+import PlaybooksSelectionTab from '../components/agent/PlaybooksSelectionTab'
+import EscalationSelectionTab from '../components/agent/EscalationSelectionTab'
 
 export default function AgentDetail() {
   const { id } = useParams()
@@ -47,7 +46,6 @@ export default function AgentDetail() {
         <TabsList>
           <TabsTrigger value="config"><Settings className="me-1.5 h-4 w-4" />Config</TabsTrigger>
           <TabsTrigger value="playbooks"><BookOpen className="me-1.5 h-4 w-4" />Playbooks</TabsTrigger>
-          <TabsTrigger value="tools"><Wrench className="me-1.5 h-4 w-4" />Tools</TabsTrigger>
           <TabsTrigger value="escalation"><Zap className="me-1.5 h-4 w-4" />Escalation</TabsTrigger>
         </TabsList>
 
@@ -56,15 +54,11 @@ export default function AgentDetail() {
         </TabsContent>
 
         <TabsContent value="playbooks" className="mt-6">
-          <PlaybooksTab agentBotId={id} />
-        </TabsContent>
-
-        <TabsContent value="tools" className="mt-6">
-          <ToolsTab agentBotId={id} />
+          <PlaybooksSelectionTab agentBotId={id} />
         </TabsContent>
 
         <TabsContent value="escalation" className="mt-6">
-          <EscalationTab agentBotId={id} />
+          <EscalationSelectionTab agentBotId={id} />
         </TabsContent>
       </Tabs>
     </div>

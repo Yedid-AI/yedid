@@ -156,6 +156,152 @@ export function useDeleteEscalation(agentBotId) {
   })
 }
 
+// ─── Playbooks Library (user-scoped) ─────────────────────
+export function usePlaybooksLibrary() {
+  return useQuery({
+    queryKey: queryKeys.playbooksLibrary,
+    queryFn: () => api.get('/playbooks'),
+    select: (data) => data.playbooks,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useCreatePlaybookLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/playbooks', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.playbooksLibrary }),
+  })
+}
+
+export function useUpdatePlaybookLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }) => api.put(`/playbooks/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.playbooksLibrary }),
+  })
+}
+
+export function useDeletePlaybookLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/playbooks/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.playbooksLibrary }),
+  })
+}
+
+// ─── Tools Library (user-scoped) ─────────────────────────
+export function useToolsLibrary() {
+  return useQuery({
+    queryKey: queryKeys.toolsLibrary,
+    queryFn: () => api.get('/tools'),
+    select: (data) => data.tools,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useCreateToolLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/tools', body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.toolsLibrary })
+      qc.invalidateQueries({ queryKey: queryKeys.playbooksLibrary })
+    },
+  })
+}
+
+export function useUpdateToolLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }) => api.put(`/tools/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.toolsLibrary })
+      qc.invalidateQueries({ queryKey: queryKeys.playbooksLibrary })
+    },
+  })
+}
+
+export function useDeleteToolLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/tools/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.toolsLibrary })
+      qc.invalidateQueries({ queryKey: queryKeys.playbooksLibrary })
+    },
+  })
+}
+
+// ─── Escalation Rules Library (user-scoped) ──────────────
+export function useEscalationRulesLibrary() {
+  return useQuery({
+    queryKey: queryKeys.escalationRulesLibrary,
+    queryFn: () => api.get('/escalation-rules'),
+    select: (data) => data.rules,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useCreateEscalationLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/escalation-rules', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.escalationRulesLibrary }),
+  })
+}
+
+export function useUpdateEscalationLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }) => api.put(`/escalation-rules/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.escalationRulesLibrary }),
+  })
+}
+
+export function useDeleteEscalationLibrary() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/escalation-rules/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.escalationRulesLibrary }),
+  })
+}
+
+// ─── Agent ↔ Library Associations ────────────────────────
+export function useAgentPlaybooks(agentBotId) {
+  return useQuery({
+    queryKey: queryKeys.agentPlaybooks(agentBotId),
+    queryFn: () => api.get(`/agent-bots/${agentBotId}/playbooks`),
+    select: (data) => data.playbooks,
+    enabled: !!agentBotId,
+  })
+}
+
+export function useUpdateAgentPlaybooks(agentBotId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (playbook_ids) => api.put(`/agent-bots/${agentBotId}/playbooks`, { playbook_ids }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.agentPlaybooks(agentBotId) }),
+  })
+}
+
+export function useAgentEscalationRules(agentBotId) {
+  return useQuery({
+    queryKey: queryKeys.agentEscalationRules(agentBotId),
+    queryFn: () => api.get(`/agent-bots/${agentBotId}/escalation-rules`),
+    select: (data) => data.rules,
+    enabled: !!agentBotId,
+  })
+}
+
+export function useUpdateAgentEscalationRules(agentBotId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (escalation_rule_ids) => api.put(`/agent-bots/${agentBotId}/escalation-rules`, { escalation_rule_ids }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.agentEscalationRules(agentBotId) }),
+  })
+}
+
 // ─── Inboxes ─────────────────────────────────────────────
 export function useInboxes() {
   return useQuery({

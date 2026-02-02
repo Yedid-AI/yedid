@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Textarea } from '@/components/ui/textarea'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
@@ -83,20 +83,21 @@ export default function ToolsTab({ agentBotId }) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-muted-foreground">{t('tools.subtitle')}</p>
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
-          <DialogTrigger asChild>
+        <Sheet open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
+          <SheetTrigger asChild>
             <Button>{t('common.new')}</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>{editItem ? t('common.edit') : t('tools.dialogTitle')}</DialogTitle>
-            </DialogHeader>
+          </SheetTrigger>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>{editItem ? t('common.edit') : t('tools.dialogTitle')}</SheetTitle>
+            </SheetHeader>
+            <div className="flex-1 overflow-y-auto px-6 py-4">
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>{t('common.name')}</Label>
-                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-                </div>
+              <div className="space-y-2">
+                <Label>{t('common.name')}</Label>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              </div>
+              <div className="grid grid-cols-[auto_1fr] gap-3">
                 <div className="space-y-2">
                   <Label>{t('tools.method')}</Label>
                   <Select value={form.method} onValueChange={(v) => setForm({ ...form, method: v })}>
@@ -106,24 +107,22 @@ export default function ToolsTab({ agentBotId }) {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              <div className="space-y-2">
-                <Label>{t('tools.url')}</Label>
-                <Input type="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} required />
+                <div className="space-y-2">
+                  <Label>{t('tools.url')}</Label>
+                  <Input type="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} required />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>{t('tools.description')}</Label>
                 <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} required />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>{t('tools.queryParams')}</Label>
-                  <Textarea value={form.query_parameters} onChange={(e) => setForm({ ...form, query_parameters: e.target.value })} rows={3} className="font-mono text-xs" />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('tools.headers')}</Label>
-                  <Textarea value={form.headers} onChange={(e) => setForm({ ...form, headers: e.target.value })} rows={3} className="font-mono text-xs" />
-                </div>
+              <div className="space-y-2">
+                <Label>{t('tools.queryParams')}</Label>
+                <Textarea value={form.query_parameters} onChange={(e) => setForm({ ...form, query_parameters: e.target.value })} rows={3} className="font-mono text-xs" />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('tools.headers')}</Label>
+                <Textarea value={form.headers} onChange={(e) => setForm({ ...form, headers: e.target.value })} rows={3} className="font-mono text-xs" />
               </div>
               <div className="space-y-2">
                 <Label>{t('tools.bodySchema')}</Label>
@@ -140,8 +139,9 @@ export default function ToolsTab({ agentBotId }) {
                 <Button type="submit">{editItem ? t('common.save') : t('common.create')}</Button>
               </div>
             </form>
-          </DialogContent>
-        </Dialog>
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
 
       {error && (
