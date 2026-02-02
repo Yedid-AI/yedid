@@ -1,5 +1,8 @@
 import 'dotenv/config'
 import express from 'express'
+import helmet from 'helmet'
+import cors from 'cors'
+import rateLimit from 'express-rate-limit'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcrypt'
 import path from 'path'
@@ -10,6 +13,9 @@ import sourcesRoutes from './routes/sources.js'
 import playbooksRoutes from './routes/playbooks.js'
 import toolsRoutes from './routes/tools.js'
 import escalationRoutes from './routes/escalation.js'
+import playbooksLibraryRoutes from './routes/playbooks-library.js'
+import toolsLibraryRoutes from './routes/tools-library.js'
+import escalationLibraryRoutes from './routes/escalation-library.js'
 import agentRoutes from './routes/agent.js'
 import settingsRoutes from './routes/settings.js'
 import agentBotsRoutes from './routes/agent-bots.js'
@@ -17,6 +23,15 @@ import inboxesRoutes from './routes/inboxes.js'
 import sessionsRoutes from './routes/sessions.js'
 import { loadSettings } from './settings.js'
 import { startClosingCron } from './engine/closing-cron.js'
+
+// --- Validate required env vars at startup ---
+const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'JWT_SECRET']
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key]) {
+    console.error(`FATAL: Missing required environment variable: ${key}`)
+    process.exit(1)
+  }
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -28,6 +43,33 @@ const supabaseKey = process.env.SUPABASE_ANON_KEY
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey) : null
 const supabaseAdmin = supabaseUrl && supabaseServiceKey ? createClient(supabaseUrl, supabaseServiceKey) : null
+
+// Security headers
+app.use(helmet({ contentSecurityPolicy: false }))
+
+// CORS
+app.use(cors({
+  origin: process.env.FRONTEND_URL || true,
+  credentials: true,
+}))
+
+// Rate limiting — login endpoint
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: { error: 'Trop de tentatives, reessayez plus tard' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
+// Rate limiting — webhook endpoint
+const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  message: { error: 'Rate limit exceeded' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
 
 // Middleware
 app.use(express.json({ limit: '10mb' }))
@@ -44,10 +86,17 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok' })
 })
 
+// Rate limiters on specific endpoints
+app.use('/api/login', loginLimiter)
+app.use('/api/webhook', webhookLimiter)
+
 // API routes
 app.use('/api', authRoutes)
 app.use('/api', agentRoutes)  // API key auth routes — must be before checkAuth routes
 app.use('/api', checkAuth, sourcesRoutes)
+app.use('/api', checkAuth, playbooksLibraryRoutes)
+app.use('/api', checkAuth, toolsLibraryRoutes)
+app.use('/api', checkAuth, escalationLibraryRoutes)
 app.use('/api', checkAuth, playbooksRoutes)
 app.use('/api', checkAuth, toolsRoutes)
 app.use('/api', checkAuth, escalationRoutes)

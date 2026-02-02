@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { checkRole } from '../middleware.js'
+import { checkRole, verifyAgentOwner } from '../middleware.js'
 import { createAgentBot } from '../chatwoot.js'
 import { getSetting } from '../settings.js'
 
@@ -17,7 +17,8 @@ router.get('/agent-bots', checkRole('admin'), async (req, res) => {
     if (error) throw error
     res.json({ agent_bots: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -36,7 +37,8 @@ router.get('/agent-bots/:id', checkRole('admin'), async (req, res) => {
     if (!data) return res.status(404).json({ error: 'Agent introuvable' })
     res.json({ agent_bot: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -103,7 +105,8 @@ router.post('/agent-bots', checkRole('admin'), async (req, res) => {
 
     res.status(201).json({ agent_bot: full })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -128,7 +131,8 @@ router.put('/agent-bots/:id', checkRole('admin'), async (req, res) => {
     if (error) throw error
     res.json({ agent_bot: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -147,7 +151,25 @@ router.put('/agent-bots/:id/config', checkRole('admin'), async (req, res) => {
 
     if (!bot) return res.status(404).json({ error: 'Agent introuvable' })
 
+    const ALLOWED_PROVIDERS = ['openai', 'anthropic']
+    const ALLOWED_MODELS = {
+      openai: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini'],
+      anthropic: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414'],
+    }
+
     const { name, prompt, tone, response_length, llm_provider, llm_model } = req.body
+
+    if (llm_provider !== undefined && !ALLOWED_PROVIDERS.includes(llm_provider)) {
+      return res.status(400).json({ error: `Provider invalide. Valeurs acceptees: ${ALLOWED_PROVIDERS.join(', ')}` })
+    }
+
+    if (llm_model !== undefined) {
+      const provider = llm_provider || 'openai'
+      if (!ALLOWED_MODELS[provider]?.includes(llm_model)) {
+        return res.status(400).json({ error: `Modele invalide pour ${provider}. Valeurs acceptees: ${(ALLOWED_MODELS[provider] || []).join(', ')}` })
+      }
+    }
+
     const updates = { updated_at: new Date().toISOString() }
     if (name !== undefined) updates.name = name
     if (prompt !== undefined) updates.prompt = prompt
@@ -166,7 +188,124 @@ router.put('/agent-bots/:id/config', checkRole('admin'), async (req, res) => {
     if (error) throw error
     res.json({ config: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// ─── Agent ↔ Playbooks association ────────────────────────────
+
+// GET /api/agent-bots/:id/playbooks — associated playbooks via junction
+router.get('/agent-bots/:id/playbooks', checkRole('admin'), verifyAgentOwner, async (req, res) => {
+  try {
+    const { data, error } = await req.supabase
+      .from('agent_bot_playbooks')
+      .select('playbook_id, playbooks(*, tools(id, name))')
+      .eq('agent_bot_id', req.params.id)
+
+    if (error) throw error
+    const playbooks = (data || []).map(row => row.playbooks).filter(Boolean)
+    res.json({ playbooks })
+  } catch (err) {
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// PUT /api/agent-bots/:id/playbooks — replace all associations
+router.put('/agent-bots/:id/playbooks', checkRole('admin'), verifyAgentOwner, async (req, res) => {
+  try {
+    const agentBotId = parseInt(req.params.id)
+    const { playbook_ids } = req.body
+
+    if (!Array.isArray(playbook_ids)) {
+      return res.status(400).json({ error: 'playbook_ids doit etre un tableau' })
+    }
+
+    // Delete existing associations
+    const { error: delError } = await req.supabase
+      .from('agent_bot_playbooks')
+      .delete()
+      .eq('agent_bot_id', agentBotId)
+
+    if (delError) throw delError
+
+    // Insert new associations
+    if (playbook_ids.length > 0) {
+      const inserts = playbook_ids.map(pbId => ({
+        agent_bot_id: agentBotId,
+        playbook_id: parseInt(pbId),
+      }))
+
+      const { error: insertError } = await req.supabase
+        .from('agent_bot_playbooks')
+        .insert(inserts)
+
+      if (insertError) throw insertError
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// ─── Agent ↔ Escalation Rules association ─────────────────────
+
+// GET /api/agent-bots/:id/escalation-rules — associated rules via junction
+router.get('/agent-bots/:id/escalation-rules', checkRole('admin'), verifyAgentOwner, async (req, res) => {
+  try {
+    const { data, error } = await req.supabase
+      .from('agent_bot_escalation_rules')
+      .select('escalation_rule_id, escalation_rules(*)')
+      .eq('agent_bot_id', req.params.id)
+
+    if (error) throw error
+    const rules = (data || []).map(row => row.escalation_rules).filter(Boolean)
+    res.json({ rules })
+  } catch (err) {
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// PUT /api/agent-bots/:id/escalation-rules — replace all associations
+router.put('/agent-bots/:id/escalation-rules', checkRole('admin'), verifyAgentOwner, async (req, res) => {
+  try {
+    const agentBotId = parseInt(req.params.id)
+    const { escalation_rule_ids } = req.body
+
+    if (!Array.isArray(escalation_rule_ids)) {
+      return res.status(400).json({ error: 'escalation_rule_ids doit etre un tableau' })
+    }
+
+    // Delete existing associations
+    const { error: delError } = await req.supabase
+      .from('agent_bot_escalation_rules')
+      .delete()
+      .eq('agent_bot_id', agentBotId)
+
+    if (delError) throw delError
+
+    // Insert new associations
+    if (escalation_rule_ids.length > 0) {
+      const inserts = escalation_rule_ids.map(erId => ({
+        agent_bot_id: agentBotId,
+        escalation_rule_id: parseInt(erId),
+      }))
+
+      const { error: insertError } = await req.supabase
+        .from('agent_bot_escalation_rules')
+        .insert(inserts)
+
+      if (insertError) throw insertError
+    }
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -183,7 +322,8 @@ router.delete('/agent-bots/:id', checkRole('admin'), async (req, res) => {
     if (error) throw error
     res.json({ success: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent-bots]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 

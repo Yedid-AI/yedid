@@ -20,7 +20,8 @@ router.get('/settings', checkRole('super_admin'), async (req, res) => {
     }
     res.json({ settings })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[settings]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -44,7 +45,8 @@ router.put('/settings', checkRole('super_admin'), async (req, res) => {
 
     res.json({ success: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[settings]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 

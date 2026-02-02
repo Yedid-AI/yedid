@@ -15,7 +15,8 @@ router.get('/agent-bots/:agentBotId/escalation-rules', checkRole('admin'), verif
     if (error) throw error
     res.json({ rules: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[escalation]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -45,7 +46,8 @@ router.post('/agent-bots/:agentBotId/escalation-rules', checkRole('admin'), veri
     if (error) throw error
     res.status(201).json({ rule: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[escalation]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -74,7 +76,8 @@ router.put('/agent-bots/:agentBotId/escalation-rules/:id', checkRole('admin'), v
     if (error) throw error
     res.json({ rule: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[escalation]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -91,7 +94,8 @@ router.delete('/agent-bots/:agentBotId/escalation-rules/:id', checkRole('admin')
     if (error) throw error
     res.json({ success: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[escalation]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 

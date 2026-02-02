@@ -15,7 +15,8 @@ router.get('/agent-bots/:agentBotId/tools', checkRole('admin'), verifyAgentOwner
     if (error) throw error
     res.json({ tools: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[tools]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -46,7 +47,8 @@ router.post('/agent-bots/:agentBotId/tools', checkRole('admin'), verifyAgentOwne
     if (error) throw error
     res.status(201).json({ tool: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[tools]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -76,7 +78,8 @@ router.put('/agent-bots/:agentBotId/tools/:id', checkRole('admin'), verifyAgentO
     if (error) throw error
     res.json({ tool: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[tools]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -93,7 +96,8 @@ router.delete('/agent-bots/:agentBotId/tools/:id', checkRole('admin'), verifyAge
     if (error) throw error
     res.json({ success: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[tools]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 

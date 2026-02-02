@@ -106,11 +106,16 @@ async function openaiCompletion({ model, systemPrompt, messages, tools, response
 async function anthropicCompletion({ model, systemPrompt, messages, tools, responseFormat }) {
   const client = getAnthropicClient()
 
-  // Convert messages to Anthropic format (no system role in messages)
-  const apiMessages = messages.map(msg => ({
-    role: msg.role === 'system' ? 'user' : msg.role,
-    content: msg.content,
-  }))
+  // Convert messages to Anthropic format (filter out system role, handled via params.system)
+  const apiMessages = messages
+    .filter(msg => msg.role !== 'system')
+    .map(msg => {
+      // Pass through tool-related messages as-is (they have content arrays)
+      if (Array.isArray(msg.content) || msg.role === 'tool') {
+        return msg
+      }
+      return { role: msg.role, content: msg.content }
+    })
 
   const params = {
     model: model || 'claude-sonnet-4-20250514',

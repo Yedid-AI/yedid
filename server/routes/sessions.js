@@ -62,7 +62,8 @@ router.get('/sessions', checkRole('admin'), async (req, res) => {
 
     res.json({ sessions, stats })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[sessions]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -81,7 +82,8 @@ router.get('/sessions/:id', checkRole('admin'), async (req, res) => {
     if (!data) return res.status(404).json({ error: 'Session introuvable' })
     res.json({ session: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[sessions]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -139,7 +141,8 @@ router.get('/sessions/:id/messages', checkRole('admin'), async (req, res) => {
 
     res.json({ messages })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[sessions]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 

@@ -32,21 +32,38 @@ export async function createOrFindSession(supabase, data) {
     return { session: existing[0], created: false }
   }
 
-  // Create new session
+  // Create new session — retry once on conflict (race condition protection)
+  const insertData = {
+    user_id,
+    inbox_id: data.inbox_id || null,
+    chatwoot_account_id: data.chatwoot_account_id || null,
+    chatwoot_inbox_id: data.chatwoot_inbox_id || null,
+    chatwoot_conversation_id,
+    status: 'open',
+  }
+
   const { data: session, error } = await supabase
     .from('sessions')
-    .insert({
-      user_id,
-      inbox_id: data.inbox_id || null,
-      chatwoot_account_id: data.chatwoot_account_id || null,
-      chatwoot_inbox_id: data.chatwoot_inbox_id || null,
-      chatwoot_conversation_id,
-      status: 'open',
-    })
+    .insert(insertData)
     .select()
     .single()
 
-  if (error) throw error
+  if (error) {
+    // If duplicate constraint violation, re-fetch the existing session
+    if (error.code === '23505') {
+      const { data: retry } = await supabase
+        .from('sessions')
+        .select('id')
+        .eq('chatwoot_conversation_id', chatwoot_conversation_id)
+        .eq('user_id', user_id)
+        .eq('status', 'open')
+        .limit(1)
+      if (retry && retry.length > 0) {
+        return { session: retry[0], created: false }
+      }
+    }
+    throw error
+  }
   return { session, created: true }
 }
 

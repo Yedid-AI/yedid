@@ -4,7 +4,7 @@ import { useI18n } from '../../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { RichEditor } from '@/components/ui/rich-editor'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
@@ -30,9 +30,21 @@ export default function ConfigTab({ agentBotId }) {
     })
   }, [agent])
 
+  const ALLOWED_MODELS = {
+    openai: ['gpt-4.1-mini', 'gpt-4.1', 'gpt-4o', 'gpt-4o-mini'],
+    anthropic: ['claude-sonnet-4-20250514', 'claude-haiku-4-20250414'],
+  }
+
   const handleSave = async (e) => {
     e.preventDefault()
     setError('')
+
+    const allowedModels = ALLOWED_MODELS[form.llm_provider] || []
+    if (!allowedModels.includes(form.llm_model)) {
+      setError(`Modele invalide pour le provider ${form.llm_provider}`)
+      return
+    }
+
     setSaving(true)
     setSuccess(false)
     try {
@@ -62,11 +74,11 @@ export default function ConfigTab({ agentBotId }) {
           </div>
           <div className="space-y-2">
             <Label>{t('config.prompt')}</Label>
-            <Textarea
+            <RichEditor
               value={form.prompt}
-              onChange={(e) => setForm({ ...form, prompt: e.target.value })}
-              rows={6}
+              onChange={(md) => setForm({ ...form, prompt: md })}
               placeholder={t('config.promptPlaceholder')}
+              minHeight="200px"
             />
           </div>
           <div className="grid grid-cols-2 gap-3">

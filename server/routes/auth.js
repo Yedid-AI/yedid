@@ -1,10 +1,9 @@
 import { Router } from 'express'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
-import { checkAuth, checkRole } from '../middleware.js'
+import { checkAuth, checkRole, JWT_SECRET } from '../middleware.js'
 
 const router = Router()
-const JWT_SECRET = process.env.JWT_SECRET || 'cardynal-app-secret-change-in-production'
 
 // Helper: attach chatwoot data to user object for frontend
 async function attachChatwootData(supabase, user) {
@@ -62,7 +61,8 @@ router.post('/login', async (req, res) => {
 
     res.json({ token, user: safeUser })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[auth]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -85,7 +85,8 @@ router.get('/verify', checkAuth, async (req, res) => {
 
     res.json({ user: safeUser })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[auth]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -126,7 +127,8 @@ router.post('/register', checkAuth, checkRole('super_admin'), async (req, res) =
     const { password_hash, ...safeUser } = data
     res.status(201).json({ user: safeUser })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[auth]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -141,7 +143,8 @@ router.get('/users', checkAuth, checkRole('super_admin'), async (req, res) => {
     if (error) throw error
     res.json({ users: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[auth]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -206,7 +209,8 @@ router.get('/users/:id', checkAuth, checkRole('super_admin'), async (req, res) =
       },
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[auth]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -233,7 +237,8 @@ router.put('/users/:id', checkAuth, checkRole('super_admin'), async (req, res) =
     if (error) throw error
     res.json({ user: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[auth]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -264,7 +269,8 @@ router.delete('/users/:id', checkAuth, checkRole('super_admin'), async (req, res
     if (error) throw error
     res.json({ success: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[auth]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 

@@ -27,55 +27,59 @@ export async function handleWebhook(webhookBody, supabase) {
     return
   }
 
-  console.log(`[Engine] Processing message for inbox ${inboxId}, conversation ${conversationId}`)
+  try {
+    console.log(`[Engine] Processing message for inbox ${inboxId}, conversation ${conversationId}`)
 
-  // --- 2. Load agent config ---
-  const config = await loadAgentConfig(supabase, inboxId)
-  if (!config) {
-    console.log(`[Engine] No agent config found for inbox ${inboxId}`)
-    return
-  }
+    // --- 2. Load agent config ---
+    const config = await loadAgentConfig(supabase, inboxId)
+    if (!config) {
+      console.log(`[Engine] No agent config found for inbox ${inboxId}`)
+      return
+    }
 
-  const { userId, inboxDbId, botToken, agentConfig, playbooks, escalationRules } = config
+    const { userId, inboxDbId, botToken, agentConfig, playbooks, escalationRules } = config
 
-  if (!agentConfig || !botToken) {
-    console.log(`[Engine] Missing agent config or bot token for inbox ${inboxId}`)
-    return
-  }
+    if (!agentConfig || !botToken) {
+      console.log(`[Engine] Missing agent config or bot token for inbox ${inboxId}`)
+      return
+    }
 
-  // --- 3. Session + Memory ---
-  const { session } = await createOrFindSession(supabase, {
-    user_id: userId,
-    inbox_id: inboxDbId,
-    chatwoot_account_id: accountId,
-    chatwoot_inbox_id: inboxId,
-    chatwoot_conversation_id: conversationId,
-  })
-
-  const conversationHistory = await getConversationHistory(supabase, session.id, 10)
-
-  // --- 4. Route ---
-  const route = await routeMessage({
-    agentConfig,
-    playbooks,
-    escalationRules,
-    userMessage,
-    conversationHistory,
-  })
-
-  console.log(`[Engine] Route decision: ${route.type} → ${route.id}`)
-
-  // --- 5. Execute ---
-  if (route.type === 'scenario') {
-    await handleScenario({
-      config, playbooks, route, userMessage, conversationHistory,
-      supabase, accountId, conversationId, session,
+    // --- 3. Session + Memory ---
+    const { session } = await createOrFindSession(supabase, {
+      user_id: userId,
+      inbox_id: inboxDbId,
+      chatwoot_account_id: accountId,
+      chatwoot_inbox_id: inboxId,
+      chatwoot_conversation_id: conversationId,
     })
-  } else {
-    await handleEscalation({
-      config, escalationRules, route, userMessage, conversationHistory,
-      supabase, accountId, conversationId, session, webhookBody,
+
+    const conversationHistory = await getConversationHistory(supabase, session.id, 10)
+
+    // --- 4. Route ---
+    const route = await routeMessage({
+      agentConfig,
+      playbooks,
+      escalationRules,
+      userMessage,
+      conversationHistory,
     })
+
+    console.log(`[Engine] Route decision: ${route.type} → ${route.id}`)
+
+    // --- 5. Execute ---
+    if (route.type === 'scenario') {
+      await handleScenario({
+        config, playbooks, route, userMessage, conversationHistory,
+        supabase, accountId, conversationId, session,
+      })
+    } else {
+      await handleEscalation({
+        config, escalationRules, route, userMessage, conversationHistory,
+        supabase, accountId, conversationId, session, webhookBody,
+      })
+    }
+  } catch (err) {
+    console.error(`[Engine] Fatal error processing inbox ${inboxId}, conversation ${conversationId}:`, err.message)
   }
 }
 
@@ -122,24 +126,26 @@ async function loadAgentConfig(supabase, inboxId) {
 
   const agentConfig = configs?.[0] || null
 
-  // Fetch playbooks with tools
-  const { data: playbooks } = await supabase
-    .from('playbooks')
-    .select('id, title, content, audience, rules, is_active, tools(id, name, description, method, url, query_parameters, headers, body_schema)')
+  // Fetch playbooks via junction table
+  const { data: playbookJunctions } = await supabase
+    .from('agent_bot_playbooks')
+    .select('playbook_id, playbooks(id, title, content, audience, rules, is_active, tools(id, name, description, method, url, query_parameters, headers, body_schema))')
     .eq('agent_bot_id', agentBotId)
-    .eq('is_active', true)
 
-  const formattedPlaybooks = (playbooks || []).map(pb => ({
-    ...pb,
-    tool: pb.tools || null,
-  }))
+  const formattedPlaybooks = (playbookJunctions || [])
+    .map(j => j.playbooks)
+    .filter(pb => pb && pb.is_active)
+    .map(pb => ({ ...pb, tool: pb.tools || null }))
 
-  // Fetch escalation rules
-  const { data: escalationRules } = await supabase
-    .from('escalation_rules')
-    .select('*')
+  // Fetch escalation rules via junction table
+  const { data: escalationJunctions } = await supabase
+    .from('agent_bot_escalation_rules')
+    .select('escalation_rule_id, escalation_rules(*)')
     .eq('agent_bot_id', agentBotId)
-    .eq('is_active', true)
+
+  const escalationRules = (escalationJunctions || [])
+    .map(j => j.escalation_rules)
+    .filter(er => er && er.is_active)
 
   // Fetch chatwoot_user_id (for escalation assignment)
   const { data: cwAccounts } = await supabase

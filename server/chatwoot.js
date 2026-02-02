@@ -45,11 +45,13 @@ export async function provisionAccount(user, supabase) {
   const accountId = account.id
   console.log(`Provision [${user.email}] step 1: account ${accountId}`)
 
-  // 2. Create Chatwoot user
+  // 2. Create Chatwoot user (random password per user)
+  const { randomBytes } = await import('crypto')
+  const tempPassword = randomBytes(24).toString('base64url') + '!A1'
   const chatUser = await platformApi('/platform/api/v1/users', 'POST', {
     name: [user.first_name, user.last_name].filter(Boolean).join(' ') || user.email,
     email: user.email,
-    password: 'CardynalTemp123!',
+    password: tempPassword,
     custom_attributes: {},
   })
   const chatUserId = chatUser.id

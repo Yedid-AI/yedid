@@ -80,13 +80,19 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
 
   // Tool-use loop
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const result = await createCompletion({
-      provider,
-      model,
-      systemPrompt,
-      messages,
-      tools,
-    })
+    let result
+    try {
+      result = await createCompletion({
+        provider,
+        model,
+        systemPrompt,
+        messages,
+        tools,
+      })
+    } catch (err) {
+      console.error(`[PlaybookAgent] LLM call failed (round ${round}):`, err.message)
+      return { content: 'Desole, une erreur est survenue. Veuillez reessayer.', metadata }
+    }
 
     // No tool calls — we have the final response
     if (!result.toolCalls || result.toolCalls.length === 0) {
@@ -102,18 +108,23 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
     for (const toolCall of result.toolCalls) {
       let toolResult
 
-      if (toolCall.name === 'search_knowledge_base') {
-        // Knowledge base search
-        const query = toolCall.arguments.query
-        const kbResults = await searchKnowledgeBase(supabase, query, userId)
-        toolResult = formatKBResults(kbResults) || 'No relevant information found in the knowledge base.'
-        metadata.kb_searches.push({ query, results_count: kbResults.length })
-      } else if (toolCall.name.startsWith('api_tool_') && apiTool) {
-        // Dynamic API tool
-        toolResult = await executeTool(apiTool, toolCall.arguments.body || toolCall.arguments)
-        metadata.tool_calls.push({ name: apiTool.name, arguments: toolCall.arguments })
-      } else {
-        toolResult = `Unknown tool: ${toolCall.name}`
+      try {
+        if (toolCall.name === 'search_knowledge_base') {
+          // Knowledge base search
+          const query = toolCall.arguments?.query || ''
+          const kbResults = await searchKnowledgeBase(supabase, query, userId)
+          toolResult = formatKBResults(kbResults) || 'No relevant information found in the knowledge base.'
+          metadata.kb_searches.push({ query, results_count: kbResults.length })
+        } else if (toolCall.name.startsWith('api_tool_') && apiTool) {
+          // Dynamic API tool
+          toolResult = await executeTool(apiTool, toolCall.arguments?.body || toolCall.arguments)
+          metadata.tool_calls.push({ name: apiTool.name, arguments: toolCall.arguments })
+        } else {
+          toolResult = `Unknown tool: ${toolCall.name}`
+        }
+      } catch (err) {
+        console.error(`[PlaybookAgent] Tool ${toolCall.name} failed:`, err.message)
+        toolResult = `Tool error: ${err.message}`
       }
 
       messages.push(buildToolResultMessage(provider, toolCall.id, toolCall.name, toolResult))
@@ -121,12 +132,16 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
   }
 
   // If we exhausted rounds, do one final call without tools
-  const finalResult = await createCompletion({
-    provider,
-    model,
-    systemPrompt,
-    messages,
-  })
-
-  return { content: finalResult.content, metadata }
+  try {
+    const finalResult = await createCompletion({
+      provider,
+      model,
+      systemPrompt,
+      messages,
+    })
+    return { content: finalResult.content, metadata }
+  } catch (err) {
+    console.error('[PlaybookAgent] Final LLM call failed:', err.message)
+    return { content: 'Desole, une erreur est survenue. Veuillez reessayer.', metadata }
+  }
 }

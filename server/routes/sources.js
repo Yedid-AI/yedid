@@ -16,7 +16,8 @@ router.get('/sources', checkRole('admin'), async (req, res) => {
     if (error) throw error
     res.json({ sources: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[sources]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -57,7 +58,8 @@ router.post('/sources', checkRole('admin'), async (req, res) => {
 
     res.status(201).json({ source })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[sources]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -94,7 +96,8 @@ router.delete('/sources/:id', checkRole('admin'), async (req, res) => {
     if (error) throw error
     res.json({ success: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[sources]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 

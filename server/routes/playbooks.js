@@ -15,7 +15,8 @@ router.get('/agent-bots/:agentBotId/playbooks', checkRole('admin'), verifyAgentO
     if (error) throw error
     res.json({ playbooks: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[playbooks]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -45,7 +46,8 @@ router.post('/agent-bots/:agentBotId/playbooks', checkRole('admin'), verifyAgent
     if (error) throw error
     res.status(201).json({ playbook: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[playbooks]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -74,7 +76,8 @@ router.put('/agent-bots/:agentBotId/playbooks/:id', checkRole('admin'), verifyAg
     if (error) throw error
     res.json({ playbook: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[playbooks]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -91,7 +94,8 @@ router.delete('/agent-bots/:agentBotId/playbooks/:id', checkRole('admin'), verif
     if (error) throw error
     res.json({ success: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[playbooks]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 

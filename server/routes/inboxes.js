@@ -16,7 +16,8 @@ router.get('/inboxes', checkRole('admin'), async (req, res) => {
     if (error) throw error
     res.json({ inboxes: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[inboxes]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -35,7 +36,8 @@ router.get('/inboxes/:id', checkRole('admin'), async (req, res) => {
     if (!data) return res.status(404).json({ error: 'Inbox introuvable' })
     res.json({ inbox: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[inboxes]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -99,7 +101,8 @@ router.post('/inboxes', checkRole('admin'), async (req, res) => {
     if (error) throw error
     res.status(201).json({ inbox: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[inboxes]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -162,7 +165,8 @@ router.put('/inboxes/:id/assign-agent', checkRole('admin'), async (req, res) => 
     if (error) throw error
     res.json({ inbox: data })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[inboxes]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -179,7 +183,8 @@ router.delete('/inboxes/:id', checkRole('admin'), async (req, res) => {
     if (error) throw error
     res.json({ success: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[inboxes]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 

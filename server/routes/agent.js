@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { checkApiKey } from '../middleware.js'
+import { checkApiKey, checkWebhookSecret } from '../middleware.js'
 import { provisionAccount } from '../chatwoot.js'
 import { checkAuth, checkRole } from '../middleware.js'
 import { handleWebhook } from '../engine/index.js'
@@ -8,7 +8,8 @@ const router = Router()
 
 // POST /api/webhook/chatwoot — receives Chatwoot agent_bot webhooks
 // Responds 200 immediately, processes async (fire-and-forget)
-router.post('/webhook/chatwoot', (req, res) => {
+// Protected by optional WEBHOOK_SECRET verification
+router.post('/webhook/chatwoot', checkWebhookSecret, (req, res) => {
   res.status(200).json({ ok: true })
 
   // Process asynchronously — don't await
@@ -160,7 +161,8 @@ router.get('/agent/config', checkApiKey, async (req, res) => {
       escalation_rules: escalation_rules || [],
     })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent/config]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -202,7 +204,8 @@ router.post('/agent/sessions', checkApiKey, async (req, res) => {
     if (error) throw error
     res.json({ session, created: true })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent/sessions]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -226,7 +229,8 @@ router.put('/agent/sessions/:id', checkApiKey, async (req, res) => {
     if (error) throw error
     res.json({ session })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent/sessions/:id]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -255,7 +259,8 @@ router.post('/agent/messages', checkApiKey, async (req, res) => {
     if (error) throw error
     res.json({ message })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[agent/messages]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
@@ -296,7 +301,8 @@ router.post('/provision-chat', checkAuth, checkRole('super_admin'), async (req, 
 
     res.json({ success: true, chatwoot: result })
   } catch (err) {
-    res.status(500).json({ error: err.message })
+    console.error('[provision-chat]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
   }
 })
 
