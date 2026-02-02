@@ -3,22 +3,7 @@ import { checkRole, verifyAgentOwner } from '../middleware.js'
 
 const router = Router()
 
-// GET /api/agent-bots/:agentBotId/escalation-rules
-router.get('/agent-bots/:agentBotId/escalation-rules', checkRole('admin'), verifyAgentOwner, async (req, res) => {
-  try {
-    const { data, error } = await req.supabase
-      .from('escalation_rules')
-      .select('*')
-      .eq('agent_bot_id', req.params.agentBotId)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-    res.json({ rules: data })
-  } catch (err) {
-    console.error('[escalation]', err.message)
-    res.status(500).json({ error: 'Erreur interne' })
-  }
-})
+// NOTE: GET /agent-bots/:agentBotId/escalation-rules is now handled by agent-bots.js (junction table)
 
 // POST /api/agent-bots/:agentBotId/escalation-rules
 router.post('/agent-bots/:agentBotId/escalation-rules', checkRole('admin'), verifyAgentOwner, async (req, res) => {

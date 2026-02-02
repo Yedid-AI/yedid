@@ -3,22 +3,7 @@ import { checkRole, verifyAgentOwner } from '../middleware.js'
 
 const router = Router()
 
-// GET /api/agent-bots/:agentBotId/playbooks
-router.get('/agent-bots/:agentBotId/playbooks', checkRole('admin'), verifyAgentOwner, async (req, res) => {
-  try {
-    const { data, error } = await req.supabase
-      .from('playbooks')
-      .select('*, tools(id, name)')
-      .eq('agent_bot_id', req.params.agentBotId)
-      .order('created_at', { ascending: false })
-
-    if (error) throw error
-    res.json({ playbooks: data })
-  } catch (err) {
-    console.error('[playbooks]', err.message)
-    res.status(500).json({ error: 'Erreur interne' })
-  }
-})
+// NOTE: GET /agent-bots/:agentBotId/playbooks is now handled by agent-bots.js (junction table)
 
 // POST /api/agent-bots/:agentBotId/playbooks
 router.post('/agent-bots/:agentBotId/playbooks', checkRole('admin'), verifyAgentOwner, async (req, res) => {
