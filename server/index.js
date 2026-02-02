@@ -4,7 +4,6 @@ import helmet from 'helmet'
 import cors from 'cors'
 import rateLimit from 'express-rate-limit'
 import { createClient } from '@supabase/supabase-js'
-import bcrypt from 'bcrypt'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { checkAuth, checkRole, checkApiKey } from './middleware.js'
@@ -25,7 +24,7 @@ import { loadSettings } from './settings.js'
 import { startClosingCron } from './engine/closing-cron.js'
 
 // --- Validate required env vars at startup ---
-const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'JWT_SECRET']
+const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY']
 for (const key of REQUIRED_ENV) {
   if (!process.env[key]) {
     console.error(`FATAL: Missing required environment variable: ${key}`)
@@ -116,7 +115,7 @@ if (process.env.NODE_ENV === 'production') {
 
 // Seed super_admin if users table is empty
 async function seedAdmin() {
-  if (!supabase) return
+  if (!supabase || !supabaseAdmin) return
 
   const email = process.env.ADMIN_EMAIL
   const password = process.env.ADMIN_PASSWORD
@@ -136,18 +135,32 @@ async function seedAdmin() {
   }
 
   if (users && users.length === 0) {
-    const hash = await bcrypt.hash(password, 10)
-    const { error: insertError } = await supabase
+    // Create user in Supabase Auth (GoTrue)
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+    })
+
+    if (authError) {
+      console.log('Seed admin auth error:', authError.message)
+      return
+    }
+
+    // Create in public.users with auth_id bridge
+    const { error: insertError } = await supabaseAdmin
       .from('users')
       .insert({
         email,
-        password_hash: hash,
+        auth_id: authData.user.id,
         first_name: 'Admin',
-        role: 'super_admin'
+        role: 'super_admin',
       })
 
     if (insertError) {
       console.log('Seed admin error:', insertError.message)
+      // Rollback auth user
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
     } else {
       console.log(`Seeded super_admin: ${email}`)
     }

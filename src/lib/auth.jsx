@@ -20,6 +20,7 @@ export function AuthProvider({ children }) {
         })
         .catch(() => {
           localStorage.removeItem('token')
+          localStorage.removeItem('refresh_token')
           localStorage.removeItem('user')
           setUser(null)
         })
@@ -32,6 +33,7 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     const data = await api.post('/login', { email, password })
     localStorage.setItem('token', data.token)
+    if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token)
     localStorage.setItem('user', JSON.stringify(data.user))
     setUser(data.user)
     return data
@@ -39,6 +41,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem('token')
+    localStorage.removeItem('refresh_token')
     localStorage.removeItem('user')
     setUser(null)
   }

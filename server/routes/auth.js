@@ -1,7 +1,5 @@
 import { Router } from 'express'
-import bcrypt from 'bcrypt'
-import jwt from 'jsonwebtoken'
-import { checkAuth, checkRole, JWT_SECRET } from '../middleware.js'
+import { checkAuth, checkRole } from '../middleware.js'
 
 const router = Router()
 
@@ -33,33 +31,33 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email et mot de passe requis' })
     }
 
-    const { data: users, error } = await req.supabase
+    // Sign in via Supabase Auth (GoTrue)
+    const { data: authData, error: authError } = await req.supabase.auth.signInWithPassword({ email, password })
+    if (authError) {
+      return res.status(401).json({ error: 'Email ou mot de passe incorrect' })
+    }
+
+    // Lookup public.users for profile + role
+    const { data: users, error: dbError } = await req.supabaseAdmin
       .from('users')
       .select('*')
-      .eq('email', email)
+      .eq('auth_id', authData.user.id)
       .limit(1)
 
-    if (error) throw error
+    if (dbError) throw dbError
     if (!users || users.length === 0) {
-      return res.status(401).json({ error: 'Email ou mot de passe incorrect' })
+      return res.status(401).json({ error: 'Utilisateur introuvable' })
     }
 
-    const user = users[0]
-    const valid = await bcrypt.compare(password, user.password_hash)
-    if (!valid) {
-      return res.status(401).json({ error: 'Email ou mot de passe incorrect' })
-    }
-
-    const token = jwt.sign(
-      { user_id: user.id, email: user.email, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    )
-
-    const { password_hash, ...safeUser } = user
+    const { password_hash, auth_id, ...safeUser } = users[0]
     await attachChatwootData(req.supabase, safeUser)
 
-    res.json({ token, user: safeUser })
+    res.json({
+      token: authData.session.access_token,
+      refresh_token: authData.session.refresh_token,
+      expires_at: authData.session.expires_at,
+      user: safeUser,
+    })
   } catch (err) {
     console.error('[auth]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
@@ -80,7 +78,7 @@ router.get('/verify', checkAuth, async (req, res) => {
       return res.status(401).json({ error: 'Utilisateur introuvable' })
     }
 
-    const { password_hash, ...safeUser } = users[0]
+    const { password_hash, auth_id, ...safeUser } = users[0]
     await attachChatwootData(req.supabase, safeUser)
 
     res.json({ user: safeUser })
@@ -103,12 +101,27 @@ router.post('/register', checkAuth, checkRole('super_admin'), async (req, res) =
       return res.status(400).json({ error: 'Role invalide' })
     }
 
-    const hash = await bcrypt.hash(password, 10)
-    const { data, error } = await req.supabase
+    // Create user in Supabase Auth (GoTrue)
+    const { data: authData, error: authError } = await req.supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { first_name, last_name },
+    })
+
+    if (authError) {
+      if (authError.message.includes('already been registered')) {
+        return res.status(409).json({ error: 'Cet email existe deja' })
+      }
+      throw authError
+    }
+
+    // Create row in public.users with auth_id bridge
+    const { data, error } = await req.supabaseAdmin
       .from('users')
       .insert({
         email,
-        password_hash: hash,
+        auth_id: authData.user.id,
         first_name: first_name || null,
         last_name: last_name || null,
         role: role || 'agent',
@@ -118,13 +131,15 @@ router.post('/register', checkAuth, checkRole('super_admin'), async (req, res) =
       .single()
 
     if (error) {
+      // Rollback: delete from auth.users if public.users insert fails
+      await req.supabaseAdmin.auth.admin.deleteUser(authData.user.id)
       if (error.code === '23505') {
         return res.status(409).json({ error: 'Cet email existe deja' })
       }
       throw error
     }
 
-    const { password_hash, ...safeUser } = data
+    const { password_hash, auth_id, ...safeUser } = data
     res.status(201).json({ user: safeUser })
   } catch (err) {
     console.error('[auth]', err.message)
@@ -220,14 +235,30 @@ router.put('/users/:id', checkAuth, checkRole('super_admin'), async (req, res) =
     const { id } = req.params
     const { first_name, last_name, role, enterprise, password } = req.body
 
+    // If password is being changed, update in Supabase Auth
+    if (password) {
+      const { data: targetUser } = await req.supabaseAdmin
+        .from('users')
+        .select('auth_id')
+        .eq('id', id)
+        .single()
+
+      if (targetUser?.auth_id) {
+        const { error: authErr } = await req.supabaseAdmin.auth.admin.updateUserById(
+          targetUser.auth_id,
+          { password }
+        )
+        if (authErr) throw authErr
+      }
+    }
+
     const updates = { updated_at: new Date().toISOString() }
     if (first_name !== undefined) updates.first_name = first_name
     if (last_name !== undefined) updates.last_name = last_name
     if (role !== undefined) updates.role = role
     if (enterprise !== undefined) updates.enterprise = enterprise
-    if (password) updates.password_hash = await bcrypt.hash(password, 10)
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.supabaseAdmin
       .from('users')
       .update(updates)
       .eq('id', id)
@@ -251,9 +282,9 @@ router.delete('/users/:id', checkAuth, checkRole('super_admin'), async (req, res
     }
 
     // Check if target is super_admin — block deletion
-    const { data: targetUsers } = await req.supabase
+    const { data: targetUsers } = await req.supabaseAdmin
       .from('users')
-      .select('role')
+      .select('role, auth_id')
       .eq('id', id)
       .limit(1)
 
@@ -261,13 +292,43 @@ router.delete('/users/:id', checkAuth, checkRole('super_admin'), async (req, res
       return res.status(403).json({ error: 'Impossible de supprimer un super_admin' })
     }
 
-    const { error } = await req.supabase
+    // Delete from Supabase Auth first
+    if (targetUsers?.[0]?.auth_id) {
+      await req.supabaseAdmin.auth.admin.deleteUser(targetUsers[0].auth_id)
+    }
+
+    // Then delete from public.users
+    const { error } = await req.supabaseAdmin
       .from('users')
       .delete()
       .eq('id', id)
 
     if (error) throw error
     res.json({ success: true })
+  } catch (err) {
+    console.error('[auth]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// POST /api/auth/refresh — refresh access token
+router.post('/auth/refresh', async (req, res) => {
+  try {
+    const { refresh_token } = req.body
+    if (!refresh_token) {
+      return res.status(400).json({ error: 'refresh_token requis' })
+    }
+
+    const { data, error } = await req.supabase.auth.refreshSession({ refresh_token })
+    if (error || !data.session) {
+      return res.status(401).json({ error: 'Session expiree, reconnectez-vous' })
+    }
+
+    res.json({
+      token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+      expires_at: data.session.expires_at,
+    })
   } catch (err) {
     console.error('[auth]', err.message)
     res.status(500).json({ error: 'Erreur interne' })

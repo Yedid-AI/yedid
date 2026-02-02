@@ -1,15 +1,6 @@
-import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 
-const JWT_SECRET = process.env.JWT_SECRET
-if (!JWT_SECRET || JWT_SECRET.length < 32) {
-  console.error('FATAL: JWT_SECRET must be set and at least 32 characters long.')
-  process.exit(1)
-}
-
-export { JWT_SECRET }
-
-export function checkAuth(req, res, next) {
+export async function checkAuth(req, res, next) {
   const authHeader = req.headers.authorization
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Non autorise' })
@@ -17,8 +8,29 @@ export function checkAuth(req, res, next) {
 
   const token = authHeader.split(' ')[1]
   try {
-    const decoded = jwt.verify(token, JWT_SECRET)
-    req.user = decoded
+    // Verify Supabase Auth token via GoTrue
+    const { data: { user: authUser }, error } = await req.supabaseAdmin.auth.getUser(token)
+    if (error || !authUser) {
+      return res.status(401).json({ error: 'Token invalide ou expire' })
+    }
+
+    // Lookup public.users by auth_id to get BIGINT user_id + role
+    const { data: users, error: dbError } = await req.supabaseAdmin
+      .from('users')
+      .select('id, email, role')
+      .eq('auth_id', authUser.id)
+      .limit(1)
+
+    if (dbError || !users || users.length === 0) {
+      return res.status(401).json({ error: 'Utilisateur introuvable' })
+    }
+
+    // Same shape as before: { user_id, email, role }
+    req.user = {
+      user_id: users[0].id,
+      email: users[0].email,
+      role: users[0].role,
+    }
     next()
   } catch (err) {
     return res.status(401).json({ error: 'Token invalide ou expire' })
