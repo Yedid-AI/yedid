@@ -198,7 +198,7 @@ router.put('/agent-bots/:id/config', checkRole('admin'), async (req, res) => {
 // GET /api/agent-bots/:id/playbooks — associated playbooks via junction
 router.get('/agent-bots/:id/playbooks', checkRole('admin'), verifyAgentOwner, async (req, res) => {
   try {
-    const { data, error } = await req.supabase
+    const { data, error } = await req.supabaseAdmin
       .from('agent_bot_playbooks')
       .select('playbook_id, playbooks(*, tools(id, name))')
       .eq('agent_bot_id', req.params.id)
@@ -223,7 +223,7 @@ router.put('/agent-bots/:id/playbooks', checkRole('admin'), verifyAgentOwner, as
     }
 
     // Delete existing associations
-    const { error: delError } = await req.supabase
+    const { error: delError } = await req.supabaseAdmin
       .from('agent_bot_playbooks')
       .delete()
       .eq('agent_bot_id', agentBotId)
@@ -237,7 +237,7 @@ router.put('/agent-bots/:id/playbooks', checkRole('admin'), verifyAgentOwner, as
         playbook_id: parseInt(pbId),
       }))
 
-      const { error: insertError } = await req.supabase
+      const { error: insertError } = await req.supabaseAdmin
         .from('agent_bot_playbooks')
         .insert(inserts)
 
@@ -256,7 +256,7 @@ router.put('/agent-bots/:id/playbooks', checkRole('admin'), verifyAgentOwner, as
 // GET /api/agent-bots/:id/escalation-rules — associated rules via junction
 router.get('/agent-bots/:id/escalation-rules', checkRole('admin'), verifyAgentOwner, async (req, res) => {
   try {
-    const { data, error } = await req.supabase
+    const { data, error } = await req.supabaseAdmin
       .from('agent_bot_escalation_rules')
       .select('escalation_rule_id, escalation_rules(*)')
       .eq('agent_bot_id', req.params.id)
@@ -281,7 +281,7 @@ router.put('/agent-bots/:id/escalation-rules', checkRole('admin'), verifyAgentOw
     }
 
     // Delete existing associations
-    const { error: delError } = await req.supabase
+    const { error: delError } = await req.supabaseAdmin
       .from('agent_bot_escalation_rules')
       .delete()
       .eq('agent_bot_id', agentBotId)
@@ -295,7 +295,7 @@ router.put('/agent-bots/:id/escalation-rules', checkRole('admin'), verifyAgentOw
         escalation_rule_id: parseInt(erId),
       }))
 
-      const { error: insertError } = await req.supabase
+      const { error: insertError } = await req.supabaseAdmin
         .from('agent_bot_escalation_rules')
         .insert(inserts)
 

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { useEscalationRulesLibrary, useAgentEscalationRules, useUpdateAgentEscalationRules } from '../../hooks/queries'
 import { useI18n } from '../../lib/i18n'
@@ -19,33 +19,14 @@ export default function EscalationSelectionTab({ agentBotId }) {
   const agentRules = agentRulesQuery.data || []
   const isLoading = libraryQuery.isLoading || agentRulesQuery.isLoading
 
-  const initialIds = useMemo(() => agentRules.map(r => r.id), [agentRules])
-  const [selectedIds, setSelectedIds] = useState([])
-  const [hasChanges, setHasChanges] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    setSelectedIds(initialIds)
-    setHasChanges(false)
-  }, [initialIds])
+  const selectedIds = useMemo(() => agentRules.map(r => r.id), [agentRules])
 
   const handleToggle = (ruleId) => {
     const newSelection = selectedIds.includes(ruleId)
       ? selectedIds.filter(id => id !== ruleId)
       : [...selectedIds, ruleId]
 
-    setSelectedIds(newSelection)
-    setHasChanges(true)
-  }
-
-  const handleSave = async () => {
-    setError('')
-    try {
-      await updateAssociations.mutateAsync(selectedIds)
-      setHasChanges(false)
-    } catch (err) {
-      setError(err.message)
-    }
+    updateAssociations.mutate(newSelection)
   }
 
   if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
@@ -56,21 +37,18 @@ export default function EscalationSelectionTab({ agentBotId }) {
         <p className="text-sm text-muted-foreground">
           {t('escalation.selectionSubtitle')} ({selectedIds.length} {t('common.selected')})
         </p>
-        <div className="flex gap-2">
-          <Button variant="outline" asChild>
-            <Link to="/escalation">
-              <ExternalLink className="me-2 h-4 w-4" />
-              {t('escalation.manageLibrary')}
-            </Link>
-          </Button>
-          <Button onClick={handleSave} disabled={!hasChanges || updateAssociations.isPending}>
-            {updateAssociations.isPending ? t('common.saving') : t('common.save')}
-          </Button>
-        </div>
+        <Button variant="outline" asChild>
+          <Link to="/escalation">
+            <ExternalLink className="me-2 h-4 w-4" />
+            {t('escalation.manageLibrary')}
+          </Link>
+        </Button>
       </div>
 
-      {error && (
-        <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
+      {updateAssociations.isError && (
+        <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">
+          {updateAssociations.error?.message}
+        </div>
       )}
 
       {library.length === 0 ? (
@@ -99,6 +77,7 @@ export default function EscalationSelectionTab({ agentBotId }) {
                     <Switch
                       checked={selectedIds.includes(r.id)}
                       onCheckedChange={() => handleToggle(r.id)}
+                      disabled={updateAssociations.isPending}
                     />
                   </TableCell>
                   <TableCell className="font-medium">{r.title}</TableCell>
