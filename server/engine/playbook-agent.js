@@ -26,6 +26,7 @@ export async function runPlaybookAgent({ agentConfig, playbook, userMessage, con
     tool_calls: [],
     kb_searches: [],
     tool_rounds: 0,
+    token_usage: { input_tokens: 0, output_tokens: 0 },
   }
 
   // Build system prompt — ported from n8n Playbook Agent node
@@ -94,6 +95,12 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
       return { content: 'Desole, une erreur est survenue. Veuillez reessayer.', metadata }
     }
 
+    // Accumulate token usage (normalize OpenAI/Anthropic formats)
+    if (result.usage) {
+      metadata.token_usage.input_tokens += result.usage.prompt_tokens || result.usage.input_tokens || 0
+      metadata.token_usage.output_tokens += result.usage.completion_tokens || result.usage.output_tokens || 0
+    }
+
     // No tool calls — we have the final response
     if (!result.toolCalls || result.toolCalls.length === 0) {
       return { content: result.content, metadata }
@@ -139,6 +146,10 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
       systemPrompt,
       messages,
     })
+    if (finalResult.usage) {
+      metadata.token_usage.input_tokens += finalResult.usage.prompt_tokens || finalResult.usage.input_tokens || 0
+      metadata.token_usage.output_tokens += finalResult.usage.completion_tokens || finalResult.usage.output_tokens || 0
+    }
     return { content: finalResult.content, metadata }
   } catch (err) {
     console.error('[PlaybookAgent] Final LLM call failed:', err.message)

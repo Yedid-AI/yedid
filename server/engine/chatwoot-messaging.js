@@ -1,13 +1,23 @@
 import { accountApi } from '../chatwoot.js'
 
+const MAX_RETRIES = 3
+const BASE_DELAY_MS = 1000
+
+async function withRetry(fn, label = 'Chatwoot') {
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      if (attempt === MAX_RETRIES) throw err
+      const delay = BASE_DELAY_MS * Math.pow(2, attempt)
+      console.warn(`[${label}] Attempt ${attempt + 1} failed, retrying in ${delay}ms: ${err.message}`)
+      await new Promise(r => setTimeout(r, delay))
+    }
+  }
+}
+
 /**
- * Send a message to a Chatwoot conversation.
- * @param {number} accountId - Chatwoot account ID
- * @param {number} conversationId - Chatwoot conversation ID
- * @param {string} content - Message content
- * @param {string} botToken - Bot access token
- * @param {Object} [opts] - Additional options
- * @param {boolean} [opts.private] - Send as private note
+ * Send a message to a Chatwoot conversation (with retry + exponential backoff).
  */
 export async function sendMessage(accountId, conversationId, content, botToken, opts = {}) {
   const path = `/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`
@@ -18,27 +28,19 @@ export async function sendMessage(accountId, conversationId, content, botToken, 
   if (opts.private) {
     body.private = true
   }
-  return accountApi(path, 'POST', body, botToken)
+  return withRetry(() => accountApi(path, 'POST', body, botToken), 'sendMessage')
 }
 
 /**
- * Assign a conversation to a human agent.
- * @param {number} accountId
- * @param {number} conversationId
- * @param {number} assigneeId - Chatwoot user ID to assign to
- * @param {string} botToken
+ * Assign a conversation to a human agent (with retry).
  */
 export async function assignConversation(accountId, conversationId, assigneeId, botToken) {
   const path = `/api/v1/accounts/${accountId}/conversations/${conversationId}/assignments`
-  return accountApi(path, 'POST', { assignee_id: assigneeId }, botToken)
+  return withRetry(() => accountApi(path, 'POST', { assignee_id: assigneeId }, botToken), 'assignConversation')
 }
 
 /**
- * Send a private note (internal comment visible only to agents).
- * @param {number} accountId
- * @param {number} conversationId
- * @param {string} content
- * @param {string} botToken
+ * Send a private note (with retry via sendMessage).
  */
 export async function sendPrivateNote(accountId, conversationId, content, botToken) {
   return sendMessage(accountId, conversationId, content, botToken, { private: true })

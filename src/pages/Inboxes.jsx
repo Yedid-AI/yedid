@@ -91,7 +91,7 @@ export default function Inboxes() {
               </div>
               <div className="flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                <Button type="submit">{t('common.create')}</Button>
+                <Button type="submit" disabled={createInbox.isPending}>{createInbox.isPending ? t('common.saving') : t('common.create')}</Button>
               </div>
             </form>
           </DialogContent>

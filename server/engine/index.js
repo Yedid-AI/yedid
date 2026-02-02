@@ -4,6 +4,29 @@ import { runEscalationAgent } from './escalation-agent.js'
 import { getConversationHistory } from './memory.js'
 import { sendMessage, assignConversation, sendPrivateNote } from './chatwoot-messaging.js'
 import { createOrFindSession, logMessage, closeSession } from './session-logger.js'
+import { decrypt } from '../crypto.js'
+
+// --- In-memory config cache (TTL-based) ---
+const configCache = new Map()
+const CACHE_TTL_MS = 60_000 // 1 minute
+
+function getCachedConfig(inboxId) {
+  const entry = configCache.get(inboxId)
+  if (!entry) return null
+  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+    configCache.delete(inboxId)
+    return null
+  }
+  return entry.data
+}
+
+function setCachedConfig(inboxId, data) {
+  configCache.set(inboxId, { data, ts: Date.now() })
+}
+
+export function clearConfigCache() {
+  configCache.clear()
+}
 
 /**
  * Main orchestrator — handles a Chatwoot webhook event end-to-end.
@@ -96,6 +119,10 @@ function shouldProcess(body) {
 // --- Load agent config from inbox_id ---
 
 async function loadAgentConfig(supabase, inboxId) {
+  // Check cache first
+  const cached = getCachedConfig(inboxId)
+  if (cached) return cached
+
   // Lookup inbox → agent_bot_id
   const { data: inboxes, error: inError } = await supabase
     .from('inboxes')
@@ -108,55 +135,40 @@ async function loadAgentConfig(supabase, inboxId) {
   const { id: inboxDbId, user_id: userId, agent_bot_id: agentBotId } = inboxes[0]
   if (!agentBotId) return null
 
-  // Fetch bot token
-  const { data: bots } = await supabase
-    .from('agent_bots')
-    .select('bot_token')
-    .eq('id', agentBotId)
-    .limit(1)
+  // Parallel fetch: bot token, config, playbooks, escalation rules, chatwoot user
+  const [botsRes, configsRes, playbookRes, escalationRes, cwRes] = await Promise.all([
+    supabase.from('agent_bots').select('bot_token').eq('id', agentBotId).limit(1),
+    supabase.from('agent_config').select('*').eq('agent_bot_id', agentBotId).limit(1),
+    supabase.from('agent_bot_playbooks')
+      .select('playbook_id, playbooks(id, title, content, audience, rules, is_active, tools(id, name, description, method, url, query_parameters, headers, body_schema))')
+      .eq('agent_bot_id', agentBotId),
+    supabase.from('agent_bot_escalation_rules')
+      .select('escalation_rule_id, escalation_rules(*)')
+      .eq('agent_bot_id', agentBotId),
+    supabase.from('chatwoot_accounts')
+      .select('chatwoot_user_id')
+      .eq('user_id', userId)
+      .limit(1),
+  ])
 
-  const botToken = bots?.[0]?.bot_token || null
+  // Decrypt bot token (supports legacy plaintext)
+  const rawToken = botsRes.data?.[0]?.bot_token || null
+  const botToken = rawToken ? decrypt(rawToken) : null
 
-  // Fetch agent_config
-  const { data: configs } = await supabase
-    .from('agent_config')
-    .select('*')
-    .eq('agent_bot_id', agentBotId)
-    .limit(1)
+  const agentConfig = configsRes.data?.[0] || null
 
-  const agentConfig = configs?.[0] || null
-
-  // Fetch playbooks via junction table
-  const { data: playbookJunctions } = await supabase
-    .from('agent_bot_playbooks')
-    .select('playbook_id, playbooks(id, title, content, audience, rules, is_active, tools(id, name, description, method, url, query_parameters, headers, body_schema))')
-    .eq('agent_bot_id', agentBotId)
-
-  const formattedPlaybooks = (playbookJunctions || [])
+  const formattedPlaybooks = (playbookRes.data || [])
     .map(j => j.playbooks)
     .filter(pb => pb && pb.is_active)
     .map(pb => ({ ...pb, tool: pb.tools || null }))
 
-  // Fetch escalation rules via junction table
-  const { data: escalationJunctions } = await supabase
-    .from('agent_bot_escalation_rules')
-    .select('escalation_rule_id, escalation_rules(*)')
-    .eq('agent_bot_id', agentBotId)
-
-  const escalationRules = (escalationJunctions || [])
+  const escalationRules = (escalationRes.data || [])
     .map(j => j.escalation_rules)
     .filter(er => er && er.is_active)
 
-  // Fetch chatwoot_user_id (for escalation assignment)
-  const { data: cwAccounts } = await supabase
-    .from('chatwoot_accounts')
-    .select('chatwoot_user_id')
-    .eq('user_id', userId)
-    .limit(1)
+  const chatwootUserId = cwRes.data?.[0]?.chatwoot_user_id || null
 
-  const chatwootUserId = cwAccounts?.[0]?.chatwoot_user_id || null
-
-  return {
+  const result = {
     userId,
     inboxDbId,
     botToken,
@@ -165,6 +177,10 @@ async function loadAgentConfig(supabase, inboxId) {
     escalationRules: escalationRules || [],
     chatwootUserId,
   }
+
+  // Cache the result
+  setCachedConfig(inboxId, result)
+  return result
 }
 
 // --- Scenario path ---
@@ -233,7 +249,7 @@ async function handleEscalation({ config, escalationRules, route, userMessage, c
   }
 
   // Run escalation agent
-  const { reponse, resume } = await runEscalationAgent({
+  const { reponse, resume, token_usage } = await runEscalationAgent({
     agentConfig,
     rule,
     userMessage,
@@ -266,7 +282,7 @@ async function handleEscalation({ config, escalationRules, route, userMessage, c
     role: 'assistant',
     content: reponse,
     escalation_id: rule.id,
-    metadata: { resume },
+    metadata: { resume, token_usage },
   })
 
   // Close session

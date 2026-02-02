@@ -52,19 +52,26 @@ No markdown, no text outside JSON.`
     responseFormat: { type: 'json_object' },
   })
 
+  // Normalize token usage (OpenAI/Anthropic)
+  const token_usage = {
+    input_tokens: result.usage?.prompt_tokens || result.usage?.input_tokens || 0,
+    output_tokens: result.usage?.completion_tokens || result.usage?.output_tokens || 0,
+  }
+
   // Parse structured output
   try {
     const parsed = JSON.parse(result.content)
     return {
       reponse: parsed.reponse || parsed.response || '',
       resume: parsed.resume || parsed.summary || '',
+      token_usage,
     }
   } catch (err) {
     console.error('Escalation parse error:', err.message, 'Raw:', result.content)
-    // Fallback: use raw content as response
     return {
       reponse: result.content,
       resume: `Escalation triggered for rule: ${rule.title}. Parse error on agent output.`,
+      token_usage,
     }
   }
 }

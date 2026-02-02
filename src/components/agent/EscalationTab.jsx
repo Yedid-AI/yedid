@@ -114,7 +114,7 @@ export default function EscalationTab({ agentBotId }) {
               </div>
               <div className="flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                <Button type="submit">{editItem ? t('common.save') : t('common.create')}</Button>
+                <Button type="submit" disabled={createEscalation.isPending || updateEscalation.isPending}>{(createEscalation.isPending || updateEscalation.isPending) ? t('common.saving') : editItem ? t('common.save') : t('common.create')}</Button>
               </div>
             </form>
             </div>

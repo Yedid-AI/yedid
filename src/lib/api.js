@@ -27,7 +27,11 @@ async function request(path, options = {}) {
   } catch {
     throw new Error('Erreur serveur')
   }
-  if (!res.ok) throw new Error(data.error || 'Erreur serveur')
+  if (!res.ok) {
+    const err = new Error(data.error || 'Erreur serveur')
+    err.status = res.status
+    throw err
+  }
   return data
 }
 

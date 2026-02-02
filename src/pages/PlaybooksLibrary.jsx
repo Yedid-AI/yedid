@@ -128,7 +128,7 @@ export default function PlaybooksLibrary() {
               </div>
               <div className="flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                <Button type="submit">{editItem ? t('common.save') : t('common.create')}</Button>
+                <Button type="submit" disabled={createPlaybook.isPending || updatePlaybook.isPending}>{(createPlaybook.isPending || updatePlaybook.isPending) ? t('common.saving') : editItem ? t('common.save') : t('common.create')}</Button>
               </div>
             </form>
             </div>

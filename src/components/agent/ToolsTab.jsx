@@ -136,7 +136,7 @@ export default function ToolsTab({ agentBotId }) {
               </div>
               <div className="flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                <Button type="submit">{editItem ? t('common.save') : t('common.create')}</Button>
+                <Button type="submit" disabled={createTool.isPending || updateTool.isPending}>{(createTool.isPending || updateTool.isPending) ? t('common.saving') : editItem ? t('common.save') : t('common.create')}</Button>
               </div>
             </form>
             </div>

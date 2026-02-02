@@ -18,6 +18,7 @@ export default function Agents() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [name, setName] = useState('')
   const [error, setError] = useState('')
+  const [creating, setCreating] = useState(false)
   const navigate = useNavigate()
   const { t, dateLocale } = useI18n()
 
@@ -26,6 +27,7 @@ export default function Agents() {
   const handleCreate = async (e) => {
     e.preventDefault()
     setError('')
+    setCreating(true)
     try {
       const data = await api.post('/agent-bots', { name })
       setDialogOpen(false)
@@ -33,6 +35,8 @@ export default function Agents() {
       navigate(`/agents/${data.agent_bot.id}`)
     } catch (err) {
       setError(err.message)
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -68,7 +72,7 @@ export default function Agents() {
               </div>
               <div className="flex gap-2 justify-end">
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                <Button type="submit">{t('common.create')}</Button>
+                <Button type="submit" disabled={creating}>{creating ? t('common.saving') : t('common.create')}</Button>
               </div>
             </form>
           </DialogContent>
