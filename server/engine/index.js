@@ -78,13 +78,15 @@ export async function handleWebhook(webhookBody, supabase) {
 
     const conversationHistory = await getConversationHistory(supabase, session.id, 10)
 
-    // --- 4. Route ---
+    // --- 4. Route (with last active playbook context) ---
+    const lastPlaybookId = await getLastPlaybookId(supabase, session.id)
     const route = await routeMessage({
       agentConfig,
       playbooks,
       escalationRules,
       userMessage,
       conversationHistory,
+      lastPlaybookId,
     })
 
     console.log(`[Engine] Route decision: ${route.type} → ${route.id}`)
@@ -104,6 +106,23 @@ export async function handleWebhook(webhookBody, supabase) {
   } catch (err) {
     console.error(`[Engine] Fatal error processing inbox ${inboxId}, conversation ${conversationId}:`, err.message)
   }
+}
+
+// --- Get last active playbook from session history ---
+
+async function getLastPlaybookId(supabase, sessionId) {
+  if (!sessionId) return null
+
+  const { data, error } = await supabase
+    .from('conversation_messages')
+    .select('playbook_id')
+    .eq('session_id', sessionId)
+    .not('playbook_id', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (error || !data || data.length === 0) return null
+  return String(data[0].playbook_id)
 }
 
 // --- Filter incoming messages (same as n8n Filter Incoming node) ---

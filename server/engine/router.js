@@ -2,7 +2,6 @@ import { createCompletion } from './llm.js'
 
 /**
  * Routing Agent — decides if a message should go to a playbook (scenario) or escalation.
- * Port of the n8n "Routing Agent" node.
  *
  * @param {Object} opts
  * @param {Object} opts.agentConfig - agent_config row (with llm_provider, llm_model)
@@ -10,13 +9,15 @@ import { createCompletion } from './llm.js'
  * @param {Array} opts.escalationRules - Active escalation rules
  * @param {string} opts.userMessage - Incoming user message
  * @param {Array} opts.conversationHistory - Previous messages [{role, content}]
+ * @param {string|null} [opts.lastPlaybookId] - ID of the playbook used in the last exchange
  * @returns {Promise<{type: 'scenario'|'escalation', id: string}>}
  */
-export async function routeMessage({ agentConfig, playbooks, escalationRules, userMessage, conversationHistory }) {
-  // Format playbooks text (same as n8n Prepare Data node)
+export async function routeMessage({ agentConfig, playbooks, escalationRules, userMessage, conversationHistory, lastPlaybookId }) {
+  // Format playbooks text
   let playbooksText = ''
   for (const pb of playbooks) {
-    playbooksText += `ID: ${pb.id}\n`
+    const isCurrent = lastPlaybookId && String(pb.id) === String(lastPlaybookId)
+    playbooksText += `ID: ${pb.id}${isCurrent ? ' (CURRENTLY ACTIVE)' : ''}\n`
     playbooksText += `Title: ${pb.title}\n`
     playbooksText += `Audience: ${pb.audience || 'N/A'}\n`
     playbooksText += `Rules: ${pb.rules || 'N/A'}\n`
@@ -34,7 +35,11 @@ export async function routeMessage({ agentConfig, playbooks, escalationRules, us
     escalationRulesText += `---\n`
   }
 
-  // System prompt — ported verbatim from n8n workflow
+  // Build context hint for active playbook
+  const activeHint = lastPlaybookId
+    ? `\nCURRENT CONTEXT: The conversation was previously handled by playbook ID ${lastPlaybookId}. Only continue with it if the user's NEW message is still relevant to that playbook's topic. If the user changes subject, route to the appropriate playbook.\n`
+    : ''
+
   const systemPrompt = `You are the Routing Agent.
 
 Your task is to analyze the user's message WITH CONVERSATION CONTEXT and classify it into one of two categories:
@@ -49,14 +54,14 @@ RULES:
 - Use CONVERSATION HISTORY to understand context (e.g. if user says "oui" or gives an email, check what was asked before)
 - If ANY escalation rule matches the user message, return "type": "escalation" with the matching rule id
 - If NO escalation rule matches, select the MOST relevant playbook and return "type": "scenario" with id
-- If multiple playbooks match, choose the MOST specific
-- If conversation is in progress with a playbook, CONTINUE with that same playbook unless escalation is triggered
+- If multiple playbooks match, choose the MOST specific one for the user's CURRENT message
+- If the user is continuing the SAME topic as the active playbook, keep routing to that playbook
+- If the user changes topic or asks about something different, route to the playbook that best matches the NEW topic — do NOT stick to the previous playbook
 - NEVER return multiple items
 - NEVER return null
 - NEVER omit "id"
-- NEVER output text outside JSON
-- NEVER explain your reasoning
-
+- Return ONLY the JSON object, no text before or after, no markdown formatting
+${activeHint}
 PLAYBOOKS:
 ${playbooksText}
 
@@ -80,19 +85,64 @@ ${escalationRulesText}`
     responseFormat: { type: 'json_object' },
   })
 
-  // Parse the JSON response
-  try {
-    const parsed = JSON.parse(result.content)
-    if (!parsed.type || !parsed.id) {
-      throw new Error('Missing type or id in routing response')
+  // Robust JSON extraction (handles markdown code blocks, preamble text, etc.)
+  const parsed = extractJSON(result.content)
+
+  if (parsed && parsed.type && parsed.id) {
+    // Validate that the returned id actually exists
+    const validIds = [
+      ...playbooks.map(pb => String(pb.id)),
+      ...escalationRules.map(er => String(er.id)),
+    ]
+    const routeId = String(parsed.id)
+
+    if (validIds.includes(routeId)) {
+      console.log(`[Router] Decision: ${parsed.type} → ${routeId}`)
+      return { type: parsed.type, id: routeId }
     }
-    return { type: parsed.type, id: String(parsed.id) }
-  } catch (err) {
-    console.error('Router parse error:', err.message, 'Raw:', result.content)
-    // Fallback: if we have playbooks, default to the first one
-    if (playbooks.length > 0) {
-      return { type: 'scenario', id: String(playbooks[0].id) }
-    }
-    throw new Error('Routing failed: ' + err.message)
+    console.warn(`[Router] LLM returned unknown id: ${routeId}. Valid ids: ${validIds.join(', ')}`)
+  } else {
+    console.warn(`[Router] Failed to extract valid JSON from LLM response. Raw: ${result.content}`)
   }
+
+  // Fallback: prefer last active playbook over arbitrary first
+  if (lastPlaybookId && playbooks.some(pb => String(pb.id) === String(lastPlaybookId))) {
+    console.warn(`[Router] Fallback → continuing with last active playbook ${lastPlaybookId}`)
+    return { type: 'scenario', id: String(lastPlaybookId) }
+  }
+  if (playbooks.length > 0) {
+    console.warn(`[Router] Fallback → first playbook ${playbooks[0].id}`)
+    return { type: 'scenario', id: String(playbooks[0].id) }
+  }
+  throw new Error('Routing failed: no valid playbooks and LLM response unparseable')
+}
+
+/**
+ * Extract a JSON object from LLM output that may contain markdown fences or surrounding text.
+ */
+function extractJSON(raw) {
+  if (!raw || typeof raw !== 'string') return null
+
+  // Try direct parse first
+  try {
+    return JSON.parse(raw.trim())
+  } catch { /* continue */ }
+
+  // Strip markdown code fences (```json ... ``` or ``` ... ```)
+  const fenceMatch = raw.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/)
+  if (fenceMatch) {
+    try {
+      return JSON.parse(fenceMatch[1].trim())
+    } catch { /* continue */ }
+  }
+
+  // Extract first JSON object from text
+  const jsonMatch = raw.match(/\{[\s\S]*?\}/)
+  if (jsonMatch) {
+    try {
+      return JSON.parse(jsonMatch[0])
+    } catch { /* continue */ }
+  }
+
+  return null
 }
