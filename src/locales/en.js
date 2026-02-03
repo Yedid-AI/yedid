@@ -180,6 +180,16 @@ export default {
   'inboxes.connectWhatsApp': 'Connect WhatsApp',
   'inboxes.scanQR': 'Scan the QR code to connect WhatsApp',
   'inboxes.whatsappConnecting': 'Connecting...',
+  'inboxes.widgetSettings': 'Widget Settings',
+  'inboxes.widgetSettingsDesc': 'Chat widget appearance and content',
+  'inboxes.websiteName': 'Website Name',
+  'inboxes.websiteDomain': 'Website Domain',
+  'inboxes.widgetColor': 'Widget Color',
+  'inboxes.avatar': 'Avatar',
+  'inboxes.uploadAvatar': 'Upload Avatar',
+  'inboxes.agentAttribution': 'Agent Attribution',
+  'inboxes.agentAttributionDesc': 'Agents who can handle conversations in this inbox',
+  'inboxes.noAgentsAvailable': 'No agents available',
 
   // sessions
   'nav.sessions': 'Sessions',

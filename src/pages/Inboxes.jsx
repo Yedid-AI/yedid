@@ -31,7 +31,7 @@ export default function Inboxes() {
   const [viewMode, setViewMode] = useState('card')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [channelStep, setChannelStep] = useState(null) // null = chooser, 'web' = web form
-  const [form, setForm] = useState({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' })
+  const [form, setForm] = useState({ name: '', website_url: '', welcome_title: '', welcome_tagline: '', widget_color: '#2383E2' })
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const { t } = useI18n()
@@ -42,7 +42,7 @@ export default function Inboxes() {
 
   const resetDialog = () => {
     setChannelStep(null)
-    setForm({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' })
+    setForm({ name: '', website_url: '', welcome_title: '', welcome_tagline: '', widget_color: '#2383E2' })
     setError('')
   }
 
@@ -163,6 +163,23 @@ export default function Inboxes() {
                   <div className="space-y-2">
                     <Label>{t('inboxes.welcomeTagline')}</Label>
                     <Input value={form.welcome_tagline} onChange={(e) => setForm({ ...form, welcome_tagline: e.target.value })} placeholder={t('inboxes.welcomeTaglinePlaceholder')} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t('inboxes.widgetColor')}</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        value={form.widget_color}
+                        onChange={(e) => setForm({ ...form, widget_color: e.target.value })}
+                        className="w-9 h-9 rounded-md border cursor-pointer p-0.5"
+                      />
+                      <Input
+                        value={form.widget_color}
+                        onChange={(e) => setForm({ ...form, widget_color: e.target.value })}
+                        className="w-[100px] font-mono text-sm"
+                        maxLength={7}
+                      />
+                    </div>
                   </div>
                   <div className="flex gap-2 justify-end">
                     <Button type="button" variant="outline" onClick={() => setChannelStep(null)}>{t('common.back')}</Button>

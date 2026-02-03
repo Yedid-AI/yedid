@@ -97,6 +97,7 @@ export async function createInbox(accountId, options = {}, accessToken = null) {
     website_url: options.websiteUrl || 'https://cardynal.io',
     welcome_title: options.welcomeTitle || 'Bienvenue',
     welcome_tagline: options.welcomeTagline || 'Comment puis-je vous aider ?',
+    ...(options.widgetColor ? { widget_color: options.widgetColor } : {}),
   }
   const inbox = await accountApi(`/api/v1/accounts/${accountId}/inboxes`, 'POST', {
     name: options.name || 'Inbox',
@@ -123,6 +124,31 @@ export async function attachBotToInbox(accountId, inboxId, botId, accessToken = 
     agent_bot: botId,
   }, accessToken)
   console.log(`attachBotToInbox: bot ${botId} -> inbox ${inboxId} on account ${accountId}`)
+}
+
+// Fetch inbox details from Chatwoot (source of truth for widget settings)
+export async function getInbox(accountId, inboxId, accessToken = null) {
+  return accountApi(`/api/v1/accounts/${accountId}/inboxes/${inboxId}`, 'GET', null, accessToken)
+}
+
+// Update inbox settings on Chatwoot (JSON fields)
+export async function updateInbox(accountId, inboxId, updates, accessToken = null) {
+  return accountApi(`/api/v1/accounts/${accountId}/inboxes/${inboxId}`, 'PATCH', updates, accessToken)
+}
+
+// Update inbox avatar on Chatwoot (multipart file upload)
+export async function updateInboxAvatar(accountId, inboxId, avatarBuffer, fileName, contentType, accessToken = null) {
+  const url = getSetting('CHATWOOT_PLATFORM_URL')
+  const token = accessToken || getSetting('CHATWOOT_ADMIN_TOKEN')
+  const formData = new FormData()
+  formData.append('avatar', new Blob([avatarBuffer], { type: contentType }), fileName)
+  const res = await fetch(`${url}/api/v1/accounts/${accountId}/inboxes/${inboxId}`, {
+    method: 'PATCH',
+    headers: { 'api_access_token': token },
+    body: formData,
+  })
+  if (!res.ok) throw new Error(`Chatwoot Avatar (${res.status}): ${await res.text()}`)
+  return res.json()
 }
 
 // Add user as inbox member

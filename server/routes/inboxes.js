@@ -1,6 +1,9 @@
 import { Router } from 'express'
 import { checkRole } from '../middleware.js'
-import { createInbox, attachBotToInbox, addInboxMember } from '../chatwoot.js'
+import { createInbox, getInbox, updateInbox, updateInboxAvatar, attachBotToInbox, addInboxMember, accountApi } from '../chatwoot.js'
+import multer from 'multer'
+
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 import { getSetting } from '../settings.js'
 
 const router = Router()
@@ -71,7 +74,7 @@ router.get('/inboxes/:id', checkRole('admin'), async (req, res) => {
 // POST /api/inboxes
 router.post('/inboxes', checkRole('admin'), async (req, res) => {
   try {
-    const { name, website_url, welcome_title, welcome_tagline } = req.body
+    const { name, website_url, welcome_title, welcome_tagline, widget_color } = req.body
     if (!name) {
       return res.status(400).json({ error: 'Nom requis' })
     }
@@ -91,13 +94,17 @@ router.post('/inboxes', checkRole('admin'), async (req, res) => {
     const chatUserId = accounts[0].chatwoot_user_id
     const userToken = accounts[0].access_token
 
-    // Create inbox on Chatwoot (using user's own token)
-    const inbox = await createInbox(accountId, {
+    // Build channel options
+    const channelOpts = {
       name,
       websiteUrl: website_url || 'https://cardynal.io',
       welcomeTitle: welcome_title || `Bienvenue chez ${name}`,
       welcomeTagline: welcome_tagline || 'Comment puis-je vous aider ?',
-    }, userToken)
+    }
+    if (widget_color) channelOpts.widgetColor = widget_color
+
+    // Create inbox on Chatwoot (using user's own token)
+    const inbox = await createInbox(accountId, channelOpts, userToken)
 
     // Wait briefly for propagation
     await new Promise((r) => setTimeout(r, 2000))
@@ -238,6 +245,245 @@ router.get('/chatwoot-sso', checkRole('admin'), async (req, res) => {
     res.json({ url: ssoUrl })
   } catch (err) {
     console.error('[chatwoot-sso]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// GET /api/inboxes/:id/chatwoot — fetch widget settings from Chatwoot (source of truth)
+router.get('/inboxes/:id/chatwoot', checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { data: inbox } = await req.supabase
+      .from('inboxes')
+      .select('id, inbox_id, chatwoot_account_id')
+      .eq('id', id)
+      .eq('user_id', req.user.user_id)
+      .single()
+
+    if (!inbox) return res.status(404).json({ error: 'Inbox introuvable' })
+
+    const { data: accounts } = await req.supabase
+      .from('chatwoot_accounts')
+      .select('access_token')
+      .eq('user_id', req.user.user_id)
+      .limit(1)
+    const userToken = accounts?.[0]?.access_token || null
+
+    const chatwootInbox = await getInbox(inbox.chatwoot_account_id, inbox.inbox_id, userToken)
+    res.json({
+      name: chatwootInbox.name,
+      avatar_url: chatwootInbox.avatar_url || null,
+      widget_color: chatwootInbox.widget_color || null,
+      website_url: chatwootInbox.web_widget_script?.website_url || chatwootInbox.channel?.website_url || null,
+      welcome_title: chatwootInbox.web_widget_script?.welcome_title || chatwootInbox.channel?.welcome_title || null,
+      welcome_tagline: chatwootInbox.web_widget_script?.welcome_tagline || chatwootInbox.channel?.welcome_tagline || null,
+    })
+  } catch (err) {
+    console.error('[inboxes/chatwoot]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// PUT /api/inboxes/:id — update inbox settings on Chatwoot + local DB
+router.put('/inboxes/:id', checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { name, website_url, welcome_title, welcome_tagline, widget_color } = req.body
+
+    const { data: inbox } = await req.supabase
+      .from('inboxes')
+      .select('id, inbox_id, chatwoot_account_id')
+      .eq('id', id)
+      .eq('user_id', req.user.user_id)
+      .single()
+
+    if (!inbox) return res.status(404).json({ error: 'Inbox introuvable' })
+
+    const { data: accounts } = await req.supabase
+      .from('chatwoot_accounts')
+      .select('access_token')
+      .eq('user_id', req.user.user_id)
+      .limit(1)
+    const userToken = accounts?.[0]?.access_token || null
+
+    // Build Chatwoot update payload
+    const updates = {}
+    if (name !== undefined) updates.name = name
+    const channel = {}
+    if (website_url !== undefined) channel.website_url = website_url
+    if (welcome_title !== undefined) channel.welcome_title = welcome_title
+    if (welcome_tagline !== undefined) channel.welcome_tagline = welcome_tagline
+    if (widget_color !== undefined) channel.widget_color = widget_color
+    if (Object.keys(channel).length > 0) updates.channel = channel
+
+    await updateInbox(inbox.chatwoot_account_id, inbox.inbox_id, updates, userToken)
+
+    // Update name in local DB if changed
+    if (name !== undefined) {
+      await req.supabase
+        .from('inboxes')
+        .update({ name, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .eq('user_id', req.user.user_id)
+    }
+
+    const { data: updated } = await req.supabase
+      .from('inboxes')
+      .select('*, agent_bots(id, name)')
+      .eq('id', id)
+      .single()
+
+    res.json({ inbox: updated })
+  } catch (err) {
+    console.error('[inboxes/update]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// POST /api/inboxes/:id/avatar — upload inbox avatar to Chatwoot
+router.post('/inboxes/:id/avatar', checkRole('admin'), upload.single('avatar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!req.file) return res.status(400).json({ error: 'Fichier requis' })
+
+    const { data: inbox } = await req.supabase
+      .from('inboxes')
+      .select('id, inbox_id, chatwoot_account_id')
+      .eq('id', id)
+      .eq('user_id', req.user.user_id)
+      .single()
+
+    if (!inbox) return res.status(404).json({ error: 'Inbox introuvable' })
+
+    const { data: accounts } = await req.supabase
+      .from('chatwoot_accounts')
+      .select('access_token')
+      .eq('user_id', req.user.user_id)
+      .limit(1)
+    const userToken = accounts?.[0]?.access_token || null
+
+    const result = await updateInboxAvatar(
+      inbox.chatwoot_account_id,
+      inbox.inbox_id,
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype,
+      userToken
+    )
+
+    res.json({ avatar_url: result.avatar_url || null })
+  } catch (err) {
+    console.error('[inboxes/avatar]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// GET /api/chatwoot-agents — list agents in user's Chatwoot account
+router.get('/chatwoot-agents', checkRole('admin'), async (req, res) => {
+  try {
+    const { data: accounts } = await req.supabase
+      .from('chatwoot_accounts')
+      .select('account_id, access_token')
+      .eq('user_id', req.user.user_id)
+      .limit(1)
+
+    if (!accounts?.length) {
+      return res.status(400).json({ error: 'Compte Chatwoot introuvable' })
+    }
+
+    const { account_id, access_token } = accounts[0]
+    const result = await accountApi(`/api/v1/accounts/${account_id}/agents`, 'GET', null, access_token)
+
+    const agents = (result || []).map((a) => ({
+      id: a.id,
+      name: a.name,
+      email: a.email,
+      avatar_url: a.thumbnail || a.avatar_url || null,
+      availability_status: a.availability_status || null,
+    }))
+
+    res.json({ agents })
+  } catch (err) {
+    console.error('[chatwoot-agents]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// GET /api/inboxes/:id/members — list inbox members from Chatwoot
+router.get('/inboxes/:id/members', checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { data: inbox } = await req.supabase
+      .from('inboxes')
+      .select('id, inbox_id, chatwoot_account_id')
+      .eq('id', id)
+      .eq('user_id', req.user.user_id)
+      .single()
+
+    if (!inbox) return res.status(404).json({ error: 'Inbox introuvable' })
+
+    const { data: accounts } = await req.supabase
+      .from('chatwoot_accounts')
+      .select('access_token')
+      .eq('user_id', req.user.user_id)
+      .limit(1)
+    const userToken = accounts?.[0]?.access_token || null
+
+    const result = await accountApi(
+      `/api/v1/accounts/${inbox.chatwoot_account_id}/inbox_members/${inbox.inbox_id}`,
+      'GET', null, userToken
+    )
+
+    const members = (result?.payload || result || []).map((m) => ({
+      id: m.id,
+      name: m.name,
+      email: m.email,
+      avatar_url: m.thumbnail || m.avatar_url || null,
+    }))
+
+    res.json({ members })
+  } catch (err) {
+    console.error('[inboxes/members]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// PUT /api/inboxes/:id/members — update inbox members on Chatwoot
+router.put('/inboxes/:id/members', checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { user_ids } = req.body
+
+    if (!Array.isArray(user_ids)) {
+      return res.status(400).json({ error: 'user_ids requis (tableau)' })
+    }
+
+    const { data: inbox } = await req.supabase
+      .from('inboxes')
+      .select('id, inbox_id, chatwoot_account_id')
+      .eq('id', id)
+      .eq('user_id', req.user.user_id)
+      .single()
+
+    if (!inbox) return res.status(404).json({ error: 'Inbox introuvable' })
+
+    const { data: accounts } = await req.supabase
+      .from('chatwoot_accounts')
+      .select('access_token')
+      .eq('user_id', req.user.user_id)
+      .limit(1)
+    const userToken = accounts?.[0]?.access_token || null
+
+    await accountApi(
+      `/api/v1/accounts/${inbox.chatwoot_account_id}/inbox_members`,
+      'POST',
+      { inbox_id: inbox.inbox_id, user_ids },
+      userToken
+    )
+
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[inboxes/members]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
   }
 })

@@ -345,6 +345,67 @@ export function useConnectWhatsApp() {
   })
 }
 
+export function useInboxChatwoot(id) {
+  return useQuery({
+    queryKey: queryKeys.inboxChatwoot(id),
+    queryFn: () => api.get(`/inboxes/${id}/chatwoot`),
+    enabled: !!id,
+  })
+}
+
+export function useUpdateInbox() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }) => api.put(`/inboxes/${id}`, body),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.inboxes })
+      qc.invalidateQueries({ queryKey: queryKeys.inbox(id) })
+      qc.invalidateQueries({ queryKey: queryKeys.inboxChatwoot(id) })
+    },
+  })
+}
+
+export function useUploadInboxAvatar() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, file }) => {
+      const formData = new FormData()
+      formData.append('avatar', file)
+      return api.upload(`/inboxes/${id}/avatar`, formData)
+    },
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.inboxChatwoot(id) })
+    },
+  })
+}
+
+export function useChatwootAgents() {
+  return useQuery({
+    queryKey: queryKeys.chatwootAgents,
+    queryFn: () => api.get('/chatwoot-agents'),
+    select: (data) => data.agents,
+  })
+}
+
+export function useInboxMembers(id) {
+  return useQuery({
+    queryKey: queryKeys.inboxMembers(id),
+    queryFn: () => api.get(`/inboxes/${id}/members`),
+    select: (data) => data.members,
+    enabled: !!id,
+  })
+}
+
+export function useUpdateInboxMembers() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, user_ids }) => api.put(`/inboxes/${id}/members`, { user_ids }),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.inboxMembers(id) })
+    },
+  })
+}
+
 export function useAssignAgent() {
   const qc = useQueryClient()
   return useMutation({

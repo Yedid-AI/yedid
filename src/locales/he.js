@@ -180,6 +180,16 @@ export default {
   'inboxes.connectWhatsApp': 'חבר WhatsApp',
   'inboxes.scanQR': 'סרוק את קוד ה-QR כדי לחבר WhatsApp',
   'inboxes.whatsappConnecting': '...מתחבר',
+  'inboxes.widgetSettings': 'הגדרות ווידג\'ט',
+  'inboxes.widgetSettingsDesc': 'מראה ותוכן ווידג\'ט הצ\'אט',
+  'inboxes.websiteName': 'שם האתר',
+  'inboxes.websiteDomain': 'דומיין האתר',
+  'inboxes.widgetColor': 'צבע הווידג\'ט',
+  'inboxes.avatar': 'אווטאר',
+  'inboxes.uploadAvatar': 'העלה אווטאר',
+  'inboxes.agentAttribution': 'שיוך סוכנים',
+  'inboxes.agentAttributionDesc': 'סוכנים שיכולים לטפל בשיחות בתיבה זו',
+  'inboxes.noAgentsAvailable': 'אין סוכנים זמינים',
 
   // sessions
   'nav.sessions': 'סשנים',

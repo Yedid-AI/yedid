@@ -1,16 +1,18 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useInbox, useAgents, useSessions, useAssignAgent, useDeleteInbox } from '../hooks/queries'
+import { useInbox, useAgents, useSessions, useAssignAgent, useDeleteInbox, useInboxChatwoot, useUpdateInbox, useUploadInboxAvatar, useChatwootAgents, useInboxMembers, useUpdateInboxMembers } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Info, MessageSquare, Trash2 } from 'lucide-react'
+import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon } from 'lucide-react'
 
 export default function InboxDetail() {
   const { id } = useParams()
@@ -23,6 +25,52 @@ export default function InboxDetail() {
   const { data: sessionData, isLoading: sessionsLoading } = useSessions({ inbox_id: id })
   const assignAgent = useAssignAgent()
   const deleteInbox = useDeleteInbox()
+
+  // Chatwoot widget settings (source of truth)
+  const isWebChannel = inbox?.channel_type !== 'whatsapp'
+  const { data: chatwootData, isLoading: chatwootLoading } = useInboxChatwoot(isWebChannel ? id : null)
+  const updateInbox = useUpdateInbox()
+  const uploadAvatar = useUploadInboxAvatar()
+
+  // Agent attribution
+  const { data: chatwootAgents = [] } = useChatwootAgents()
+  const { data: inboxMembers = [] } = useInboxMembers(id)
+  const updateMembers = useUpdateInboxMembers()
+
+  // Widget settings form state
+  const [widgetForm, setWidgetForm] = useState({
+    name: '',
+    website_url: '',
+    welcome_title: '',
+    welcome_tagline: '',
+    widget_color: '#2383E2',
+  })
+  const [widgetSaved, setWidgetSaved] = useState(false)
+  const avatarInputRef = useRef(null)
+
+  // Members state
+  const [selectedMembers, setSelectedMembers] = useState([])
+  const [membersSaved, setMembersSaved] = useState(false)
+
+  // Initialize widget form from Chatwoot data
+  useEffect(() => {
+    if (chatwootData) {
+      setWidgetForm({
+        name: chatwootData.name || '',
+        website_url: chatwootData.website_url || '',
+        welcome_title: chatwootData.welcome_title || '',
+        welcome_tagline: chatwootData.welcome_tagline || '',
+        widget_color: chatwootData.widget_color || '#2383E2',
+      })
+    }
+  }, [chatwootData])
+
+  // Initialize members from inbox members data
+  useEffect(() => {
+    if (inboxMembers.length > 0) {
+      setSelectedMembers(inboxMembers.map((m) => m.id))
+    }
+  }, [inboxMembers])
 
   const sessions = sessionData?.sessions || []
   const isLoading = inboxLoading || agentsLoading || sessionsLoading
@@ -44,15 +92,49 @@ export default function InboxDetail() {
     }
   }
 
+  const handleSaveWidget = async (e) => {
+    e.preventDefault()
+    setError('')
+    setWidgetSaved(false)
+    try {
+      await updateInbox.mutateAsync({ id, body: widgetForm })
+      setWidgetSaved(true)
+      setTimeout(() => setWidgetSaved(false), 2000)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setError('')
+    try {
+      await uploadAvatar.mutateAsync({ id, file })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleSaveMembers = async () => {
+    setError('')
+    setMembersSaved(false)
+    try {
+      await updateMembers.mutateAsync({ id, user_ids: selectedMembers })
+      setMembersSaved(true)
+      setTimeout(() => setMembersSaved(false), 2000)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const toggleMember = (agentId) => {
+    setSelectedMembers((prev) =>
+      prev.includes(agentId) ? prev.filter((id) => id !== agentId) : [...prev, agentId]
+    )
+  }
+
   if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
-  if (error) return (
-    <div>
-      <Button variant="ghost" onClick={() => navigate('/inboxes')} className="mb-4">
-        <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
-      </Button>
-      <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
-    </div>
-  )
 
   return (
     <div>
@@ -71,6 +153,10 @@ export default function InboxDetail() {
         )}
       </div>
 
+      {error && (
+        <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
+      )}
+
       <Tabs defaultValue="info">
         <TabsList>
           <TabsTrigger value="info"><Info className="me-1.5 h-4 w-4" />{t('inboxes.info')}</TabsTrigger>
@@ -78,6 +164,197 @@ export default function InboxDetail() {
         </TabsList>
 
         <TabsContent value="info" className="mt-6 space-y-6">
+          {/* Widget Settings (web channel only) */}
+          {isWebChannel && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Palette size={16} />
+                  {t('inboxes.widgetSettings')}
+                </CardTitle>
+                <CardDescription>{t('inboxes.widgetSettingsDesc')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {chatwootLoading ? (
+                  <div className="text-sm text-muted-foreground">{t('common.loading')}</div>
+                ) : (
+                  <form onSubmit={handleSaveWidget} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>{t('inboxes.websiteName')}</Label>
+                        <Input
+                          value={widgetForm.name}
+                          onChange={(e) => setWidgetForm({ ...widgetForm, name: e.target.value })}
+                          placeholder={t('inboxes.namePlaceholder')}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{t('inboxes.websiteDomain')}</Label>
+                        <Input
+                          value={widgetForm.website_url}
+                          onChange={(e) => setWidgetForm({ ...widgetForm, website_url: e.target.value })}
+                          placeholder="https://monsite.com"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>{t('inboxes.welcomeTitle')}</Label>
+                        <Input
+                          value={widgetForm.welcome_title}
+                          onChange={(e) => setWidgetForm({ ...widgetForm, welcome_title: e.target.value })}
+                          placeholder={t('inboxes.welcomeTitlePlaceholder')}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>{t('inboxes.welcomeTagline')}</Label>
+                        <Input
+                          value={widgetForm.welcome_tagline}
+                          onChange={(e) => setWidgetForm({ ...widgetForm, welcome_tagline: e.target.value })}
+                          placeholder={t('inboxes.welcomeTaglinePlaceholder')}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>{t('inboxes.widgetColor')}</Label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={widgetForm.widget_color}
+                          onChange={(e) => setWidgetForm({ ...widgetForm, widget_color: e.target.value })}
+                          className="w-10 h-10 rounded-md border cursor-pointer p-0.5"
+                        />
+                        <Input
+                          value={widgetForm.widget_color}
+                          onChange={(e) => setWidgetForm({ ...widgetForm, widget_color: e.target.value })}
+                          className="w-[120px] font-mono text-sm"
+                          maxLength={7}
+                        />
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button type="submit" disabled={updateInbox.isPending}>
+                        {updateInbox.isPending ? t('common.saving') : t('common.save')}
+                      </Button>
+                      {widgetSaved && (
+                        <span className="text-sm text-emerald-600">{t('common.saved')}</span>
+                      )}
+                    </div>
+                  </form>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Avatar (web channel only) */}
+          {isWebChannel && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <ImageIcon size={16} />
+                  {t('inboxes.avatar')}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-4">
+                  {chatwootData?.avatar_url ? (
+                    <img
+                      src={chatwootData.avatar_url}
+                      alt="Avatar"
+                      className="w-16 h-16 rounded-full object-cover border"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center border">
+                      <ImageIcon size={24} className="text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      onChange={handleAvatarUpload}
+                      className="hidden"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => avatarInputRef.current?.click()}
+                      disabled={uploadAvatar.isPending}
+                    >
+                      <Upload size={14} />
+                      {uploadAvatar.isPending ? t('common.saving') : t('inboxes.uploadAvatar')}
+                    </Button>
+                    <p className="text-xs text-muted-foreground">PNG, JPG — max 5 MB</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Agent Attribution (inbox members) */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users size={16} />
+                {t('inboxes.agentAttribution')}
+              </CardTitle>
+              <CardDescription>{t('inboxes.agentAttributionDesc')}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {chatwootAgents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('inboxes.noAgentsAvailable')}</p>
+              ) : (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    {chatwootAgents.map((agent) => (
+                      <label
+                        key={agent.id}
+                        className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer"
+                      >
+                        <Checkbox
+                          checked={selectedMembers.includes(agent.id)}
+                          onCheckedChange={() => toggleMember(agent.id)}
+                        />
+                        {agent.avatar_url ? (
+                          <img src={agent.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary">
+                            {(agent.name || agent.email || '?')[0].toUpperCase()}
+                          </div>
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{agent.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{agent.email}</p>
+                        </div>
+                        {agent.availability_status && (
+                          <span className={`ms-auto text-xs ${agent.availability_status === 'online' ? 'text-emerald-500' : 'text-muted-foreground'}`}>
+                            {agent.availability_status}
+                          </span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      onClick={handleSaveMembers}
+                      disabled={updateMembers.isPending}
+                    >
+                      {updateMembers.isPending ? t('common.saving') : t('common.save')}
+                    </Button>
+                    {membersSaved && (
+                      <span className="text-sm text-emerald-600">{t('common.saved')}</span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Assigned AI Agent Bot */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t('inboxes.assignedAgent')}</CardTitle>
@@ -103,6 +380,7 @@ export default function InboxDetail() {
             </CardContent>
           </Card>
 
+          {/* Technical Details */}
           <Card>
             <CardHeader>
               <CardTitle className="text-base">{t('common.details')}</CardTitle>
@@ -125,6 +403,7 @@ export default function InboxDetail() {
             </CardContent>
           </Card>
 
+          {/* Widget Embed */}
           {inbox.website_token && (
             <Card>
               <CardHeader>
@@ -152,6 +431,8 @@ export default function InboxDetail() {
               </CardContent>
             </Card>
           )}
+
+          {/* Delete */}
           <Card className="border-destructive/30">
             <CardHeader>
               <CardTitle className="text-base text-destructive">{t('inboxes.deleteTitle')}</CardTitle>

@@ -18,6 +18,9 @@ export const queryKeys = {
 
   inboxes: ['inboxes'],
   inbox: (id) => ['inboxes', id],
+  inboxChatwoot: (id) => ['inboxes', id, 'chatwoot'],
+  inboxMembers: (id) => ['inboxes', id, 'members'],
+  chatwootAgents: ['chatwoot-agents'],
 
   sessions: (filters) => ['sessions', filters || {}],
   session: (id) => ['sessions', 'detail', id],
