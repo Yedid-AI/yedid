@@ -114,6 +114,25 @@ export async function registerWebhook(url) {
     console.log('[unipile] Could not list webhooks:', e.message)
   }
 
-  await unipileApi('/api/v1/webhooks', 'POST', { url })
+  await unipileApi('/api/v1/webhooks', 'POST', {
+    request_url: url,
+    events: ['message_received'],
+    source: 'messaging',
+    name: 'Cardynal App',
+    data: [
+      { key: 'account_id', name: 'account_id' },
+      { key: 'account_type', name: 'account_type' },
+      { key: 'sender', name: 'sender' },
+      { key: 'message', name: 'message' },
+      { key: 'message_id', name: 'message_id' },
+      { key: 'timestamp', name: 'timestamp' },
+      { key: 'attachments', name: 'attachments' },
+      { key: 'is_sender', name: 'is_sender' },
+      { key: 'quoted', name: 'quoted' },
+      { key: 'chat_id', name: 'chat_id' },
+      { key: 'attendees', name: 'attendees' },
+      { key: 'is_group', name: 'is_group' },
+    ],
+  })
   console.log('[unipile] Webhook registered:', url)
 }
