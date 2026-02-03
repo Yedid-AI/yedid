@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useInboxes, useCreateInbox } from '../hooks/queries'
+import { useInboxes, useCreateInbox, useConnectWhatsApp } from '../hooks/queries'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 
-import { LayoutGrid, List, Globe, MessageCircle, Instagram, Facebook, Settings, ExternalLink, Bot, CircleDot, CheckCircle } from 'lucide-react'
+import { LayoutGrid, List, Globe, MessageCircle, Instagram, Facebook, Settings, ExternalLink, Bot, CircleDot, CheckCircle, Loader2 } from 'lucide-react'
 
 const CHANNEL_ICONS = {
   web: Globe,
@@ -30,6 +30,7 @@ const CHANNEL_LABELS = {
 export default function Inboxes() {
   const [viewMode, setViewMode] = useState('card')
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [channelStep, setChannelStep] = useState(null) // null = chooser, 'web' = web form
   const [form, setForm] = useState({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' })
   const [error, setError] = useState('')
   const navigate = useNavigate()
@@ -37,6 +38,13 @@ export default function Inboxes() {
 
   const { data: inboxes = [], isLoading } = useInboxes()
   const createInbox = useCreateInbox()
+  const connectWhatsApp = useConnectWhatsApp()
+
+  const resetDialog = () => {
+    setChannelStep(null)
+    setForm({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' })
+    setError('')
+  }
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -44,7 +52,21 @@ export default function Inboxes() {
     try {
       await createInbox.mutateAsync(form)
       setDialogOpen(false)
-      setForm({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' })
+      resetDialog()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleConnectWhatsApp = async () => {
+    setError('')
+    try {
+      const data = await connectWhatsApp.mutateAsync()
+      if (data.url) {
+        window.open(data.url, '_blank')
+        setDialogOpen(false)
+        resetDialog()
+      }
     } catch (err) {
       setError(err.message)
     }
@@ -82,7 +104,7 @@ export default function Inboxes() {
               <List size={14} />
             </button>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setForm({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' }) }}>
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetDialog() }}>
             <DialogTrigger asChild>
               <Button>{t('inboxes.newInbox')}</Button>
             </DialogTrigger>
@@ -90,28 +112,64 @@ export default function Inboxes() {
               <DialogHeader>
                 <DialogTitle>{t('inboxes.dialogTitle')}</DialogTitle>
               </DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>{t('common.name')}</Label>
-                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('inboxes.namePlaceholder')} required />
+
+              {error && (
+                <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
+              )}
+
+              {!channelStep ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground">{t('inboxes.chooseChannel')}</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
+                      onClick={() => setChannelStep('web')}
+                    >
+                      <Globe size={24} className="text-primary" />
+                      <span className="text-sm font-medium">{t('inboxes.channelWeb')}</span>
+                      <span className="text-[11px] text-muted-foreground text-center">{t('inboxes.webDescription')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-emerald-500 hover:bg-emerald-500/5 transition-colors"
+                      onClick={handleConnectWhatsApp}
+                      disabled={connectWhatsApp.isPending}
+                    >
+                      {connectWhatsApp.isPending ? (
+                        <Loader2 size={24} className="text-emerald-500 animate-spin" />
+                      ) : (
+                        <MessageCircle size={24} className="text-emerald-500" />
+                      )}
+                      <span className="text-sm font-medium">WhatsApp</span>
+                      <span className="text-[11px] text-muted-foreground text-center">{t('inboxes.whatsappDescription')}</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>{t('inboxes.websiteUrl')}</Label>
-                  <Input value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder={t('inboxes.websiteUrlPlaceholder')} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('inboxes.welcomeTitle')}</Label>
-                  <Input value={form.welcome_title} onChange={(e) => setForm({ ...form, welcome_title: e.target.value })} placeholder={t('inboxes.welcomeTitlePlaceholder')} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('inboxes.welcomeTagline')}</Label>
-                  <Input value={form.welcome_tagline} onChange={(e) => setForm({ ...form, welcome_tagline: e.target.value })} placeholder={t('inboxes.welcomeTaglinePlaceholder')} />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                  <Button type="submit" disabled={createInbox.isPending}>{createInbox.isPending ? t('common.saving') : t('common.create')}</Button>
-                </div>
-              </form>
+              ) : (
+                <form onSubmit={handleCreate} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label>{t('common.name')}</Label>
+                    <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('inboxes.namePlaceholder')} required />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t('inboxes.websiteUrl')}</Label>
+                    <Input value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder={t('inboxes.websiteUrlPlaceholder')} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t('inboxes.welcomeTitle')}</Label>
+                    <Input value={form.welcome_title} onChange={(e) => setForm({ ...form, welcome_title: e.target.value })} placeholder={t('inboxes.welcomeTitlePlaceholder')} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t('inboxes.welcomeTagline')}</Label>
+                    <Input value={form.welcome_tagline} onChange={(e) => setForm({ ...form, welcome_tagline: e.target.value })} placeholder={t('inboxes.welcomeTaglinePlaceholder')} />
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button type="button" variant="outline" onClick={() => setChannelStep(null)}>{t('common.back')}</Button>
+                    <Button type="submit" disabled={createInbox.isPending}>{createInbox.isPending ? t('common.saving') : t('common.create')}</Button>
+                  </div>
+                </form>
+              )}
             </DialogContent>
           </Dialog>
         </div>

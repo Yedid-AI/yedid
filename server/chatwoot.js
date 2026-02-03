@@ -90,18 +90,19 @@ export async function provisionAccount(user, supabase) {
   return { accountId, chatUserId, accessToken, pubsubToken }
 }
 
-// Step 5: Create web_widget inbox via Account API
+// Step 5: Create inbox via Account API (web_widget or api channel)
 export async function createInbox(accountId, options = {}, accessToken = null) {
+  const channel = options.channel || {
+    type: 'web_widget',
+    website_url: options.websiteUrl || 'https://cardynal.io',
+    welcome_title: options.welcomeTitle || 'Bienvenue',
+    welcome_tagline: options.welcomeTagline || 'Comment puis-je vous aider ?',
+  }
   const inbox = await accountApi(`/api/v1/accounts/${accountId}/inboxes`, 'POST', {
     name: options.name || 'Inbox',
-    channel: {
-      type: 'web_widget',
-      website_url: options.websiteUrl || 'https://cardynal.io',
-      welcome_title: options.welcomeTitle || 'Bienvenue',
-      welcome_tagline: options.welcomeTagline || 'Comment puis-je vous aider ?',
-    },
+    channel,
   }, accessToken)
-  console.log(`createInbox: inbox ${inbox.id} on account ${accountId}`)
+  console.log(`createInbox: inbox ${inbox.id} (${channel.type}) on account ${accountId}`)
   return inbox
 }
 

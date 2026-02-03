@@ -337,6 +337,14 @@ export function useDeleteInbox() {
   })
 }
 
+export function useConnectWhatsApp() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post('/whatsapp/connect'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.inboxes }),
+  })
+}
+
 export function useAssignAgent() {
   const qc = useQueryClient()
   return useMutation({

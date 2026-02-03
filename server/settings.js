@@ -11,6 +11,9 @@ const CONFIGURABLE_KEYS = [
   'CHATWOOT_ADMIN_TOKEN',
   'APP_BASE_URL',
   'AGENT_API_KEY',
+  // Unipile (WhatsApp)
+  'UNIPILE_API_KEY',
+  'UNIPILE_DSN_URL',
   // Closing & Billing
   'CLOSING_ENABLED',
   'CLOSING_INTERVAL_MINUTES',

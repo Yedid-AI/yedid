@@ -40,6 +40,15 @@ const GROUPS = [
     ],
   },
   {
+    title: 'Unipile',
+    titleKey: 'environment.unipileTitle',
+    descriptionKey: 'environment.unipileDesc',
+    keys: [
+      { key: 'UNIPILE_API_KEY', label: 'API Key', placeholderKey: 'environment.unipileApiKeyPlaceholder' },
+      { key: 'UNIPILE_DSN_URL', label: 'DSN URL', placeholder: 'https://api14.unipile.com:14433' },
+    ],
+  },
+  {
     title: 'Application',
     titleKey: 'environment.appTitle',
     descriptionKey: 'environment.appDesc',

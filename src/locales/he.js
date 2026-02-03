@@ -174,6 +174,12 @@ export default {
   'inboxes.sessionCount': 'סשנים',
   'inboxes.resolvedCount': 'נפתרו ע״י AI',
   'inboxes.openInbox': 'פתח תיבה',
+  'inboxes.chooseChannel': 'בחר סוג ערוץ',
+  'inboxes.webDescription': 'ווידג\'ט צ\'אט לאתר שלך',
+  'inboxes.whatsappDescription': 'חבר מספר WhatsApp',
+  'inboxes.connectWhatsApp': 'חבר WhatsApp',
+  'inboxes.scanQR': 'סרוק את קוד ה-QR כדי לחבר WhatsApp',
+  'inboxes.whatsappConnecting': '...מתחבר',
 
   // sessions
   'nav.sessions': 'סשנים',
@@ -275,6 +281,9 @@ export default {
   'environment.agentApiTitle': 'Agent API',
   'environment.agentApiDesc': 'אימות עבור קריאות סוכן',
   'environment.agentApiKeyPlaceholder': '...מפתח סודי',
+  'environment.unipileTitle': 'Unipile',
+  'environment.unipileDesc': 'אינטגרציית WhatsApp דרך Unipile',
+  'environment.unipileApiKeyPlaceholder': '...מפתח API של Unipile',
 
   // closing & billing
   'nav.closing': 'סגירה וחיוב',

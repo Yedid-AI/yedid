@@ -16,6 +16,7 @@ import playbooksLibraryRoutes from './routes/playbooks-library.js'
 import toolsLibraryRoutes from './routes/tools-library.js'
 import escalationLibraryRoutes from './routes/escalation-library.js'
 import agentRoutes from './routes/agent.js'
+import whatsappRoutes from './routes/whatsapp.js'
 import settingsRoutes from './routes/settings.js'
 import agentBotsRoutes from './routes/agent-bots.js'
 import inboxesRoutes from './routes/inboxes.js'
@@ -92,6 +93,7 @@ app.use('/api/webhook', webhookLimiter)
 // API routes
 app.use('/api', authRoutes)
 app.use('/api', agentRoutes)  // API key auth routes — must be before checkAuth routes
+app.use('/api', whatsappRoutes)  // Mixed auth — webhooks are public, /whatsapp/connect has its own checkAuth
 app.use('/api', checkAuth, sourcesRoutes)
 app.use('/api', checkAuth, playbooksLibraryRoutes)
 app.use('/api', checkAuth, toolsLibraryRoutes)

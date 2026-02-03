@@ -38,7 +38,7 @@ router.get('/inboxes', checkRole('admin'), async (req, res) => {
       ...i,
       session_count: sessionCountMap[i.inbox_id] || 0,
       resolved_count: resolvedCountMap[i.inbox_id] || 0,
-      channel_type: 'web',
+      channel_type: i.channel_type || 'web',
     }))
 
     res.json({ inboxes })

@@ -174,6 +174,12 @@ export default {
   'inboxes.sessionCount': 'Sessions',
   'inboxes.resolvedCount': 'AI Resolved',
   'inboxes.openInbox': 'Open inbox',
+  'inboxes.chooseChannel': 'Choose the channel type',
+  'inboxes.webDescription': 'Chat widget for your website',
+  'inboxes.whatsappDescription': 'Connect a WhatsApp number',
+  'inboxes.connectWhatsApp': 'Connect WhatsApp',
+  'inboxes.scanQR': 'Scan the QR code to connect WhatsApp',
+  'inboxes.whatsappConnecting': 'Connecting...',
 
   // sessions
   'nav.sessions': 'Sessions',
@@ -275,6 +281,9 @@ export default {
   'environment.agentApiTitle': 'Agent API',
   'environment.agentApiDesc': 'Authentication for agent calls',
   'environment.agentApiKeyPlaceholder': 'Secret key...',
+  'environment.unipileTitle': 'Unipile',
+  'environment.unipileDesc': 'WhatsApp integration via Unipile',
+  'environment.unipileApiKeyPlaceholder': 'Unipile API key...',
 
   // closing & billing
   'nav.closing': 'Closing & Billing',
