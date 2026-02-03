@@ -45,3 +45,12 @@ export async function assignConversation(accountId, conversationId, assigneeId, 
 export async function sendPrivateNote(accountId, conversationId, content, botToken) {
   return sendMessage(accountId, conversationId, content, botToken, { private: true })
 }
+
+/**
+ * Set conversation status (pending, open, resolved, snoozed).
+ * Use "pending" to keep the widget open after bot response.
+ */
+export async function setConversationStatus(accountId, conversationId, status, botToken) {
+  const path = `/api/v1/accounts/${accountId}/conversations/${conversationId}/toggle_status`
+  return withRetry(() => accountApi(path, 'POST', { status }, botToken), 'setConversationStatus')
+}
