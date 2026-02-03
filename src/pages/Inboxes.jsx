@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useInboxes, useAgents, useCreateInbox, useDeleteInbox, useAssignAgent } from '../hooks/queries'
+import { useInboxes, useCreateInbox } from '../hooks/queries'
+import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -9,23 +10,33 @@ import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+
+import { LayoutGrid, List, Globe, MessageCircle, Instagram, Facebook, Settings, ExternalLink, Bot, CircleDot, CheckCircle } from 'lucide-react'
+
+const CHANNEL_ICONS = {
+  web: Globe,
+  whatsapp: MessageCircle,
+  instagram: Instagram,
+  meta: Facebook,
+}
+
+const CHANNEL_LABELS = {
+  web: 'inboxes.channelWeb',
+  whatsapp: 'inboxes.channelWhatsapp',
+  instagram: 'inboxes.channelInstagram',
+  meta: 'inboxes.channelMeta',
+}
 
 export default function Inboxes() {
+  const [viewMode, setViewMode] = useState('card')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' })
   const [error, setError] = useState('')
   const navigate = useNavigate()
-  const { t, dateLocale } = useI18n()
+  const { t } = useI18n()
 
-  const { data: inboxes = [], isLoading: inboxesLoading } = useInboxes()
-  const { data: agents = [], isLoading: agentsLoading } = useAgents()
+  const { data: inboxes = [], isLoading } = useInboxes()
   const createInbox = useCreateInbox()
-  const deleteInbox = useDeleteInbox()
-  const assignAgent = useAssignAgent()
-
-  const isLoading = inboxesLoading || agentsLoading
 
   const handleCreate = async (e) => {
     e.preventDefault()
@@ -39,23 +50,21 @@ export default function Inboxes() {
     }
   }
 
-  const handleAssignAgent = async (inboxId, agentBotId) => {
+  const handleOpenChatwoot = async () => {
     try {
-      await assignAgent.mutateAsync({ inboxId, agentBotId })
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  const handleDelete = async (id) => {
-    try {
-      await deleteInbox.mutateAsync(id)
+      const data = await api.get('/chatwoot-sso')
+      if (data.url) window.open(data.url, '_blank')
     } catch (err) {
       setError(err.message)
     }
   }
 
   if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
+
+  const channelIcon = (type) => {
+    const Icon = CHANNEL_ICONS[type] || Globe
+    return <Icon size={16} />
+  }
 
   return (
     <div>
@@ -64,104 +73,159 @@ export default function Inboxes() {
           <h1 className="text-2xl font-semibold tracking-tight">{t('inboxes.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('inboxes.subtitle')}</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setForm({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' }) }}>
-          <DialogTrigger asChild>
-            <Button>{t('inboxes.newInbox')}</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>{t('inboxes.dialogTitle')}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleCreate} className="space-y-4">
-              <div className="space-y-2">
-                <Label>{t('common.name')}</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('inboxes.namePlaceholder')} required />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('inboxes.websiteUrl')}</Label>
-                <Input value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder={t('inboxes.websiteUrlPlaceholder')} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('inboxes.welcomeTitle')}</Label>
-                <Input value={form.welcome_title} onChange={(e) => setForm({ ...form, welcome_title: e.target.value })} placeholder={t('inboxes.welcomeTitlePlaceholder')} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('inboxes.welcomeTagline')}</Label>
-                <Input value={form.welcome_tagline} onChange={(e) => setForm({ ...form, welcome_tagline: e.target.value })} placeholder={t('inboxes.welcomeTaglinePlaceholder')} />
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                <Button type="submit" disabled={createInbox.isPending}>{createInbox.isPending ? t('common.saving') : t('common.create')}</Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 border rounded-lg p-0.5">
+            <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('card')}>
+              <LayoutGrid size={14} />
+            </button>
+            <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('table')}>
+              <List size={14} />
+            </button>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setForm({ name: '', website_url: '', welcome_title: '', welcome_tagline: '' }) }}>
+            <DialogTrigger asChild>
+              <Button>{t('inboxes.newInbox')}</Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>{t('inboxes.dialogTitle')}</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreate} className="space-y-4">
+                <div className="space-y-2">
+                  <Label>{t('common.name')}</Label>
+                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('inboxes.namePlaceholder')} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('inboxes.websiteUrl')}</Label>
+                  <Input value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder={t('inboxes.websiteUrlPlaceholder')} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('inboxes.welcomeTitle')}</Label>
+                  <Input value={form.welcome_title} onChange={(e) => setForm({ ...form, welcome_title: e.target.value })} placeholder={t('inboxes.welcomeTitlePlaceholder')} />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('inboxes.welcomeTagline')}</Label>
+                  <Input value={form.welcome_tagline} onChange={(e) => setForm({ ...form, welcome_tagline: e.target.value })} placeholder={t('inboxes.welcomeTaglinePlaceholder')} />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit" disabled={createInbox.isPending}>{createInbox.isPending ? t('common.saving') : t('common.create')}</Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {error && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
       )}
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('common.name')}</TableHead>
-              <TableHead>{t('inboxes.agent')}</TableHead>
-              <TableHead>{t('common.createdAt')}</TableHead>
-              <TableHead>{t('common.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {inboxes.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">{t('inboxes.empty')}</TableCell></TableRow>
-            ) : (
-              inboxes.map((inbox) => (
-                <TableRow key={inbox.id} className="cursor-pointer" onClick={() => navigate(`/inboxes/${inbox.id}`)}>
-                  <TableCell className="font-medium">{inbox.name || '-'}</TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <Select
-                      value={inbox.agent_bot_id ? String(inbox.agent_bot_id) : 'none'}
-                      onValueChange={(v) => handleAssignAgent(inbox.id, v)}
-                    >
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue placeholder={t('inboxes.noAgent')} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">{t('inboxes.noAgent')}</SelectItem>
-                        {agents.map((a) => (
-                          <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {new Date(inbox.created_at).toLocaleDateString(dateLocale)}
-                  </TableCell>
-                  <TableCell className="flex gap-2" onClick={(e) => e.stopPropagation()}>
-                    <Button size="sm" variant="ghost" onClick={() => navigate(`/inboxes/${inbox.id}`)}>{t('common.details')}</Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{t('inboxes.deleteTitle')}</AlertDialogTitle>
-                          <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(inbox.id)}>{t('common.delete')}</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+      {viewMode === 'card' ? (
+        inboxes.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12">{t('inboxes.empty')}</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {inboxes.map((inbox) => {
+              const ChannelIcon = CHANNEL_ICONS[inbox.channel_type] || Globe
+              return (
+                <Card key={inbox.id} className="hover:shadow-soft-md transition-all py-0 gap-0">
+                  <div className="p-[15px]">
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary shrink-0">
+                        <ChannelIcon size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-sm truncate leading-tight">{inbox.name || '-'}</h3>
+                        <span className="text-[11px] text-muted-foreground">{t(CHANNEL_LABELS[inbox.channel_type] || 'inboxes.channelWeb')}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground mb-2.5">
+                      <span className="flex items-center gap-1">
+                        <Bot size={11} />
+                        <span className={inbox.agent_bots?.name ? 'text-foreground' : ''}>{inbox.agent_bots?.name || t('inboxes.noAgent')}</span>
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <CircleDot size={11} className="text-primary" />
+                        <span className="font-medium text-foreground">{inbox.session_count ?? 0}</span>
+                        {t('inboxes.sessionCount')}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <CheckCircle size={11} className="text-emerald-500" />
+                        <span className="font-medium text-foreground">{inbox.resolved_count ?? 0}</span>
+                        {t('inboxes.resolvedCount')}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-1 border-t pt-2 -mx-1">
+                      <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => navigate(`/inboxes/${inbox.id}`)}>
+                        <Settings size={12} />
+                        {t('common.configure')}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleOpenChatwoot}>
+                        <ExternalLink size={12} />
+                        {t('inboxes.openInbox')}
+                      </Button>
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )
+      ) : (
+        <Card>
+          <Table className="[&_th:first-child]:pl-3 [&_td:first-child]:pl-3">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('common.name')}</TableHead>
+                <TableHead>{t('inboxes.channel')}</TableHead>
+                <TableHead>{t('inboxes.sessionCount')}</TableHead>
+                <TableHead>{t('inboxes.resolvedCount')}</TableHead>
+                <TableHead>{t('inboxes.agent')}</TableHead>
+                <TableHead>{t('common.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {inboxes.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">{t('inboxes.empty')}</TableCell></TableRow>
+              ) : (
+                inboxes.map((inbox) => (
+                  <TableRow key={inbox.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center justify-center w-7 h-7 rounded-md bg-primary/10 text-primary shrink-0">
+                          {channelIcon(inbox.channel_type)}
+                        </div>
+                        <span className="font-medium">{inbox.name || '-'}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{t(CHANNEL_LABELS[inbox.channel_type] || 'inboxes.channelWeb')}</Badge>
+                    </TableCell>
+                    <TableCell>{inbox.session_count ?? 0}</TableCell>
+                    <TableCell>{inbox.resolved_count ?? 0}</TableCell>
+                    <TableCell className="text-muted-foreground">{inbox.agent_bots?.name || '-'}</TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={() => navigate(`/inboxes/${inbox.id}`)}>
+                          <Settings size={12} />
+                          {t('common.configure')}
+                        </Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs gap-1" onClick={handleOpenChatwoot}>
+                          <ExternalLink size={12} />
+                          {t('inboxes.openInbox')}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
     </div>
   )
 }

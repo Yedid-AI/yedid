@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { LayoutGrid, List, FileText, Globe as GlobeIcon } from 'lucide-react'
 
 const statusVariant = {
   pending: 'secondary',
@@ -26,6 +27,7 @@ export default function Sources() {
   const [name, setName] = useState('')
   const [url, setUrl] = useState('')
   const [file, setFile] = useState(null)
+  const [viewMode, setViewMode] = useState('card')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
@@ -68,9 +70,19 @@ export default function Sources() {
 
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">{t('sources.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t('sources.subtitle')}</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{t('sources.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('sources.subtitle')}</p>
+        </div>
+        <div className="flex items-center gap-0.5 border rounded-lg p-0.5">
+          <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('card')}>
+            <LayoutGrid size={14} />
+          </button>
+          <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('table')}>
+            <List size={14} />
+          </button>
+        </div>
       </div>
 
       {displayError && (
@@ -105,59 +117,113 @@ export default function Sources() {
         </Tabs>
       </Card>
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('common.name')}</TableHead>
-              <TableHead>{t('sources.type')}</TableHead>
-              <TableHead>{t('common.status')}</TableHead>
-              <TableHead>{t('sources.chunks')}</TableHead>
-              <TableHead>{t('common.date')}</TableHead>
-              <TableHead>{t('common.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sources.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">{t('sources.empty')}</TableCell></TableRow>
-            ) : (
-              sources.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-medium">{s.name}</TableCell>
-                  <TableCell>{s.type === 'file' ? 'PDF' : 'Web'}</TableCell>
-                  <TableCell>
-                    <Badge variant={statusVariant[s.status]} className={s.status === 'processing' ? 'animate-pulse' : ''}>
-                      {s.status}
-                    </Badge>
-                    {s.error_message && (
-                      <span className="ms-2 text-xs text-destructive" title={s.error_message}>(?)</span>
-                    )}
-                  </TableCell>
-                  <TableCell>{s.chunk_count}</TableCell>
-                  <TableCell className="text-muted-foreground">{new Date(s.created_at).toLocaleDateString(dateLocale)}</TableCell>
-                  <TableCell>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{t('sources.deleteTitle')}</AlertDialogTitle>
-                          <AlertDialogDescription>{t('sources.deleteDescription')}</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(s.id)}>{t('common.delete')}</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+      {viewMode === 'card' ? (
+        sources.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12">{t('sources.empty')}</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {sources.map((s) => {
+              const TypeIcon = s.type === 'file' ? FileText : GlobeIcon
+              return (
+                <Card key={s.id} className="hover:shadow-soft-md transition-all py-0 gap-0">
+                  <div className="p-[15px]">
+                    <div className="flex items-center gap-2.5 mb-2">
+                      <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-primary/10 text-primary shrink-0">
+                        <TypeIcon size={16} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-sm truncate leading-tight">{s.name}</h3>
+                        <span className="text-[11px] text-muted-foreground">{s.type === 'file' ? 'PDF' : 'Web'}</span>
+                      </div>
+                      <Badge variant={statusVariant[s.status]} className={`shrink-0 ${s.status === 'processing' ? 'animate-pulse' : ''}`}>
+                        {s.status}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-3 text-[11px] text-muted-foreground mb-2.5">
+                      <span>{t('sources.chunks')}: <span className="font-medium text-foreground">{s.chunk_count}</span></span>
+                      <span>{new Date(s.created_at).toLocaleDateString(dateLocale)}</span>
+                      {s.error_message && (
+                        <span className="text-destructive" title={s.error_message}>(?)</span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-end gap-1 border-t pt-2 -mx-1">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive">{t('common.delete')}</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{t('sources.deleteTitle')}</AlertDialogTitle>
+                            <AlertDialogDescription>{t('sources.deleteDescription')}</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                            <AlertDialogAction variant="destructive" onClick={() => handleDelete(s.id)}>{t('common.delete')}</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('common.name')}</TableHead>
+                <TableHead>{t('sources.type')}</TableHead>
+                <TableHead>{t('common.status')}</TableHead>
+                <TableHead>{t('sources.chunks')}</TableHead>
+                <TableHead>{t('common.date')}</TableHead>
+                <TableHead>{t('common.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sources.length === 0 ? (
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">{t('sources.empty')}</TableCell></TableRow>
+              ) : (
+                sources.map((s) => (
+                  <TableRow key={s.id}>
+                    <TableCell className="font-medium">{s.name}</TableCell>
+                    <TableCell>{s.type === 'file' ? 'PDF' : 'Web'}</TableCell>
+                    <TableCell>
+                      <Badge variant={statusVariant[s.status]} className={s.status === 'processing' ? 'animate-pulse' : ''}>
+                        {s.status}
+                      </Badge>
+                      {s.error_message && (
+                        <span className="ms-2 text-xs text-destructive" title={s.error_message}>(?)</span>
+                      )}
+                    </TableCell>
+                    <TableCell>{s.chunk_count}</TableCell>
+                    <TableCell className="text-muted-foreground">{new Date(s.created_at).toLocaleDateString(dateLocale)}</TableCell>
+                    <TableCell>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{t('sources.deleteTitle')}</AlertDialogTitle>
+                            <AlertDialogDescription>{t('sources.deleteDescription')}</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                            <AlertDialogAction variant="destructive" onClick={() => handleDelete(s.id)}>{t('common.delete')}</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
     </div>
   )
 }

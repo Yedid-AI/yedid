@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { LayoutGrid, List } from 'lucide-react'
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
@@ -20,6 +21,7 @@ export default function ToolsTab({ agentBotId }) {
   const createTool = useCreateTool(agentBotId)
   const updateTool = useUpdateTool(agentBotId)
   const deleteTool = useDeleteTool(agentBotId)
+  const [viewMode, setViewMode] = useState('card')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [form, setForm] = useState({
@@ -79,120 +81,161 @@ export default function ToolsTab({ agentBotId }) {
 
   if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
+  const deleteButton = (tool) => (
+    <AlertDialog>
+      <AlertDialogTrigger asChild>
+        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{t('tools.deleteTitle')}</AlertDialogTitle>
+          <AlertDialogDescription>{t('tools.deleteDescription')}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={() => handleDelete(tool.id)}>{t('common.delete')}</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-sm text-muted-foreground">{t('tools.subtitle')}</p>
-        <Sheet open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
-          <SheetTrigger asChild>
-            <Button>{t('common.new')}</Button>
-          </SheetTrigger>
-          <SheetContent>
-            <SheetHeader>
-              <SheetTitle>{editItem ? t('common.edit') : t('tools.dialogTitle')}</SheetTitle>
-            </SheetHeader>
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>{t('common.name')}</Label>
-                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-              </div>
-              <div className="grid grid-cols-[auto_1fr] gap-3">
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 border rounded-lg p-0.5">
+            <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('card')}>
+              <LayoutGrid size={14} />
+            </button>
+            <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('table')}>
+              <List size={14} />
+            </button>
+          </div>
+          <Sheet open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
+            <SheetTrigger asChild>
+              <Button>{t('common.new')}</Button>
+            </SheetTrigger>
+            <SheetContent>
+              <SheetHeader>
+                <SheetTitle>{editItem ? t('common.edit') : t('tools.dialogTitle')}</SheetTitle>
+              </SheetHeader>
+              <div className="flex-1 overflow-y-auto px-6 py-4">
+              <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
-                  <Label>{t('tools.method')}</Label>
-                  <Select value={form.method} onValueChange={(v) => setForm({ ...form, method: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Label>{t('common.name')}</Label>
+                  <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                </div>
+                <div className="grid grid-cols-[auto_1fr] gap-3">
+                  <div className="space-y-2">
+                    <Label>{t('tools.method')}</Label>
+                    <Select value={form.method} onValueChange={(v) => setForm({ ...form, method: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {METHODS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>{t('tools.url')}</Label>
+                    <Input type="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} required />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>{t('tools.url')}</Label>
-                  <Input type="url" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} required />
+                  <Label>{t('tools.description')}</Label>
+                  <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} required />
                 </div>
+                <div className="space-y-2">
+                  <Label>{t('tools.queryParams')}</Label>
+                  <Textarea value={form.query_parameters} onChange={(e) => setForm({ ...form, query_parameters: e.target.value })} rows={3} className="font-mono text-xs" />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('tools.headers')}</Label>
+                  <Textarea value={form.headers} onChange={(e) => setForm({ ...form, headers: e.target.value })} rows={3} className="font-mono text-xs" />
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('tools.bodySchema')}</Label>
+                  <Textarea
+                    value={form.body_schema}
+                    onChange={(e) => setForm({ ...form, body_schema: e.target.value })}
+                    rows={3}
+                    className="font-mono text-xs"
+                    placeholder={t('tools.bodyPlaceholder')}
+                  />
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit" disabled={createTool.isPending || updateTool.isPending}>{(createTool.isPending || updateTool.isPending) ? t('common.saving') : editItem ? t('common.save') : t('common.create')}</Button>
+                </div>
+              </form>
               </div>
-              <div className="space-y-2">
-                <Label>{t('tools.description')}</Label>
-                <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} required />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('tools.queryParams')}</Label>
-                <Textarea value={form.query_parameters} onChange={(e) => setForm({ ...form, query_parameters: e.target.value })} rows={3} className="font-mono text-xs" />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('tools.headers')}</Label>
-                <Textarea value={form.headers} onChange={(e) => setForm({ ...form, headers: e.target.value })} rows={3} className="font-mono text-xs" />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('tools.bodySchema')}</Label>
-                <Textarea
-                  value={form.body_schema}
-                  onChange={(e) => setForm({ ...form, body_schema: e.target.value })}
-                  rows={3}
-                  className="font-mono text-xs"
-                  placeholder={t('tools.bodyPlaceholder')}
-                />
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                <Button type="submit" disabled={createTool.isPending || updateTool.isPending}>{(createTool.isPending || updateTool.isPending) ? t('common.saving') : editItem ? t('common.save') : t('common.create')}</Button>
-              </div>
-            </form>
-            </div>
-          </SheetContent>
-        </Sheet>
+            </SheetContent>
+          </Sheet>
+        </div>
       </div>
 
       {error && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
       )}
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('common.name')}</TableHead>
-              <TableHead>{t('tools.method')}</TableHead>
-              <TableHead>{t('tools.url')}</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>{t('common.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tools.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('tools.empty')}</TableCell></TableRow>
-            ) : (
-              tools.map((tool) => (
-                <TableRow key={tool.id}>
-                  <TableCell className="font-medium">{tool.name}</TableCell>
-                  <TableCell><Badge variant="outline" className="font-mono">{tool.method}</Badge></TableCell>
-                  <TableCell className="text-muted-foreground truncate max-w-[200px]">{tool.url}</TableCell>
-                  <TableCell className="truncate max-w-[250px]">{tool.description}</TableCell>
-                  <TableCell className="flex gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => handleEdit(tool)}>{t('common.edit')}</Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{t('tools.deleteTitle')}</AlertDialogTitle>
-                          <AlertDialogDescription>{t('tools.deleteDescription')}</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(tool.id)}>{t('common.delete')}</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+      {viewMode === 'card' ? (
+        tools.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12">{t('tools.empty')}</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {tools.map((tool) => (
+              <Card key={tool.id} className="hover:shadow-soft-md transition-all py-0 gap-0">
+                <div className="p-[15px]">
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-sm truncate leading-tight">{tool.name}</h3>
+                      <p className="text-[11px] text-muted-foreground truncate">{tool.url}</p>
+                    </div>
+                    <Badge variant="outline" className="font-mono shrink-0">{tool.method}</Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2.5">{tool.description}</p>
+                  <div className="flex items-center justify-end gap-1 border-t pt-2 -mx-1">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleEdit(tool)}>{t('common.edit')}</Button>
+                    {deleteButton(tool)}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('common.name')}</TableHead>
+                <TableHead>{t('tools.method')}</TableHead>
+                <TableHead>{t('tools.url')}</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>{t('common.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tools.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('tools.empty')}</TableCell></TableRow>
+              ) : (
+                tools.map((tool) => (
+                  <TableRow key={tool.id}>
+                    <TableCell className="font-medium">{tool.name}</TableCell>
+                    <TableCell><Badge variant="outline" className="font-mono">{tool.method}</Badge></TableCell>
+                    <TableCell className="text-muted-foreground truncate max-w-[200px]">{tool.url}</TableCell>
+                    <TableCell className="truncate max-w-[250px]">{tool.description}</TableCell>
+                    <TableCell className="flex gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => handleEdit(tool)}>{t('common.edit')}</Button>
+                      {deleteButton(tool)}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
     </div>
   )
 }

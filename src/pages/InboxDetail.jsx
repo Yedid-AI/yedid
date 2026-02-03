@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useInbox, useAgents, useSessions, useAssignAgent } from '../hooks/queries'
+import { useInbox, useAgents, useSessions, useAssignAgent, useDeleteInbox } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
-import { ArrowLeft, Info, MessageSquare } from 'lucide-react'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { ArrowLeft, Info, MessageSquare, Trash2 } from 'lucide-react'
 
 export default function InboxDetail() {
   const { id } = useParams()
@@ -21,6 +22,7 @@ export default function InboxDetail() {
   const { data: agents = [], isLoading: agentsLoading } = useAgents()
   const { data: sessionData, isLoading: sessionsLoading } = useSessions({ inbox_id: id })
   const assignAgent = useAssignAgent()
+  const deleteInbox = useDeleteInbox()
 
   const sessions = sessionData?.sessions || []
   const isLoading = inboxLoading || agentsLoading || sessionsLoading
@@ -28,6 +30,15 @@ export default function InboxDetail() {
   const handleAssignAgent = async (agentBotId) => {
     try {
       await assignAgent.mutateAsync({ inboxId: id, agentBotId })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleDelete = async () => {
+    try {
+      await deleteInbox.mutateAsync(id)
+      navigate('/inboxes')
     } catch (err) {
       setError(err.message)
     }
@@ -141,6 +152,32 @@ export default function InboxDetail() {
               </CardContent>
             </Card>
           )}
+          <Card className="border-destructive/30">
+            <CardHeader>
+              <CardTitle className="text-base text-destructive">{t('inboxes.deleteTitle')}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-3">{t('common.irreversible')}</p>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="destructive" size="sm" className="gap-1.5">
+                    <Trash2 size={14} />
+                    {t('common.delete')}
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>{t('inboxes.deleteTitle')}</AlertDialogTitle>
+                    <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                    <AlertDialogAction variant="destructive" onClick={handleDelete}>{t('common.delete')}</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="sessions" className="mt-6">

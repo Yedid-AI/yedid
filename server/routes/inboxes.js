@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { checkRole } from '../middleware.js'
 import { createInbox, attachBotToInbox, addInboxMember } from '../chatwoot.js'
+import { getSetting } from '../settings.js'
 
 const router = Router()
 
@@ -14,7 +15,33 @@ router.get('/inboxes', checkRole('admin'), async (req, res) => {
       .order('created_at', { ascending: false })
 
     if (error) throw error
-    res.json({ inboxes: data })
+
+    // Fetch session counts per inbox (grouped by chatwoot_inbox_id)
+    const inboxIds = data.map((i) => i.inbox_id).filter(Boolean)
+    const sessionCountMap = {}
+    const resolvedCountMap = {}
+    if (inboxIds.length > 0) {
+      const { data: sessions } = await req.supabase
+        .from('sessions')
+        .select('chatwoot_inbox_id, billable')
+        .eq('user_id', req.user.user_id)
+        .in('chatwoot_inbox_id', inboxIds)
+      for (const s of sessions || []) {
+        sessionCountMap[s.chatwoot_inbox_id] = (sessionCountMap[s.chatwoot_inbox_id] || 0) + 1
+        if (s.billable) {
+          resolvedCountMap[s.chatwoot_inbox_id] = (resolvedCountMap[s.chatwoot_inbox_id] || 0) + 1
+        }
+      }
+    }
+
+    const inboxes = data.map((i) => ({
+      ...i,
+      session_count: sessionCountMap[i.inbox_id] || 0,
+      resolved_count: resolvedCountMap[i.inbox_id] || 0,
+      channel_type: 'web',
+    }))
+
+    res.json({ inboxes })
   } catch (err) {
     console.error('[inboxes]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
@@ -166,6 +193,51 @@ router.put('/inboxes/:id/assign-agent', checkRole('admin'), async (req, res) => 
     res.json({ inbox: data })
   } catch (err) {
     console.error('[inboxes]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// GET /api/chatwoot-sso — generate a temporary Chatwoot login URL via Platform API
+router.get('/chatwoot-sso', checkRole('admin'), async (req, res) => {
+  try {
+    const chatwootUrl = getSetting('CHATWOOT_PLATFORM_URL')
+    const platformToken = getSetting('CHATWOOT_PLATFORM_TOKEN')
+    if (!chatwootUrl || !platformToken) {
+      return res.status(400).json({ error: 'Chatwoot non configure' })
+    }
+
+    const { data: accounts } = await req.supabase
+      .from('chatwoot_accounts')
+      .select('chatwoot_user_id, account_id')
+      .eq('user_id', req.user.user_id)
+      .limit(1)
+
+    if (!accounts?.length) {
+      return res.status(400).json({ error: 'Compte Chatwoot introuvable' })
+    }
+
+    const { chatwoot_user_id, account_id } = accounts[0]
+
+    // Call Chatwoot Platform API to generate a temporary login URL
+    const loginRes = await fetch(`${chatwootUrl}/platform/api/v1/users/${chatwoot_user_id}/login`, {
+      headers: { 'api_access_token': platformToken },
+    })
+
+    if (!loginRes.ok) {
+      const text = await loginRes.text()
+      console.error('[chatwoot-sso] Platform API error:', loginRes.status, text)
+      return res.status(502).json({ error: 'Erreur Chatwoot SSO' })
+    }
+
+    const loginData = await loginRes.json()
+    const ssoUrl = loginData.url
+    if (!ssoUrl) {
+      return res.status(502).json({ error: 'URL SSO non disponible' })
+    }
+
+    res.json({ url: ssoUrl })
+  } catch (err) {
+    console.error('[chatwoot-sso]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
   }
 })

@@ -15,8 +15,19 @@ router.get('/sessions', checkRole('admin'), async (req, res) => {
 
     if (allErr) throw allErr
 
+    // Apply date range filter (affects stats + table)
+    let dateFiltered = allData
+    if (req.query.date_from) {
+      const from = new Date(req.query.date_from)
+      dateFiltered = dateFiltered.filter((s) => new Date(s.created_at) >= from)
+    }
+    if (req.query.date_to) {
+      const to = new Date(req.query.date_to)
+      dateFiltered = dateFiltered.filter((s) => new Date(s.created_at) <= to)
+    }
+
     // Fetch all assistant messages for stats (total AI messages + first response times)
-    const allSessionIds = allData.map((s) => s.id)
+    const allSessionIds = dateFiltered.map((s) => s.id)
     let assistantMsgs = []
     if (allSessionIds.length > 0) {
       const { data: aMsgs } = await req.supabase
@@ -31,7 +42,7 @@ router.get('/sessions', checkRole('admin'), async (req, res) => {
     }
 
     // Compute first response time per session (first assistant message - session created_at)
-    const sessionById = Object.fromEntries(allData.map((s) => [s.id, s]))
+    const sessionById = Object.fromEntries(dateFiltered.map((s) => [s.id, s]))
     const firstResponseMap = {}
     for (const msg of assistantMsgs) {
       if (!firstResponseMap[msg.session_id]) {
@@ -48,12 +59,12 @@ router.get('/sessions', checkRole('admin'), async (req, res) => {
     }
 
     // Global stats (always computed from full dataset)
-    const resolved = allData.filter((s) => s.billable).length
+    const resolved = dateFiltered.filter((s) => s.billable).length
     const stats = {
-      total: allData.length,
+      total: dateFiltered.length,
       total_ai_messages: assistantMsgs.length,
       resolved,
-      escalated: allData.filter((s) => s.ai_reason?.startsWith('ESCALATION:')).length,
+      escalated: dateFiltered.filter((s) => s.ai_reason?.startsWith('ESCALATION:')).length,
       resolution_rate: allData.length > 0 ? +(resolved / allData.length * 100).toFixed(0) : null,
       avg_first_response: responseTimes.length > 0
         ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
@@ -61,38 +72,88 @@ router.get('/sessions', checkRole('admin'), async (req, res) => {
     }
 
     // Apply filters for table view
-    let filtered = allData
+    let filtered = dateFiltered
     if (req.query.inbox_id) {
       filtered = filtered.filter((s) => String(s.chatwoot_inbox_id) === req.query.inbox_id)
     }
     if (req.query.status) {
-      filtered = filtered.filter((s) => s.status === req.query.status)
+      const st = req.query.status
+      if (st === 'escalated') {
+        filtered = filtered.filter((s) => s.ai_reason?.startsWith('ESCALATION:'))
+      } else if (st === 'resolved') {
+        filtered = filtered.filter((s) => s.billable && !s.ai_reason?.startsWith('ESCALATION:'))
+      } else if (st === 'closed') {
+        filtered = filtered.filter((s) => s.status === 'closed' && !s.billable && !s.ai_reason?.startsWith('ESCALATION:'))
+      } else {
+        filtered = filtered.filter((s) => s.status === st)
+      }
     }
 
-    // Fetch message counts for visible sessions
+    // Fetch messages for visible sessions (counts + dominant playbook)
     const sessionIds = filtered.map((s) => s.id)
     const countMap = {}
+    const playbookCountMap = {}
     if (sessionIds.length > 0) {
       const { data: msgs } = await req.supabase
         .from('conversation_messages')
-        .select('session_id')
+        .select('session_id, playbook_id')
         .in('session_id', sessionIds)
         .limit(50000)
       for (const m of msgs || []) {
         countMap[m.session_id] = (countMap[m.session_id] || 0) + 1
+        if (m.playbook_id) {
+          if (!playbookCountMap[m.session_id]) playbookCountMap[m.session_id] = {}
+          playbookCountMap[m.session_id][m.playbook_id] = (playbookCountMap[m.session_id][m.playbook_id] || 0) + 1
+        }
       }
+    }
+
+    // Resolve dominant playbook per session
+    const dominantPbMap = {}
+    for (const [sid, counts] of Object.entries(playbookCountMap)) {
+      let maxCount = 0, maxId = null
+      for (const [pbId, count] of Object.entries(counts)) {
+        if (count > maxCount) { maxCount = count; maxId = pbId }
+      }
+      dominantPbMap[sid] = maxId
+    }
+    const pbIds = [...new Set(Object.values(dominantPbMap).filter(Boolean))]
+    const pbTitleMap = {}
+    if (pbIds.length > 0) {
+      const { data: pbs } = await req.supabase.from('playbooks').select('id, title').in('id', pbIds)
+      for (const pb of pbs || []) pbTitleMap[pb.id] = pb.title
     }
 
     // Enrich filtered sessions
     const sessions = filtered.map((s) => ({
       ...s,
       message_count: countMap[s.id] || 0,
+      dominant_playbook: pbTitleMap[dominantPbMap[s.id]] || null,
       duration_seconds: s.closed_at
         ? Math.round((new Date(s.closed_at) - new Date(s.created_at)) / 1000)
         : null,
     }))
 
-    res.json({ sessions, stats })
+    // Build chart data — daily breakdown from filtered sessions
+    const chartMap = {}
+    const filteredIdSet = new Set(filtered.map((s) => s.id))
+    for (const s of filtered) {
+      const day = s.created_at.slice(0, 10)
+      if (!chartMap[day]) chartMap[day] = { date: day, sessions: 0, resolved: 0, escalated: 0, ai_messages: 0 }
+      chartMap[day].sessions++
+      const isEsc = s.ai_reason?.startsWith('ESCALATION:')
+      if (isEsc) chartMap[day].escalated++
+      else if (s.billable) chartMap[day].resolved++
+    }
+    for (const msg of assistantMsgs) {
+      if (filteredIdSet.has(msg.session_id)) {
+        const day = msg.created_at.slice(0, 10)
+        if (chartMap[day]) chartMap[day].ai_messages++
+      }
+    }
+    const chart = Object.values(chartMap).sort((a, b) => a.date.localeCompare(b.date))
+
+    res.json({ sessions, stats, chart })
   } catch (err) {
     console.error('[sessions]', err.message)
     res.status(500).json({ error: 'Erreur interne' })

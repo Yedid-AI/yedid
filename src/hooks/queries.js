@@ -356,6 +356,8 @@ export function useSessions(filters) {
       const params = new URLSearchParams()
       if (filters?.status && filters.status !== 'all') params.set('status', filters.status)
       if (filters?.inbox_id && filters.inbox_id !== 'all') params.set('inbox_id', filters.inbox_id)
+      if (filters?.date_from) params.set('date_from', filters.date_from)
+      if (filters?.date_to) params.set('date_to', filters.date_to)
       const qs = params.toString()
       return api.get(`/sessions${qs ? '?' + qs : ''}`)
     },
