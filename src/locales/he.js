@@ -190,6 +190,7 @@ export default {
   'inboxes.agentAttribution': 'שיוך סוכנים',
   'inboxes.agentAttributionDesc': 'סוכנים שיכולים לטפל בשיחות בתיבה זו',
   'inboxes.noAgentsAvailable': 'אין סוכנים זמינים',
+  'inboxes.widgetLocale': 'שפת הווידג\'ט',
 
   // sessions
   'nav.sessions': 'סשנים',

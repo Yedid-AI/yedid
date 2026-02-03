@@ -74,7 +74,7 @@ router.get('/inboxes/:id', checkRole('admin'), async (req, res) => {
 // POST /api/inboxes
 router.post('/inboxes', checkRole('admin'), async (req, res) => {
   try {
-    const { name, website_url, welcome_title, welcome_tagline, widget_color } = req.body
+    const { name, website_url, welcome_title, welcome_tagline, widget_color, widget_locale } = req.body
     if (!name) {
       return res.status(400).json({ error: 'Nom requis' })
     }
@@ -128,6 +128,7 @@ router.post('/inboxes', checkRole('admin'), async (req, res) => {
         inbox_id: inbox.id,
         website_token: inbox.website_token,
         name,
+        widget_locale: widget_locale || null,
       })
       .select('*, agent_bots(id, name)')
       .single()
@@ -288,7 +289,7 @@ router.get('/inboxes/:id/chatwoot', checkRole('admin'), async (req, res) => {
 router.put('/inboxes/:id', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const { name, website_url, welcome_title, welcome_tagline, widget_color } = req.body
+    const { name, website_url, welcome_title, welcome_tagline, widget_color, widget_locale } = req.body
 
     const { data: inbox } = await req.supabase
       .from('inboxes')
@@ -306,11 +307,11 @@ router.put('/inboxes/:id', checkRole('admin'), async (req, res) => {
       .limit(1)
     const userToken = accounts?.[0]?.access_token || null
 
-    // Build Chatwoot update payload
+    // Build Chatwoot update payload (widget_color goes inside channel per Chatwoot API)
     const updates = {}
     if (name !== undefined) updates.name = name
-    if (widget_color !== undefined) updates.widget_color = widget_color
     const channel = {}
+    if (widget_color !== undefined) channel.widget_color = widget_color
     if (website_url) channel.website_url = website_url
     if (welcome_title !== undefined) channel.welcome_title = welcome_title
     if (welcome_tagline !== undefined) channel.welcome_tagline = welcome_tagline
@@ -318,14 +319,16 @@ router.put('/inboxes/:id', checkRole('admin'), async (req, res) => {
 
     await updateInbox(inbox.chatwoot_account_id, inbox.inbox_id, updates, userToken)
 
-    // Update name in local DB if changed
-    if (name !== undefined) {
-      await req.supabase
-        .from('inboxes')
-        .update({ name, updated_at: new Date().toISOString() })
-        .eq('id', id)
-        .eq('user_id', req.user.user_id)
-    }
+    // Update local DB fields
+    const dbUpdates = { updated_at: new Date().toISOString() }
+    if (name !== undefined) dbUpdates.name = name
+    if (widget_locale !== undefined) dbUpdates.widget_locale = widget_locale
+
+    await req.supabase
+      .from('inboxes')
+      .update(dbUpdates)
+      .eq('id', id)
+      .eq('user_id', req.user.user_id)
 
     const { data: updated } = await req.supabase
       .from('inboxes')

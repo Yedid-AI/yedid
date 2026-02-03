@@ -190,6 +190,7 @@ export default {
   'inboxes.agentAttribution': 'Agent Attribution',
   'inboxes.agentAttributionDesc': 'Agents who can handle conversations in this inbox',
   'inboxes.noAgentsAvailable': 'No agents available',
+  'inboxes.widgetLocale': 'Widget Language',
 
   // sessions
   'nav.sessions': 'Sessions',

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useInbox, useAgents, useSessions, useAssignAgent, useDeleteInbox, useInboxChatwoot, useUpdateInbox, useUploadInboxAvatar, useChatwootAgents, useInboxMembers, useUpdateInboxMembers } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
+import { useTheme } from '../lib/theme'
+import { localeConfig } from '../locales/index.js'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -12,13 +14,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon, RefreshCw, Globe } from 'lucide-react'
 
 export default function InboxDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [error, setError] = useState('')
-  const { t, dateLocale } = useI18n()
+  const { t, locale: appLocale, dateLocale } = useI18n()
+  const { dark } = useTheme()
 
   const { data: inbox, isLoading: inboxLoading } = useInbox(id)
   const { data: agents = [], isLoading: agentsLoading } = useAgents()
@@ -49,6 +52,9 @@ export default function InboxDetail() {
   const [previewKey, setPreviewKey] = useState(0)
   const avatarInputRef = useRef(null)
 
+  // Widget locale state (defaults to app language)
+  const [widgetLocale, setWidgetLocale] = useState(appLocale)
+
   // Members state
   const [selectedMembers, setSelectedMembers] = useState([])
   const [membersSaved, setMembersSaved] = useState(false)
@@ -66,6 +72,13 @@ export default function InboxDetail() {
     }
   }, [chatwootData])
 
+  // Initialize widget locale from inbox data (or fallback to app language)
+  useEffect(() => {
+    if (inbox?.widget_locale) {
+      setWidgetLocale(inbox.widget_locale)
+    }
+  }, [inbox?.widget_locale])
+
   // Initialize members from inbox members data
   useEffect(() => {
     if (inboxMembers.length > 0) {
@@ -82,7 +95,7 @@ export default function InboxDetail() {
 <meta charset="utf-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #f5f5f5; overflow: hidden; }
+  body { background: ${dark ? '#171717' : '#f5f5f5'}; overflow: hidden; }
   .woot-widget-holder {
     position: fixed !important; inset: 0 !important;
     width: 100% !important; height: 100% !important;
@@ -103,7 +116,9 @@ export default function InboxDetail() {
     g.onload = function() {
       window.chatwootSDK.run({
         websiteToken: "${inbox.website_token}",
-        baseUrl: "https://chat.cardynal.io"
+        baseUrl: "https://chat.cardynal.io",
+        darkMode: "${dark ? 'dark' : 'light'}",
+        locale: "${widgetLocale}"
       });
     };
   })(document, "script");
@@ -136,7 +151,7 @@ export default function InboxDetail() {
     setError('')
     setWidgetSaved(false)
     try {
-      await updateInbox.mutateAsync({ id, body: widgetForm })
+      await updateInbox.mutateAsync({ id, body: { ...widgetForm, widget_locale: widgetLocale } })
       setWidgetSaved(true)
       setTimeout(() => { setWidgetSaved(false); setPreviewKey((k) => k + 1) }, 1500)
     } catch (err) {
@@ -316,6 +331,24 @@ export default function InboxDetail() {
                         </div>
                       </div>
 
+                      {/* Widget Language */}
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-1.5">
+                          <Globe size={14} />
+                          {t('inboxes.widgetLocale')}
+                        </Label>
+                        <Select value={widgetLocale} onValueChange={setWidgetLocale}>
+                          <SelectTrigger className="w-[200px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(localeConfig).map(([code, cfg]) => (
+                              <SelectItem key={code} value={code}>{cfg.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
                       <div className="flex items-center gap-2 pt-1">
                         <Button type="submit" disabled={updateInbox.isPending}>
                           {updateInbox.isPending ? t('common.saving') : t('common.save')}
@@ -484,7 +517,8 @@ export default function InboxDetail() {
     g.onload=function(){
       window.chatwootSDK.run({
         websiteToken: '${inbox.website_token}',
-        baseUrl: BASE_URL
+        baseUrl: BASE_URL,
+        locale: '${widgetLocale}'
       })
     }
   })(document,"script");
