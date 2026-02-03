@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { checkAuth, checkRole } from '../middleware.js'
 import { getSetting } from '../settings.js'
 import { createHostedAuthLink, getAccount, sendMessage, sendMessageWithAttachment, downloadAttachment, registerWebhook } from '../unipile.js'
-import { createInbox, addInboxMember, accountApi } from '../chatwoot.js'
+import { createInbox, addInboxMember, attachBotToInbox, accountApi } from '../chatwoot.js'
 
 const router = Router()
 
@@ -100,7 +100,29 @@ router.post('/webhook/unipile/account', async (req, res) => {
       }
     }
 
-    // 5. Insert inbox in DB
+    // 5. Find user's active agent bot and attach to Chatwoot inbox
+    let agentBotDbId = null
+    try {
+      const { data: bots } = await supabase
+        .from('agent_bots')
+        .select('id, bot_id')
+        .eq('user_id', userId)
+        .eq('is_active', true)
+        .limit(1)
+
+      if (bots?.length) {
+        const agentBot = bots[0]
+        agentBotDbId = agentBot.id
+        await attachBotToInbox(chatwootAccountId, inbox.id, agentBot.bot_id, userToken)
+        console.log(`[unipile/account] Agent bot ${agentBot.bot_id} attached to inbox ${inbox.id}`)
+      } else {
+        console.log('[unipile/account] No active agent bot found for user — assign one manually')
+      }
+    } catch (e) {
+      console.log('[unipile/account] Agent bot attachment skipped:', e.message)
+    }
+
+    // 6. Insert inbox in DB (with agent_bot_id if found)
     const { error: insertError } = await supabase
       .from('inboxes')
       .insert({
@@ -111,6 +133,7 @@ router.post('/webhook/unipile/account', async (req, res) => {
         channel_type: 'whatsapp',
         unipile_account_id: account_id,
         phone_number: phoneNumber,
+        agent_bot_id: agentBotDbId,
       })
 
     if (insertError) {
@@ -118,7 +141,7 @@ router.post('/webhook/unipile/account', async (req, res) => {
       return
     }
 
-    // 6. Register Unipile webhook for incoming messages (idempotent)
+    // 7. Register Unipile webhook for incoming messages (idempotent)
     try {
       await registerWebhook(`${appBaseUrl}/api/webhook/unipile/message`)
     } catch (e) {
@@ -137,11 +160,28 @@ router.post('/webhook/unipile/message', async (req, res) => {
   res.status(200).json({ ok: true })
 
   try {
-    const { event, account_id, sender, message, is_sender, attachments, quoted } = req.body
+    console.log('[unipile/message] Webhook received:', JSON.stringify(req.body).slice(0, 500))
+
+    const body = req.body
+
+    // Unipile can wrap the payload in a top-level object — normalize
+    const event = body.event
+    const account_id = body.account_id
+    const is_sender = body.is_sender
+    const sender = body.sender
+    const message = body.message || body.text || body.body
+    const attachments = body.attachments
+    const quoted = body.quoted
 
     // Skip our own messages and non-message events
-    if (is_sender) return
-    if (event && event !== 'message_received') return
+    if (is_sender) {
+      console.log('[unipile/message] Skipping own message')
+      return
+    }
+    if (event && event !== 'message_received' && event !== 'message.received') {
+      console.log('[unipile/message] Skipping event:', event)
+      return
+    }
 
     if (!account_id) {
       console.log('[unipile/message] No account_id in webhook')
@@ -351,11 +391,17 @@ router.post('/webhook/chatwoot-channel', async (req, res) => {
 
   try {
     const body = req.body
+    console.log('[chatwoot-channel] Webhook received:', JSON.stringify(body).slice(0, 500))
+
     const event = body.event
     const messageType = body.message_type
 
-    // Only process outgoing messages
-    if (event !== 'message_created' || messageType !== 'outgoing') return
+    // Only process outgoing messages (message_type can be 'outgoing' or 1)
+    const isOutgoing = messageType === 'outgoing' || messageType === 1
+    if (event !== 'message_created' || !isOutgoing) {
+      console.log(`[chatwoot-channel] Skipping: event=${event}, message_type=${messageType}`)
+      return
+    }
 
     const content = body.content || ''
     const chatwootInboxId = body.conversation?.inbox_id || body.inbox?.id
