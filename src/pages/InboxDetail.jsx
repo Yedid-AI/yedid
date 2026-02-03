@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon, X, ArrowRight } from 'lucide-react'
+import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon, RefreshCw } from 'lucide-react'
 
 export default function InboxDetail() {
   const { id } = useParams()
@@ -46,6 +46,7 @@ export default function InboxDetail() {
     widget_color: '#2383E2',
   })
   const [widgetSaved, setWidgetSaved] = useState(false)
+  const [previewKey, setPreviewKey] = useState(0)
   const avatarInputRef = useRef(null)
 
   // Members state
@@ -99,7 +100,7 @@ export default function InboxDetail() {
     try {
       await updateInbox.mutateAsync({ id, body: widgetForm })
       setWidgetSaved(true)
-      setTimeout(() => setWidgetSaved(false), 2000)
+      setTimeout(() => { setWidgetSaved(false); setPreviewKey((k) => k + 1) }, 1500)
     } catch (err) {
       setError(err.message)
     }
@@ -111,6 +112,7 @@ export default function InboxDetail() {
     setError('')
     try {
       await uploadAvatar.mutateAsync({ id, file })
+      setTimeout(() => setPreviewKey((k) => k + 1), 1500)
     } catch (err) {
       setError(err.message)
     }
@@ -286,89 +288,30 @@ export default function InboxDetail() {
                       </div>
                     </form>
 
-                    {/* Right: Live Widget Preview */}
-                    <div className="flex flex-col items-center">
-                      <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">Preview</p>
-                      <div className="w-[320px] rounded-2xl overflow-hidden shadow-soft-lg border bg-background">
-                        {/* Widget header */}
-                        <div
-                          className="px-5 pt-5 pb-6"
-                          style={{ backgroundColor: widgetForm.widget_color }}
-                        >
-                          <div className="flex items-start gap-3">
-                            {chatwootData?.avatar_url ? (
-                              <img
-                                src={chatwootData.avatar_url}
-                                alt=""
-                                className="w-10 h-10 rounded-full object-cover border-2 border-white/30 shrink-0"
-                              />
-                            ) : (
-                              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
-                                <ImageIcon size={16} className="text-white/70" />
-                              </div>
-                            )}
-                            <div className="min-w-0">
-                              <h3 className="text-white font-semibold text-lg leading-tight truncate">
-                                {widgetForm.welcome_title || 'Welcome'}
-                              </h3>
-                              <p className="text-white/75 text-sm mt-0.5 line-clamp-2">
-                                {widgetForm.welcome_tagline || 'How can we help you?'}
-                              </p>
-                            </div>
-                          </div>
+                    {/* Right: Live Widget Preview (real Chatwoot widget) */}
+                    {inbox.website_token && (
+                      <div className="flex flex-col items-center">
+                        <div className="flex items-center gap-2 mb-3">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Preview</p>
+                          <button
+                            type="button"
+                            onClick={() => setPreviewKey((k) => k + 1)}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title="Refresh"
+                          >
+                            <RefreshCw size={12} />
+                          </button>
                         </div>
-
-                        {/* Widget body */}
-                        <div className="px-5 py-4">
-                          <div className="flex items-center gap-3 p-3 rounded-xl border hover:shadow-soft-sm transition-shadow cursor-default">
-                            {chatwootData?.avatar_url ? (
-                              <img
-                                src={chatwootData.avatar_url}
-                                alt=""
-                                className="w-8 h-8 rounded-full object-cover shrink-0"
-                              />
-                            ) : (
-                              <div
-                                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold"
-                                style={{ backgroundColor: widgetForm.widget_color }}
-                              >
-                                {(widgetForm.name || 'C')[0].toUpperCase()}
-                              </div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm font-medium truncate">
-                                {widgetForm.name || 'Cardynal'}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                We are Online
-                              </p>
-                            </div>
-                            <ArrowRight
-                              size={16}
-                              className="shrink-0"
-                              style={{ color: widgetForm.widget_color }}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Widget footer */}
-                        <div className="px-5 pb-4 flex justify-center">
-                          <span className="text-[10px] text-muted-foreground">
-                            Powered by Cardynal Chat
-                          </span>
+                        <div className="w-[370px] h-[550px] rounded-2xl overflow-hidden shadow-soft-lg border">
+                          <iframe
+                            key={previewKey}
+                            src={`https://chat.cardynal.io/widget?website_token=${inbox.website_token}`}
+                            className="w-full h-full border-0"
+                            title="Widget preview"
+                          />
                         </div>
                       </div>
-
-                      {/* Floating button preview */}
-                      <div className="mt-4 self-end me-4">
-                        <div
-                          className="w-12 h-12 rounded-full flex items-center justify-center shadow-soft-md cursor-default"
-                          style={{ backgroundColor: widgetForm.widget_color }}
-                        >
-                          <X size={20} className="text-white" />
-                        </div>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 )}
               </CardContent>
