@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon } from 'lucide-react'
+import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon, X, ArrowRight } from 'lucide-react'
 
 export default function InboxDetail() {
   const { id } = useParams()
@@ -164,7 +164,7 @@ export default function InboxDetail() {
         </TabsList>
 
         <TabsContent value="info" className="mt-6 space-y-6">
-          {/* Widget Settings (web channel only) */}
+          {/* Widget Settings + Preview (web channel only) */}
           {isWebChannel && (
             <Card>
               <CardHeader>
@@ -178,8 +178,46 @@ export default function InboxDetail() {
                 {chatwootLoading ? (
                   <div className="text-sm text-muted-foreground">{t('common.loading')}</div>
                 ) : (
-                  <form onSubmit={handleSaveWidget} className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* Left: Settings Form */}
+                    <form onSubmit={handleSaveWidget} className="space-y-5">
+                      {/* Avatar */}
+                      <div className="space-y-2">
+                        <Label>{t('inboxes.avatar')}</Label>
+                        <div className="flex items-center gap-3">
+                          {chatwootData?.avatar_url ? (
+                            <img
+                              src={chatwootData.avatar_url}
+                              alt="Avatar"
+                              className="w-12 h-12 rounded-full object-cover border"
+                            />
+                          ) : (
+                            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center border">
+                              <ImageIcon size={18} className="text-muted-foreground" />
+                            </div>
+                          )}
+                          <input
+                            ref={avatarInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleAvatarUpload}
+                            className="hidden"
+                          />
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="gap-1.5"
+                            onClick={() => avatarInputRef.current?.click()}
+                            disabled={uploadAvatar.isPending}
+                          >
+                            <Upload size={14} />
+                            {uploadAvatar.isPending ? t('common.saving') : t('inboxes.uploadAvatar')}
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Website Name */}
                       <div className="space-y-2">
                         <Label>{t('inboxes.websiteName')}</Label>
                         <Input
@@ -188,16 +226,8 @@ export default function InboxDetail() {
                           placeholder={t('inboxes.namePlaceholder')}
                         />
                       </div>
-                      <div className="space-y-2">
-                        <Label>{t('inboxes.websiteDomain')}</Label>
-                        <Input
-                          value={widgetForm.website_url}
-                          onChange={(e) => setWidgetForm({ ...widgetForm, website_url: e.target.value })}
-                          placeholder="https://monsite.com"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
+
+                      {/* Welcome Heading */}
                       <div className="space-y-2">
                         <Label>{t('inboxes.welcomeTitle')}</Label>
                         <Input
@@ -206,6 +236,8 @@ export default function InboxDetail() {
                           placeholder={t('inboxes.welcomeTitlePlaceholder')}
                         />
                       </div>
+
+                      {/* Welcome Tagline */}
                       <div className="space-y-2">
                         <Label>{t('inboxes.welcomeTagline')}</Label>
                         <Input
@@ -214,82 +246,131 @@ export default function InboxDetail() {
                           placeholder={t('inboxes.welcomeTaglinePlaceholder')}
                         />
                       </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>{t('inboxes.widgetColor')}</Label>
-                      <div className="flex items-center gap-3">
-                        <input
-                          type="color"
-                          value={widgetForm.widget_color}
-                          onChange={(e) => setWidgetForm({ ...widgetForm, widget_color: e.target.value })}
-                          className="w-10 h-10 rounded-md border cursor-pointer p-0.5"
-                        />
+
+                      {/* Website Domain */}
+                      <div className="space-y-2">
+                        <Label>{t('inboxes.websiteDomain')}</Label>
                         <Input
-                          value={widgetForm.widget_color}
-                          onChange={(e) => setWidgetForm({ ...widgetForm, widget_color: e.target.value })}
-                          className="w-[120px] font-mono text-sm"
-                          maxLength={7}
+                          value={widgetForm.website_url}
+                          onChange={(e) => setWidgetForm({ ...widgetForm, website_url: e.target.value })}
+                          placeholder="https://monsite.com"
                         />
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button type="submit" disabled={updateInbox.isPending}>
-                        {updateInbox.isPending ? t('common.saving') : t('common.save')}
-                      </Button>
-                      {widgetSaved && (
-                        <span className="text-sm text-emerald-600">{t('common.saved')}</span>
-                      )}
-                    </div>
-                  </form>
-                )}
-              </CardContent>
-            </Card>
-          )}
 
-          {/* Avatar (web channel only) */}
-          {isWebChannel && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <ImageIcon size={16} />
-                  {t('inboxes.avatar')}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-4">
-                  {chatwootData?.avatar_url ? (
-                    <img
-                      src={chatwootData.avatar_url}
-                      alt="Avatar"
-                      className="w-16 h-16 rounded-full object-cover border"
-                    />
-                  ) : (
-                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center border">
-                      <ImageIcon size={24} className="text-muted-foreground" />
+                      {/* Widget Color */}
+                      <div className="space-y-2">
+                        <Label>{t('inboxes.widgetColor')}</Label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="color"
+                            value={widgetForm.widget_color}
+                            onChange={(e) => setWidgetForm({ ...widgetForm, widget_color: e.target.value })}
+                            className="w-9 h-9 rounded-md border cursor-pointer p-0.5"
+                          />
+                          <Input
+                            value={widgetForm.widget_color}
+                            onChange={(e) => setWidgetForm({ ...widgetForm, widget_color: e.target.value })}
+                            className="w-[100px] font-mono text-sm"
+                            maxLength={7}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-1">
+                        <Button type="submit" disabled={updateInbox.isPending}>
+                          {updateInbox.isPending ? t('common.saving') : t('common.save')}
+                        </Button>
+                        {widgetSaved && (
+                          <span className="text-sm text-emerald-600">{t('common.saved')}</span>
+                        )}
+                      </div>
+                    </form>
+
+                    {/* Right: Live Widget Preview */}
+                    <div className="flex flex-col items-center">
+                      <p className="text-xs font-medium text-muted-foreground mb-3 uppercase tracking-wider">Preview</p>
+                      <div className="w-[320px] rounded-2xl overflow-hidden shadow-soft-lg border bg-background">
+                        {/* Widget header */}
+                        <div
+                          className="px-5 pt-5 pb-6"
+                          style={{ backgroundColor: widgetForm.widget_color }}
+                        >
+                          <div className="flex items-start gap-3">
+                            {chatwootData?.avatar_url ? (
+                              <img
+                                src={chatwootData.avatar_url}
+                                alt=""
+                                className="w-10 h-10 rounded-full object-cover border-2 border-white/30 shrink-0"
+                              />
+                            ) : (
+                              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                                <ImageIcon size={16} className="text-white/70" />
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <h3 className="text-white font-semibold text-lg leading-tight truncate">
+                                {widgetForm.welcome_title || 'Welcome'}
+                              </h3>
+                              <p className="text-white/75 text-sm mt-0.5 line-clamp-2">
+                                {widgetForm.welcome_tagline || 'How can we help you?'}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Widget body */}
+                        <div className="px-5 py-4">
+                          <div className="flex items-center gap-3 p-3 rounded-xl border hover:shadow-soft-sm transition-shadow cursor-default">
+                            {chatwootData?.avatar_url ? (
+                              <img
+                                src={chatwootData.avatar_url}
+                                alt=""
+                                className="w-8 h-8 rounded-full object-cover shrink-0"
+                              />
+                            ) : (
+                              <div
+                                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold"
+                                style={{ backgroundColor: widgetForm.widget_color }}
+                              >
+                                {(widgetForm.name || 'C')[0].toUpperCase()}
+                              </div>
+                            )}
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">
+                                {widgetForm.name || 'Cardynal'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                We are Online
+                              </p>
+                            </div>
+                            <ArrowRight
+                              size={16}
+                              className="shrink-0"
+                              style={{ color: widgetForm.widget_color }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Widget footer */}
+                        <div className="px-5 pb-4 flex justify-center">
+                          <span className="text-[10px] text-muted-foreground">
+                            Powered by Cardynal Chat
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Floating button preview */}
+                      <div className="mt-4 self-end me-4">
+                        <div
+                          className="w-12 h-12 rounded-full flex items-center justify-center shadow-soft-md cursor-default"
+                          style={{ backgroundColor: widgetForm.widget_color }}
+                        >
+                          <X size={20} className="text-white" />
+                        </div>
+                      </div>
                     </div>
-                  )}
-                  <div className="space-y-2">
-                    <input
-                      ref={avatarInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleAvatarUpload}
-                      className="hidden"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5"
-                      onClick={() => avatarInputRef.current?.click()}
-                      disabled={uploadAvatar.isPending}
-                    >
-                      <Upload size={14} />
-                      {uploadAvatar.isPending ? t('common.saving') : t('inboxes.uploadAvatar')}
-                    </Button>
-                    <p className="text-xs text-muted-foreground">PNG, JPG — max 5 MB</p>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           )}
