@@ -2,7 +2,7 @@ import { routeMessage } from './router.js'
 import { runPlaybookAgent } from './playbook-agent.js'
 import { runEscalationAgent } from './escalation-agent.js'
 import { getConversationHistory } from './memory.js'
-import { sendMessage, assignConversation, sendPrivateNote, setConversationStatus } from './chatwoot-messaging.js'
+import { sendMessage, assignConversation, sendPrivateNote } from './chatwoot-messaging.js'
 import { createOrFindSession, logMessage, closeSession } from './session-logger.js'
 import { decrypt } from '../crypto.js'
 
@@ -233,13 +233,6 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
 
   // Send response to Chatwoot
   await sendMessage(accountId, conversationId, response, botToken)
-
-  // Keep conversation open (prevent Chatwoot auto-resolve)
-  try {
-    await setConversationStatus(accountId, conversationId, 'pending', botToken)
-  } catch (e) {
-    console.warn(`[Engine] Could not reset status for conversation ${conversationId}:`, e.message)
-  }
 
   // Log user message + agent response
   await logMessage(supabase, {

@@ -76,6 +76,44 @@ export default function InboxDetail() {
   const sessions = sessionData?.sessions || []
   const isLoading = inboxLoading || agentsLoading || sessionsLoading
 
+  // Build preview HTML using Chatwoot SDK (prevents auto-close that happens with raw widget URL)
+  const widgetPreviewSrc = inbox?.website_token ? `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #f5f5f5; overflow: hidden; }
+  .woot-widget-holder {
+    position: fixed !important; inset: 0 !important;
+    width: 100% !important; height: 100% !important;
+    max-height: 100% !important; border-radius: 0 !important;
+    box-shadow: none !important;
+  }
+  .woot-widget-holder iframe { border-radius: 0 !important; }
+  .woot--bubble-holder { display: none !important; }
+</style>
+</head>
+<body>
+<script>
+  (function(d, t) {
+    var g = d.createElement(t);
+    g.src = "https://chat.cardynal.io/packs/js/sdk.js";
+    g.async = true;
+    d.body.appendChild(g);
+    g.onload = function() {
+      window.chatwootSDK.run({
+        websiteToken: "${inbox.website_token}",
+        baseUrl: "https://chat.cardynal.io"
+      });
+    };
+  })(document, "script");
+  window.addEventListener("chatwoot:ready", function() {
+    window.$chatwoot.toggle("open");
+  });
+</script>
+</body>
+</html>` : null
+
   const handleAssignAgent = async (agentBotId) => {
     try {
       await assignAgent.mutateAsync({ inboxId: id, agentBotId })
@@ -305,7 +343,7 @@ export default function InboxDetail() {
                         <div className="w-[370px] h-[550px] rounded-2xl overflow-hidden shadow-soft-lg border">
                           <iframe
                             key={previewKey}
-                            src={`https://chat.cardynal.io/widget?website_token=${inbox.website_token}`}
+                            srcdoc={widgetPreviewSrc}
                             className="w-full h-full border-0"
                             title="Widget preview"
                           />
