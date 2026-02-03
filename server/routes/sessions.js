@@ -15,17 +15,49 @@ router.get('/sessions', checkRole('admin'), async (req, res) => {
 
     if (allErr) throw allErr
 
+    // Fetch all assistant messages for stats (total AI messages + first response times)
+    const allSessionIds = allData.map((s) => s.id)
+    let assistantMsgs = []
+    if (allSessionIds.length > 0) {
+      const { data: aMsgs } = await req.supabase
+        .from('conversation_messages')
+        .select('session_id, created_at')
+        .eq('user_id', req.user.user_id)
+        .eq('role', 'assistant')
+        .in('session_id', allSessionIds)
+        .order('created_at', { ascending: true })
+        .limit(50000)
+      assistantMsgs = aMsgs || []
+    }
+
+    // Compute first response time per session (first assistant message - session created_at)
+    const sessionById = Object.fromEntries(allData.map((s) => [s.id, s]))
+    const firstResponseMap = {}
+    for (const msg of assistantMsgs) {
+      if (!firstResponseMap[msg.session_id]) {
+        firstResponseMap[msg.session_id] = msg.created_at
+      }
+    }
+    const responseTimes = []
+    for (const [sid, firstMsgTime] of Object.entries(firstResponseMap)) {
+      const session = sessionById[sid]
+      if (session) {
+        const diff = Math.round((new Date(firstMsgTime) - new Date(session.created_at)) / 1000)
+        if (diff >= 0) responseTimes.push(diff)
+      }
+    }
+
     // Global stats (always computed from full dataset)
-    const withConfidence = allData.filter((s) => s.ai_confidence != null)
+    const resolved = allData.filter((s) => s.billable).length
     const stats = {
       total: allData.length,
-      open: allData.filter((s) => s.status === 'open').length,
-      closed: allData.filter((s) => s.status === 'closed').length,
-      billable: allData.filter((s) => s.billable).length,
-      avg_confidence:
-        withConfidence.length > 0
-          ? +(withConfidence.reduce((sum, s) => sum + s.ai_confidence, 0) / withConfidence.length).toFixed(2)
-          : null,
+      total_ai_messages: assistantMsgs.length,
+      resolved,
+      escalated: allData.filter((s) => s.ai_reason?.startsWith('ESCALATION:')).length,
+      resolution_rate: allData.length > 0 ? +(resolved / allData.length * 100).toFixed(0) : null,
+      avg_first_response: responseTimes.length > 0
+        ? Math.round(responseTimes.reduce((a, b) => a + b, 0) / responseTimes.length)
+        : null,
     }
 
     // Apply filters for table view

@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Database, Bot, Inbox, Users, MessageSquare, CheckCircle, CircleDot, Receipt, Brain, User, X, BookOpen, Wrench, Search, AlertTriangle } from 'lucide-react'
+import { Database, Bot, Inbox, Users, MessageSquare, CheckCircle, CircleDot, Brain, User, X, BookOpen, Wrench, Search, AlertTriangle, ArrowUpRight, Clock, TrendingUp } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -68,11 +68,12 @@ export default function Dashboard() {
   ]
 
   const sessionStatCards = [
-    { labelKey: 'sessions.total', value: sessionStats.total, icon: MessageSquare },
-    { labelKey: 'sessions.open', value: sessionStats.open, icon: CircleDot },
-    { labelKey: 'sessions.closed', value: sessionStats.closed, icon: CheckCircle },
-    { labelKey: 'sessions.billable', value: sessionStats.billable, icon: Receipt },
-    { labelKey: 'sessions.avgConfidence', value: sessionStats.avg_confidence != null ? `${Math.round(sessionStats.avg_confidence * 100)}%` : '-', icon: Brain },
+    { labelKey: 'sessions.totalAiMessages', value: sessionStats.total_ai_messages, icon: MessageSquare },
+    { labelKey: 'sessions.totalSessions', value: sessionStats.total, icon: CircleDot },
+    { labelKey: 'sessions.resolved', value: sessionStats.resolved, icon: CheckCircle },
+    { labelKey: 'sessions.escalated', value: sessionStats.escalated, icon: ArrowUpRight },
+    { labelKey: 'sessions.resolutionRate', value: sessionStats.resolution_rate != null ? `${sessionStats.resolution_rate}%` : '-', icon: TrendingUp },
+    { labelKey: 'sessions.avgFirstResponse', value: formatDuration(sessionStats.avg_first_response), icon: Clock },
   ]
 
   const cards = user?.role === 'super_admin' ? superAdminCards : adminCards
@@ -233,7 +234,7 @@ export default function Dashboard() {
         <div className="mt-10">
           <h2 className="text-lg font-semibold tracking-tight mb-4">{t('sessions.title')}</h2>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
             {sessionStatCards.map((card) => {
               const Icon = card.icon
               return (
@@ -281,6 +282,7 @@ export default function Dashboard() {
                 <TableRow>
                   <TableHead>{t('sessions.inbox')}</TableHead>
                   <TableHead>{t('common.status')}</TableHead>
+                  <TableHead>{t('sessions.escalatedCol')}</TableHead>
                   <TableHead>{t('sessions.messages')}</TableHead>
                   <TableHead>{t('sessions.billableCol')}</TableHead>
                   <TableHead>{t('sessions.confidence')}</TableHead>
@@ -291,7 +293,7 @@ export default function Dashboard() {
               <TableBody>
                 {sessions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-6">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground py-6">
                       {t('sessions.empty')}
                     </TableCell>
                   </TableRow>
@@ -303,6 +305,13 @@ export default function Dashboard() {
                         <Badge variant={s.status === 'open' ? 'default' : 'secondary'}>
                           {s.status === 'open' ? t('sessions.statusOpen') : t('sessions.statusClosed')}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {s.ai_reason?.startsWith('ESCALATION:') ? (
+                          <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 font-medium">
+                            <AlertTriangle size={12} /> {t('common.yes')}
+                          </span>
+                        ) : '-'}
                       </TableCell>
                       <TableCell>{s.message_count}</TableCell>
                       <TableCell>{s.billable ? t('common.yes') : t('common.no')}</TableCell>
