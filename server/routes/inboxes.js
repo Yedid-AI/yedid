@@ -269,14 +269,14 @@ router.get('/inboxes/:id/chatwoot', checkRole('admin'), async (req, res) => {
       .limit(1)
     const userToken = accounts?.[0]?.access_token || null
 
-    const chatwootInbox = await getInbox(inbox.chatwoot_account_id, inbox.inbox_id, userToken)
+    const cw = await getInbox(inbox.chatwoot_account_id, inbox.inbox_id, userToken)
     res.json({
-      name: chatwootInbox.name,
-      avatar_url: chatwootInbox.avatar_url || null,
-      widget_color: chatwootInbox.widget_color || null,
-      website_url: chatwootInbox.web_widget_script?.website_url || chatwootInbox.channel?.website_url || null,
-      welcome_title: chatwootInbox.web_widget_script?.welcome_title || chatwootInbox.channel?.welcome_title || null,
-      welcome_tagline: chatwootInbox.web_widget_script?.welcome_tagline || chatwootInbox.channel?.welcome_tagline || null,
+      name: cw.name,
+      avatar_url: cw.avatar_url || null,
+      widget_color: cw.widget_color || null,
+      website_url: cw.website_url || cw.channel?.website_url || null,
+      welcome_title: cw.welcome_title || cw.channel?.welcome_title || null,
+      welcome_tagline: cw.welcome_tagline || cw.channel?.welcome_tagline || null,
     })
   } catch (err) {
     console.error('[inboxes/chatwoot]', err.message)
@@ -309,11 +309,11 @@ router.put('/inboxes/:id', checkRole('admin'), async (req, res) => {
     // Build Chatwoot update payload
     const updates = {}
     if (name !== undefined) updates.name = name
+    if (widget_color !== undefined) updates.widget_color = widget_color
     const channel = {}
-    if (website_url !== undefined) channel.website_url = website_url
+    if (website_url) channel.website_url = website_url
     if (welcome_title !== undefined) channel.welcome_title = welcome_title
     if (welcome_tagline !== undefined) channel.welcome_tagline = welcome_tagline
-    if (widget_color !== undefined) channel.widget_color = widget_color
     if (Object.keys(channel).length > 0) updates.channel = channel
 
     await updateInbox(inbox.chatwoot_account_id, inbox.inbox_id, updates, userToken)
@@ -448,7 +448,7 @@ router.get('/inboxes/:id/members', checkRole('admin'), async (req, res) => {
   }
 })
 
-// PUT /api/inboxes/:id/members — update inbox members on Chatwoot
+// PUT /api/inboxes/:id/members — update inbox members on Chatwoot (full replace via PATCH)
 router.put('/inboxes/:id/members', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
@@ -474,9 +474,10 @@ router.put('/inboxes/:id/members', checkRole('admin'), async (req, res) => {
       .limit(1)
     const userToken = accounts?.[0]?.access_token || null
 
+    // PATCH replaces the full member list (removes members not in user_ids)
     await accountApi(
       `/api/v1/accounts/${inbox.chatwoot_account_id}/inbox_members`,
-      'POST',
+      'PATCH',
       { inbox_id: inbox.inbox_id, user_ids },
       userToken
     )
