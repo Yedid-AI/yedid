@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { LayoutGrid, List } from 'lucide-react'
 
 export default function EscalationLibrary() {
   const { t } = useI18n()
@@ -18,6 +19,7 @@ export default function EscalationLibrary() {
   const createEscalation = useCreateEscalationLibrary()
   const updateEscalation = useUpdateEscalationLibrary()
   const deleteEscalation = useDeleteEscalationLibrary()
+  const [viewMode, setViewMode] = useState('card')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [form, setForm] = useState({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', is_active: true })
@@ -81,6 +83,15 @@ export default function EscalationLibrary() {
           <h1 className="text-2xl font-semibold tracking-tight">{t('escalation.libraryTitle')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('escalation.librarySubtitle')}</p>
         </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 border rounded-lg p-0.5">
+            <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('card')}>
+              <LayoutGrid size={14} />
+            </button>
+            <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('table')}>
+              <List size={14} />
+            </button>
+          </div>
         <Sheet open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
           <SheetTrigger asChild>
             <Button>{t('common.new')}</Button>
@@ -123,46 +134,42 @@ export default function EscalationLibrary() {
             </div>
           </SheetContent>
         </Sheet>
+        </div>
       </div>
 
       {error && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
       )}
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('common.title')}</TableHead>
-              <TableHead>Trigger</TableHead>
-              <TableHead>{t('common.audience')}</TableHead>
-              <TableHead>{t('common.active')}</TableHead>
-              <TableHead>{t('common.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rules.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('escalation.empty')}</TableCell></TableRow>
-            ) : (
-              rules.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="font-medium">{r.title}</TableCell>
-                  <TableCell className="truncate max-w-[250px]">{r.trigger_description || '-'}</TableCell>
-                  <TableCell>{r.audience || '-'}</TableCell>
-                  <TableCell>
+      {viewMode === 'card' ? (
+        rules.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12">{t('escalation.empty')}</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {rules.map((r) => (
+              <Card key={r.id} className="hover:shadow-soft-md transition-all py-0 gap-0">
+                <div className="p-[15px]">
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-sm truncate leading-tight">{r.title}</h3>
+                      <span className="text-[11px] text-muted-foreground">{r.audience || '-'}</span>
+                    </div>
                     <Badge
                       variant={r.is_active ? 'default' : 'secondary'}
-                      className="cursor-pointer"
+                      className="cursor-pointer shrink-0"
                       onClick={() => toggleActive(r)}
                     >
                       {r.is_active ? t('common.active') : t('common.inactive')}
                     </Badge>
-                  </TableCell>
-                  <TableCell className="flex gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => handleEdit(r)}>{t('common.edit')}</Button>
+                  </div>
+                  {r.trigger_description && (
+                    <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2.5">{r.trigger_description}</p>
+                  )}
+                  <div className="flex items-center justify-end gap-1 border-t pt-2 -mx-1">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleEdit(r)}>{t('common.edit')}</Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive">{t('common.delete')}</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
@@ -175,13 +182,67 @@ export default function EscalationLibrary() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('common.title')}</TableHead>
+                <TableHead>Trigger</TableHead>
+                <TableHead>{t('common.audience')}</TableHead>
+                <TableHead>{t('common.active')}</TableHead>
+                <TableHead>{t('common.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rules.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('escalation.empty')}</TableCell></TableRow>
+              ) : (
+                rules.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell className="font-medium">{r.title}</TableCell>
+                    <TableCell className="truncate max-w-[250px]">{r.trigger_description || '-'}</TableCell>
+                    <TableCell>{r.audience || '-'}</TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={r.is_active ? 'default' : 'secondary'}
+                        className="cursor-pointer"
+                        onClick={() => toggleActive(r)}
+                      >
+                        {r.is_active ? t('common.active') : t('common.inactive')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="flex gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => handleEdit(r)}>{t('common.edit')}</Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{t('escalation.deleteTitle')}</AlertDialogTitle>
+                            <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                            <AlertDialogAction variant="destructive" onClick={() => handleDelete(r.id)}>{t('common.delete')}</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
     </div>
   )
 }

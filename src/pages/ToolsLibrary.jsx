@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { LayoutGrid, List } from 'lucide-react'
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE']
 
@@ -20,6 +21,7 @@ export default function ToolsLibrary() {
   const createTool = useCreateToolLibrary()
   const updateTool = useUpdateToolLibrary()
   const deleteTool = useDeleteToolLibrary()
+  const [viewMode, setViewMode] = useState('card')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
   const [form, setForm] = useState({
@@ -86,6 +88,15 @@ export default function ToolsLibrary() {
           <h1 className="text-2xl font-semibold tracking-tight">{t('tools.libraryTitle')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('tools.librarySubtitle')}</p>
         </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5 border rounded-lg p-0.5">
+            <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'card' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('card')}>
+              <LayoutGrid size={14} />
+            </button>
+            <button className={`p-1.5 rounded-md transition-colors ${viewMode === 'table' ? 'bg-accent text-foreground' : 'text-muted-foreground hover:text-foreground'}`} onClick={() => setViewMode('table')}>
+              <List size={14} />
+            </button>
+          </div>
         <Sheet open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
           <SheetTrigger asChild>
             <Button>{t('common.new')}</Button>
@@ -145,38 +156,34 @@ export default function ToolsLibrary() {
             </div>
           </SheetContent>
         </Sheet>
+        </div>
       </div>
 
       {error && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
       )}
 
-      <Card>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('common.name')}</TableHead>
-              <TableHead>{t('tools.method')}</TableHead>
-              <TableHead>{t('tools.url')}</TableHead>
-              <TableHead>Description</TableHead>
-              <TableHead>{t('common.actions')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {tools.length === 0 ? (
-              <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('tools.empty')}</TableCell></TableRow>
-            ) : (
-              tools.map((tool) => (
-                <TableRow key={tool.id}>
-                  <TableCell className="font-medium">{tool.name}</TableCell>
-                  <TableCell><Badge variant="outline" className="font-mono">{tool.method}</Badge></TableCell>
-                  <TableCell className="text-muted-foreground truncate max-w-[200px]">{tool.url}</TableCell>
-                  <TableCell className="truncate max-w-[250px]">{tool.description}</TableCell>
-                  <TableCell className="flex gap-2">
-                    <Button size="sm" variant="ghost" onClick={() => handleEdit(tool)}>{t('common.edit')}</Button>
+      {viewMode === 'card' ? (
+        tools.length === 0 ? (
+          <p className="text-center text-muted-foreground py-12">{t('tools.empty')}</p>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {tools.map((tool) => (
+              <Card key={tool.id} className="hover:shadow-soft-md transition-all py-0 gap-0">
+                <div className="p-[15px]">
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-sm truncate leading-tight">{tool.name}</h3>
+                      <p className="text-[11px] text-muted-foreground truncate">{tool.url}</p>
+                    </div>
+                    <Badge variant="outline" className="font-mono shrink-0">{tool.method}</Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2.5">{tool.description}</p>
+                  <div className="flex items-center justify-end gap-1 border-t pt-2 -mx-1">
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleEdit(tool)}>{t('common.edit')}</Button>
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive">{t('common.delete')}</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
@@ -189,13 +196,59 @@ export default function ToolsLibrary() {
                         </AlertDialogFooter>
                       </AlertDialogContent>
                     </AlertDialog>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </Card>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )
+      ) : (
+        <Card>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('common.name')}</TableHead>
+                <TableHead>{t('tools.method')}</TableHead>
+                <TableHead>{t('tools.url')}</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>{t('common.actions')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {tools.length === 0 ? (
+                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('tools.empty')}</TableCell></TableRow>
+              ) : (
+                tools.map((tool) => (
+                  <TableRow key={tool.id}>
+                    <TableCell className="font-medium">{tool.name}</TableCell>
+                    <TableCell><Badge variant="outline" className="font-mono">{tool.method}</Badge></TableCell>
+                    <TableCell className="text-muted-foreground truncate max-w-[200px]">{tool.url}</TableCell>
+                    <TableCell className="truncate max-w-[250px]">{tool.description}</TableCell>
+                    <TableCell className="flex gap-2">
+                      <Button size="sm" variant="ghost" onClick={() => handleEdit(tool)}>{t('common.edit')}</Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>{t('tools.deleteTitle')}</AlertDialogTitle>
+                            <AlertDialogDescription>{t('tools.deleteDescription')}</AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                            <AlertDialogAction variant="destructive" onClick={() => handleDelete(tool.id)}>{t('common.delete')}</AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </Card>
+      )}
     </div>
   )
 }
