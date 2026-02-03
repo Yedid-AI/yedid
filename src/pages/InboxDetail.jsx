@@ -90,6 +90,7 @@ export default function InboxDetail() {
   const isLoading = inboxLoading || agentsLoading || sessionsLoading
 
   // Build preview HTML using Chatwoot SDK (prevents auto-close that happens with raw widget URL)
+  // darkMode + locale must be set via window.chatwootSettings BEFORE chatwootSDK.run()
   const widgetPreviewSrc = inbox?.website_token ? `<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -102,12 +103,22 @@ export default function InboxDetail() {
     max-height: 100% !important; border-radius: 0 !important;
     box-shadow: none !important;
   }
-  .woot-widget-holder iframe { border-radius: 0 !important; }
+  .woot-widget-holder iframe {
+    border-radius: 0 !important;
+    color-scheme: ${dark ? 'dark' : 'light'};
+  }
   .woot--bubble-holder { display: none !important; }
 </style>
 </head>
 <body>
 <script>
+  window.chatwootSettings = {
+    hideMessageBubble: true,
+    position: "right",
+    locale: "${widgetLocale}",
+    type: "standard",
+    darkMode: "${dark ? 'dark' : 'light'}"
+  };
   (function(d, t) {
     var g = d.createElement(t);
     g.src = "https://chat.cardynal.io/packs/js/sdk.js";
@@ -116,9 +127,7 @@ export default function InboxDetail() {
     g.onload = function() {
       window.chatwootSDK.run({
         websiteToken: "${inbox.website_token}",
-        baseUrl: "https://chat.cardynal.io",
-        darkMode: "${dark ? 'dark' : 'light'}",
-        locale: "${widgetLocale}"
+        baseUrl: "https://chat.cardynal.io"
       });
     };
   })(document, "script");
@@ -507,6 +516,13 @@ export default function InboxDetail() {
               <CardContent>
                 <pre className="p-3 bg-muted rounded-md text-xs font-mono overflow-x-auto">
 {`<script>
+  window.chatwootSettings = {
+    hideMessageBubble: false,
+    position: "right",
+    locale: "${widgetLocale}",
+    type: "standard",
+    darkMode: "auto"
+  };
   (function(d,t) {
     var BASE_URL="https://chat.cardynal.io";
     var g=d.createElement(t),s=d.getElementsByTagName(t)[0];
@@ -517,8 +533,7 @@ export default function InboxDetail() {
     g.onload=function(){
       window.chatwootSDK.run({
         websiteToken: '${inbox.website_token}',
-        baseUrl: BASE_URL,
-        locale: '${widgetLocale}'
+        baseUrl: BASE_URL
       })
     }
   })(document,"script");
