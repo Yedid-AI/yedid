@@ -2,8 +2,8 @@
 import { getSetting } from './settings.js'
 
 function getConfig() {
-  const dsnUrl = getSetting('UNIPILE_DSN_URL')
-  const apiKey = getSetting('UNIPILE_API_KEY')
+  const dsnUrl = (getSetting('UNIPILE_DSN_URL') || '').trim().replace(/\/+$/, '')
+  const apiKey = (getSetting('UNIPILE_API_KEY') || '').trim()
   if (!dsnUrl || !apiKey) {
     throw new Error('Unipile non configure. Ajoutez UNIPILE_DSN_URL et UNIPILE_API_KEY dans Environnement.')
   }
@@ -23,7 +23,9 @@ async function unipileApi(path, method = 'GET', body = null) {
     opts.headers['content-type'] = 'application/json'
     opts.body = JSON.stringify(body)
   }
-  const res = await fetch(`${dsnUrl}${path}`, opts)
+  const url = `${dsnUrl}${path}`
+  console.log(`[unipile] ${method} ${url} (key: ${apiKey.slice(0, 4)}...${apiKey.slice(-4)}, len=${apiKey.length})`)
+  const res = await fetch(url, opts)
   if (!res.ok) {
     const text = await res.text()
     throw new Error(`Unipile (${res.status}): ${text}`)
