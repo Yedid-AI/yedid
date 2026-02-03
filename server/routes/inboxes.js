@@ -5,6 +5,8 @@ import multer from 'multer'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 import { getSetting } from '../settings.js'
+import { clearConfigCache } from '../engine/index.js'
+import { getAccount, createHostedAuthLink } from '../unipile.js'
 
 const router = Router()
 
@@ -489,6 +491,115 @@ router.put('/inboxes/:id/members', checkRole('admin'), async (req, res) => {
   } catch (err) {
     console.error('[inboxes/members]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// PUT /api/inboxes/:id/ai-settings — update AI toggle + schedule
+router.put('/inboxes/:id/ai-settings', checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { ai_enabled, ai_schedule, ai_timezone } = req.body
+
+    // Validate schedule structure if provided
+    if (ai_schedule !== undefined && ai_schedule !== null) {
+      if (typeof ai_schedule !== 'object') {
+        return res.status(400).json({ error: 'Format de planning invalide' })
+      }
+      for (const [key, value] of Object.entries(ai_schedule)) {
+        const dayNum = parseInt(key)
+        if (isNaN(dayNum) || dayNum < 0 || dayNum > 6) {
+          return res.status(400).json({ error: 'Format de planning invalide' })
+        }
+        if (!Array.isArray(value) || value.length !== 24 || !value.every(v => typeof v === 'boolean')) {
+          return res.status(400).json({ error: 'Format de planning invalide' })
+        }
+      }
+    }
+
+    const dbUpdates = { updated_at: new Date().toISOString() }
+    if (ai_enabled !== undefined) dbUpdates.ai_enabled = ai_enabled
+    if (ai_schedule !== undefined) dbUpdates.ai_schedule = ai_schedule
+    if (ai_timezone !== undefined) dbUpdates.ai_timezone = ai_timezone
+
+    const { data, error } = await req.supabase
+      .from('inboxes')
+      .update(dbUpdates)
+      .eq('id', id)
+      .eq('user_id', req.user.user_id)
+      .select('*, agent_bots(id, name)')
+      .single()
+
+    if (error) throw error
+    if (!data) return res.status(404).json({ error: 'Inbox introuvable' })
+
+    clearConfigCache()
+
+    res.json({ inbox: data })
+  } catch (err) {
+    console.error('[inboxes/ai-settings]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// GET /api/inboxes/:id/whatsapp-status — check WhatsApp connection status via Unipile
+router.get('/inboxes/:id/whatsapp-status', checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { data: inbox, error } = await req.supabase
+      .from('inboxes')
+      .select('channel_type, unipile_account_id, phone_number')
+      .eq('id', id)
+      .eq('user_id', req.user.user_id)
+      .single()
+
+    if (error || !inbox) return res.status(404).json({ error: 'Inbox introuvable' })
+    if (inbox.channel_type !== 'whatsapp') return res.status(400).json({ error: 'Pas une inbox WhatsApp' })
+    if (!inbox.unipile_account_id) return res.status(400).json({ error: 'Pas de compte Unipile associe' })
+
+    const account = await getAccount(inbox.unipile_account_id)
+    res.json({
+      status: account.status || 'UNKNOWN',
+      phone_number: inbox.phone_number || account?.connection_params?.im?.phone_number || '',
+    })
+  } catch (err) {
+    console.error('[inboxes/whatsapp-status]', err.message)
+    // Unipile errors (404 = deleted account, etc.) — return ERROR status
+    res.json({ status: 'ERROR', error: err.message })
+  }
+})
+
+// POST /api/inboxes/:id/whatsapp-reconnect — generate reconnect link for WhatsApp
+router.post('/inboxes/:id/whatsapp-reconnect', checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { data: inbox, error } = await req.supabase
+      .from('inboxes')
+      .select('channel_type, unipile_account_id')
+      .eq('id', id)
+      .eq('user_id', req.user.user_id)
+      .single()
+
+    if (error || !inbox) return res.status(404).json({ error: 'Inbox introuvable' })
+    if (inbox.channel_type !== 'whatsapp') return res.status(400).json({ error: 'Pas une inbox WhatsApp' })
+    if (!inbox.unipile_account_id) return res.status(400).json({ error: 'Pas de compte Unipile associe' })
+
+    const appBaseUrl = getSetting('APP_BASE_URL')
+    const result = await createHostedAuthLink({
+      callbackUrl: `${appBaseUrl}/inboxes?whatsapp=reconnected`,
+      notifyUrl: `${appBaseUrl}/api/webhook/unipile/account`,
+      name: String(req.user.user_id),
+      reconnectAccountId: inbox.unipile_account_id,
+    })
+
+    let url = result.url
+    if (url && url.includes('account.unipile.com')) {
+      url = url.replace('account.unipile.com', 'auth.cardynal.io')
+    }
+
+    res.json({ url })
+  } catch (err) {
+    console.error('[inboxes/whatsapp-reconnect]', err.message)
+    res.status(500).json({ error: err.message })
   }
 })
 

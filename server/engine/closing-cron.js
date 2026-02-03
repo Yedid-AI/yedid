@@ -128,7 +128,7 @@ export async function runClosingCycle(supabase) {
   // 1. Find all open sessions
   const { data: openSessions, error: sessErr } = await supabase
     .from('sessions')
-    .select('id, user_id')
+    .select('id, user_id, ai_reason')
     .eq('status', 'open')
 
   if (sessErr || !openSessions || openSessions.length === 0) return
@@ -139,6 +139,14 @@ export async function runClosingCycle(supabase) {
 
   for (const session of openSessions) {
     try {
+      // Skip LLM billing analysis for preview/test sessions — close directly
+      if (session.ai_reason?.startsWith('PREVIEW')) {
+        await closeSession(supabase, session.id, session.ai_reason, false, 1.0)
+        closedCount++
+        console.log(`[Closing] Session ${session.id} → PREVIEW/TEST (skipped billing analysis)`)
+        continue
+      }
+
       // 2. Get the last message timestamp
       const { data: lastMsgs } = await supabase
         .from('conversation_messages')

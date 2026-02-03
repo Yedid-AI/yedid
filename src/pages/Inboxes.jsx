@@ -63,7 +63,10 @@ export default function Inboxes() {
     try {
       const data = await connectWhatsApp.mutateAsync()
       if (data.url) {
-        window.open(data.url, '_blank')
+        const w = 480, h = 720
+        const left = window.screenX + Math.round((window.outerWidth - w) / 2)
+        const top = window.screenY + Math.round((window.outerHeight - h) / 2)
+        window.open(data.url, 'whatsapp-auth', `width=${w},height=${h},left=${left},top=${top}`)
         setDialogOpen(false)
         resetDialog()
       }

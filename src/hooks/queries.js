@@ -345,6 +345,25 @@ export function useConnectWhatsApp() {
   })
 }
 
+export function useWhatsAppStatus(id) {
+  return useQuery({
+    queryKey: queryKeys.whatsappStatus(id),
+    queryFn: () => api.get(`/inboxes/${id}/whatsapp-status`),
+    enabled: !!id,
+    refetchInterval: 60_000,
+  })
+}
+
+export function useWhatsAppReconnect() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.post(`/inboxes/${id}/whatsapp-reconnect`),
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: queryKeys.whatsappStatus(id) })
+    },
+  })
+}
+
 export function useInboxChatwoot(id) {
   return useQuery({
     queryKey: queryKeys.inboxChatwoot(id),
@@ -402,6 +421,17 @@ export function useUpdateInboxMembers() {
     mutationFn: ({ id, user_ids }) => api.put(`/inboxes/${id}/members`, { user_ids }),
     onSuccess: (_, { id }) => {
       qc.invalidateQueries({ queryKey: queryKeys.inboxMembers(id) })
+    },
+  })
+}
+
+export function useUpdateInboxAiSettings() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }) => api.put(`/inboxes/${id}/ai-settings`, body),
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: queryKeys.inboxes })
+      qc.invalidateQueries({ queryKey: queryKeys.inbox(id) })
     },
   })
 }

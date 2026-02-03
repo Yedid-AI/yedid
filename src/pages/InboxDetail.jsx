@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useInbox, useAgents, useSessions, useAssignAgent, useDeleteInbox, useInboxChatwoot, useUpdateInbox, useUploadInboxAvatar, useChatwootAgents, useInboxMembers, useUpdateInboxMembers } from '../hooks/queries'
+import { useInbox, useAgents, useSessions, useAssignAgent, useDeleteInbox, useInboxChatwoot, useUpdateInbox, useUploadInboxAvatar, useChatwootAgents, useInboxMembers, useUpdateInboxMembers, useUpdateInboxAiSettings, useWhatsAppStatus, useWhatsAppReconnect } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { useTheme } from '../lib/theme'
 import { localeConfig } from '../locales/index.js'
@@ -14,7 +14,20 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
-import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon, RefreshCw, Globe } from 'lucide-react'
+import { api } from '../lib/api'
+import { Switch } from '@/components/ui/switch'
+import ScheduleGrid from '@/components/inbox/ScheduleGrid'
+import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon, RefreshCw, Globe, Copy, Check, ExternalLink, Bot, Wifi, WifiOff, Loader2, Phone } from 'lucide-react'
+
+const COMMON_TIMEZONES = [
+  'UTC',
+  'Asia/Jerusalem', 'Asia/Dubai', 'Asia/Kolkata', 'Asia/Shanghai', 'Asia/Tokyo', 'Asia/Singapore', 'Asia/Hong_Kong',
+  'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Madrid', 'Europe/Rome', 'Europe/Moscow', 'Europe/Istanbul',
+  'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles', 'America/Toronto', 'America/Sao_Paulo', 'America/Mexico_City',
+  'Australia/Sydney', 'Australia/Melbourne',
+  'Pacific/Auckland',
+  'Africa/Johannesburg', 'Africa/Cairo',
+]
 
 export default function InboxDetail() {
   const { id } = useParams()
@@ -31,7 +44,12 @@ export default function InboxDetail() {
 
   // Chatwoot widget settings (source of truth)
   const isWebChannel = inbox?.channel_type !== 'whatsapp'
+  const isWhatsApp = inbox?.channel_type === 'whatsapp'
   const { data: chatwootData, isLoading: chatwootLoading } = useInboxChatwoot(isWebChannel ? id : null)
+
+  // WhatsApp connection status
+  const { data: waStatus, isLoading: waStatusLoading, dataUpdatedAt: waCheckedAt, refetch: refetchWaStatus } = useWhatsAppStatus(isWhatsApp ? id : null)
+  const waReconnect = useWhatsAppReconnect()
   const updateInbox = useUpdateInbox()
   const uploadAvatar = useUploadInboxAvatar()
 
@@ -55,9 +73,18 @@ export default function InboxDetail() {
   // Widget locale state (defaults to app language)
   const [widgetLocale, setWidgetLocale] = useState(appLocale)
 
+  // Token copy state
+  const [copied, setCopied] = useState(false)
+
   // Members state
   const [selectedMembers, setSelectedMembers] = useState([])
   const [membersSaved, setMembersSaved] = useState(false)
+
+  // AI availability state
+  const updateAiSettings = useUpdateInboxAiSettings()
+  const [aiSchedule, setAiSchedule] = useState(null)
+  const [aiTimezone, setAiTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone)
+  const [aiSettingsSaved, setAiSettingsSaved] = useState(false)
 
   // Initialize widget form from Chatwoot data
   useEffect(() => {
@@ -86,6 +113,14 @@ export default function InboxDetail() {
     }
   }, [inboxMembers])
 
+  // Initialize AI settings from inbox data
+  useEffect(() => {
+    if (inbox) {
+      setAiSchedule(inbox.ai_schedule ?? null)
+      setAiTimezone(inbox.ai_timezone || Intl.DateTimeFormat().resolvedOptions().timeZone)
+    }
+  }, [inbox?.ai_schedule, inbox?.ai_timezone])
+
   const sessions = sessionData?.sessions || []
   const isLoading = inboxLoading || agentsLoading || sessionsLoading
 
@@ -96,7 +131,7 @@ export default function InboxDetail() {
 <meta charset="utf-8">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: ${dark ? '#171717' : '#f5f5f5'}; overflow: hidden; }
+  body { background: transparent; overflow: hidden; }
   .woot-widget-holder {
     position: fixed !important; inset: 0 !important;
     width: 100% !important; height: 100% !important;
@@ -133,6 +168,7 @@ export default function InboxDetail() {
   })(document, "script");
   window.addEventListener("chatwoot:ready", function() {
     window.$chatwoot.toggle("open");
+    window.$chatwoot.setCustomAttributes({ cardynal_preview: "true" });
   });
 </script>
 </body>
@@ -198,6 +234,68 @@ export default function InboxDetail() {
     )
   }
 
+  const handleCopyToken = () => {
+    navigator.clipboard.writeText(inbox.website_token)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const handleSSO = async () => {
+    try {
+      const res = await api.get('/chatwoot-sso')
+      if (res.url) window.open(res.url, '_blank')
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleAiToggle = async (checked) => {
+    try {
+      await updateAiSettings.mutateAsync({ id, body: { ai_enabled: checked } })
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleSaveAiSettings = async () => {
+    setError('')
+    setAiSettingsSaved(false)
+    try {
+      await updateAiSettings.mutateAsync({
+        id,
+        body: { ai_schedule: aiSchedule, ai_timezone: aiTimezone },
+      })
+      setAiSettingsSaved(true)
+      setTimeout(() => setAiSettingsSaved(false), 2000)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleWhatsAppReconnect = async () => {
+    setError('')
+    try {
+      const res = await waReconnect.mutateAsync(id)
+      if (res.url) {
+        const popup = window.open(res.url, 'whatsapp_reconnect', 'width=480,height=720')
+        // Refetch status when popup closes
+        const timer = setInterval(() => {
+          if (!popup || popup.closed) {
+            clearInterval(timer)
+            refetchWaStatus()
+          }
+        }, 1000)
+      }
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const HEALTHY_STATUSES = ['OK', 'CREATION_SUCCESS', 'RECONNECTED', 'SYNC_SUCCESS']
+  const PENDING_STATUSES = ['CONNECTING']
+  const waIsHealthy = waStatus && HEALTHY_STATUSES.includes(waStatus.status)
+  const waIsPending = waStatus && PENDING_STATUSES.includes(waStatus.status)
+
   if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
   return (
@@ -228,9 +326,119 @@ export default function InboxDetail() {
         </TabsList>
 
         <TabsContent value="info" className="mt-6 space-y-6">
+          {/* Inline details bar */}
+          <Card className="py-[15px]">
+            <CardContent className="px-4">
+              <div className="flex items-center gap-5 text-sm flex-wrap">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Inbox</span>
+                  <span className="font-medium">{inbox.inbox_id}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Account</span>
+                  <span className="font-medium">{inbox.chatwoot_account_id}</span>
+                </div>
+                {inbox.website_token && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-muted-foreground">Token</span>
+                    <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded select-all">{inbox.website_token}</code>
+                    <button
+                      type="button"
+                      onClick={handleCopyToken}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                    </button>
+                  </div>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ms-auto gap-1.5"
+                  onClick={handleSSO}
+                >
+                  <ExternalLink size={14} />
+                  {t('inboxes.openInbox')}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* WhatsApp Connection Status */}
+          {isWhatsApp && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Phone size={16} />
+                  {t('inboxes.whatsappConnection')}
+                </CardTitle>
+                <CardDescription>{t('inboxes.whatsappConnectionDesc')}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {inbox.phone_number && (
+                      <span className="text-sm font-mono font-medium">{inbox.phone_number}</span>
+                    )}
+                    {waStatusLoading ? (
+                      <Badge variant="outline" className="gap-1.5">
+                        <Loader2 size={12} className="animate-spin" />
+                        {t('common.loading')}
+                      </Badge>
+                    ) : waIsHealthy ? (
+                      <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 gap-1.5">
+                        <Wifi size={12} />
+                        {t('inboxes.whatsappConnected')}
+                      </Badge>
+                    ) : waIsPending ? (
+                      <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 gap-1.5">
+                        <Loader2 size={12} className="animate-spin" />
+                        {t('inboxes.whatsappConnecting')}
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-destructive/10 text-destructive border-destructive/20 gap-1.5">
+                        <WifiOff size={12} />
+                        {waStatus?.status === 'DELETED' ? t('inboxes.whatsappDisconnected') : t('inboxes.whatsappError')}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {waStatus && !waIsHealthy && !waIsPending && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={handleWhatsAppReconnect}
+                        disabled={waReconnect.isPending}
+                      >
+                        <WifiOff size={14} />
+                        {waReconnect.isPending ? t('inboxes.whatsappConnecting') : t('inboxes.whatsappReconnect')}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={() => refetchWaStatus()}
+                      disabled={waStatusLoading}
+                    >
+                      <RefreshCw size={14} className={waStatusLoading ? 'animate-spin' : ''} />
+                      {t('inboxes.whatsappCheckStatus')}
+                    </Button>
+                  </div>
+                </div>
+                {waCheckedAt > 0 && (
+                  <p className="text-xs text-muted-foreground mt-3">
+                    {t('inboxes.whatsappLastChecked')} {new Date(waCheckedAt).toLocaleTimeString()}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Widget Settings + Preview (web channel only) */}
           {isWebChannel && (
-            <Card>
+            <Card className="bg-transparent border-0 !shadow-none">
               <CardHeader>
                 <CardTitle className="text-base flex items-center gap-2">
                   <Palette size={16} />
@@ -458,54 +666,122 @@ export default function InboxDetail() {
             </CardContent>
           </Card>
 
-          {/* Assigned AI Agent Bot */}
+          {/* Assigned AI Agent Bot + Toggle */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">{t('inboxes.assignedAgent')}</CardTitle>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Bot size={16} />
+                    {t('inboxes.assignedAgent')}
+                  </CardTitle>
+                  <CardDescription>{t('inboxes.chooseAgent')}</CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="ai-toggle" className="text-sm">
+                    {inbox.ai_enabled !== false ? t('common.active') : t('common.inactive')}
+                  </Label>
+                  <Switch
+                    id="ai-toggle"
+                    checked={inbox.ai_enabled !== false}
+                    onCheckedChange={handleAiToggle}
+                    disabled={updateAiSettings.isPending}
+                  />
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <Label>{t('inboxes.chooseAgent')}</Label>
-                <Select
-                  value={inbox.agent_bot_id ? String(inbox.agent_bot_id) : 'none'}
-                  onValueChange={handleAssignAgent}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {/* No agent option */}
+                <button
+                  type="button"
+                  onClick={() => handleAssignAgent('none')}
+                  className={`flex items-center gap-3 p-3 rounded-lg border-2 text-start transition-colors ${
+                    !inbox.agent_bot_id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-transparent bg-muted/50 hover:bg-muted'
+                  }`}
                 >
-                  <SelectTrigger className="w-[240px]">
-                    <SelectValue placeholder={t('inboxes.noAgent')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">{t('inboxes.noAgent')}</SelectItem>
-                    {agents.map((a) => (
-                      <SelectItem key={a.id} value={String(a.id)}>{a.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0">
+                    <Bot size={16} className="text-muted-foreground" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{t('inboxes.noAgent')}</p>
+                    <p className="text-xs text-muted-foreground">{t('inboxes.noAgentDesc')}</p>
+                  </div>
+                </button>
+
+                {/* Agent options */}
+                {agents.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => handleAssignAgent(String(a.id))}
+                    className={`flex items-center gap-3 p-3 rounded-lg border-2 text-start transition-colors ${
+                      inbox.agent_bot_id === a.id
+                        ? 'border-primary bg-primary/5'
+                        : 'border-transparent bg-muted/50 hover:bg-muted'
+                    }`}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-sm font-semibold text-primary shrink-0">
+                      {(a.name || '?')[0].toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{a.name}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Technical Details */}
+          {/* AI Availability (schedule) */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">{t('common.details')}</CardTitle>
+              <CardTitle className="text-base">{t('inboxes.aiAvailability')}</CardTitle>
+              <CardDescription>{t('inboxes.aiAvailabilityDesc')}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">Inbox ID (Chatwoot)</span>
-                  <p className="font-medium mt-0.5">{inbox.inbox_id}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Account ID</span>
-                  <p className="font-medium mt-0.5">{inbox.chatwoot_account_id}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Website Token</span>
-                  <p className="font-mono text-xs mt-0.5">{inbox.website_token || '-'}</p>
-                </div>
+              {/* Timezone */}
+              <div className="flex items-center gap-3 mb-4">
+                <Label className="text-sm shrink-0">{t('inboxes.timezone')}</Label>
+                <Select value={aiTimezone} onValueChange={setAiTimezone} disabled={inbox.ai_enabled === false}>
+                  <SelectTrigger className="w-[260px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COMMON_TIMEZONES.map(tz => (
+                      <SelectItem key={tz} value={tz}>{tz.replace(/_/g, ' ')}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Schedule grid */}
+              <ScheduleGrid
+                schedule={aiSchedule}
+                onChange={setAiSchedule}
+                disabled={inbox.ai_enabled === false}
+              />
+
+              {/* Save */}
+              <div className="flex items-center gap-2 mt-4">
+                <Button
+                  onClick={handleSaveAiSettings}
+                  disabled={updateAiSettings.isPending || inbox.ai_enabled === false}
+                >
+                  {updateAiSettings.isPending ? t('common.saving') : t('common.save')}
+                </Button>
+                {aiSettingsSaved && (
+                  <span className="text-sm text-emerald-600">{t('common.saved')}</span>
+                )}
+                <span className="text-xs text-muted-foreground ms-auto">
+                  {aiSchedule === null ? t('inboxes.scheduleAlwaysActive') : t('inboxes.scheduleCustom')}
+                </span>
               </div>
             </CardContent>
           </Card>
+
 
           {/* Widget Embed */}
           {inbox.website_token && (

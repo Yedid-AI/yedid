@@ -67,14 +67,30 @@ export async function handleWebhook(webhookBody, supabase) {
       return
     }
 
+    // --- 2b. Check AI availability (toggle + schedule) ---
+    if (!isAiAvailable(config)) {
+      console.log(`[Engine] AI unavailable for inbox ${inboxId} (disabled or outside schedule)`)
+      return
+    }
+
     // --- 3. Session + Memory ---
-    const { session } = await createOrFindSession(supabase, {
+    const { session, created } = await createOrFindSession(supabase, {
       user_id: userId,
       inbox_id: inboxDbId,
       chatwoot_account_id: accountId,
       chatwoot_inbox_id: inboxId,
       chatwoot_conversation_id: conversationId,
     })
+
+    // Detect preview conversations (from InboxDetail widget preview)
+    const isPreview = webhookBody.conversation?.custom_attributes?.cardynal_preview === 'true'
+    if (isPreview && created) {
+      await supabase.from('sessions').update({
+        billable: false,
+        ai_reason: 'PREVIEW/TEST',
+      }).eq('id', session.id)
+      console.log(`[Engine] Preview session ${session.id} marked as non-billable`)
+    }
 
     const conversationHistory = await getConversationHistory(supabase, session.id, 10)
 
@@ -125,6 +141,31 @@ async function getLastPlaybookId(supabase, sessionId) {
   return String(data[0].playbook_id)
 }
 
+// --- AI availability check (toggle + schedule) ---
+
+const DAY_MAP = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+
+function isAiAvailable(config) {
+  if (config.aiEnabled === false) return false
+  if (!config.aiSchedule) return true // null = 24/7
+
+  const tz = config.aiTimezone || 'UTC'
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: 'numeric',
+    hour12: false,
+    weekday: 'short',
+  }).formatToParts(new Date())
+
+  const day = DAY_MAP[parts.find(p => p.type === 'weekday').value]
+  const hour = parseInt(parts.find(p => p.type === 'hour').value)
+
+  const daySchedule = config.aiSchedule[String(day)]
+  if (!daySchedule) return false
+
+  return daySchedule[hour] === true
+}
+
 // --- Filter incoming messages (same as n8n Filter Incoming node) ---
 
 function shouldProcess(body) {
@@ -145,7 +186,7 @@ async function loadAgentConfig(supabase, inboxId) {
   // Lookup inbox → agent_bot_id
   const { data: inboxes, error: inError } = await supabase
     .from('inboxes')
-    .select('id, user_id, agent_bot_id')
+    .select('id, user_id, agent_bot_id, ai_enabled, ai_schedule, ai_timezone')
     .eq('inbox_id', parseInt(inboxId))
     .limit(1)
 
@@ -190,6 +231,9 @@ async function loadAgentConfig(supabase, inboxId) {
   const result = {
     userId,
     inboxDbId,
+    aiEnabled: inboxes[0].ai_enabled,
+    aiSchedule: inboxes[0].ai_schedule,
+    aiTimezone: inboxes[0].ai_timezone,
     botToken,
     agentConfig,
     playbooks: formattedPlaybooks,
