@@ -119,6 +119,9 @@ export async function registerWebhook(url) {
     events: ['message_received'],
     source: 'messaging',
     name: 'Cardynal App',
+    headers: [
+      { key: 'Content-Type', value: 'application/json' },
+    ],
     data: [
       { key: 'account_id', name: 'account_id' },
       { key: 'account_type', name: 'account_type' },

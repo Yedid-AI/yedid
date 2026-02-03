@@ -160,7 +160,10 @@ router.post('/webhook/unipile/message', async (req, res) => {
   res.status(200).json({ ok: true })
 
   try {
-    console.log('[unipile/message] Webhook received:', JSON.stringify(req.body).slice(0, 500))
+    console.log('[unipile/message] Content-Type:', req.headers['content-type'])
+    console.log('[unipile/message] Content-Length:', req.headers['content-length'])
+    console.log('[unipile/message] Body keys:', Object.keys(req.body || {}))
+    console.log('[unipile/message] Webhook received:', JSON.stringify(req.body).slice(0, 800))
 
     const body = req.body
 
