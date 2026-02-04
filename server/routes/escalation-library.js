@@ -23,7 +23,7 @@ router.get('/escalation-rules', checkRole('admin'), async (req, res) => {
 // POST /api/escalation-rules — create escalation rule
 router.post('/escalation-rules', checkRole('admin'), async (req, res) => {
   try {
-    const { title, trigger_description, rules, audience, assign_to_agent, is_active } = req.body
+    const { title, trigger_description, rules, audience, assign_to_agent, is_active, emoji } = req.body
     if (!title) {
       return res.status(400).json({ error: 'Titre requis' })
     }
@@ -38,6 +38,7 @@ router.post('/escalation-rules', checkRole('admin'), async (req, res) => {
         audience: audience || null,
         assign_to_agent: assign_to_agent || null,
         is_active: is_active !== undefined ? is_active : true,
+        emoji: emoji || null,
       })
       .select()
       .single()
@@ -54,7 +55,7 @@ router.post('/escalation-rules', checkRole('admin'), async (req, res) => {
 router.put('/escalation-rules/:id', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const { title, trigger_description, rules, audience, assign_to_agent, is_active } = req.body
+    const { title, trigger_description, rules, audience, assign_to_agent, is_active, emoji } = req.body
 
     const updates = {}
     if (title !== undefined) updates.title = title
@@ -63,6 +64,7 @@ router.put('/escalation-rules/:id', checkRole('admin'), async (req, res) => {
     if (audience !== undefined) updates.audience = audience
     if (assign_to_agent !== undefined) updates.assign_to_agent = assign_to_agent
     if (is_active !== undefined) updates.is_active = is_active
+    if (emoji !== undefined) updates.emoji = emoji || null
 
     const { data, error } = await req.supabase
       .from('escalation_rules')

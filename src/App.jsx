@@ -5,7 +5,11 @@ import { ThemeProvider } from './lib/theme'
 import { I18nProvider } from './lib/i18n'
 import { AuthProvider } from './lib/auth'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
-import { Sidebar } from './components/layout/Sidebar'
+import { AppSidebar } from './components/layout/Sidebar'
+import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
+import { Separator } from './components/ui/separator'
+import { PageHeaderProvider, usePageHeader } from './lib/page-header'
+import { SidePanelProvider, useSidePanel } from './lib/side-panel'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Sources from './pages/Sources'
@@ -23,16 +27,48 @@ import PlaybooksLibrary from './pages/PlaybooksLibrary'
 import ToolsLibrary from './pages/ToolsLibrary'
 import EscalationLibrary from './pages/EscalationLibrary'
 
+function AppHeader() {
+  const { title, setActionsContainer } = usePageHeader()
+  return (
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+      <SidebarTrigger className="-ml-1" />
+      <Separator orientation="vertical" className="mr-2 h-4" />
+      {title && <h1 className="text-sm font-medium">{title}</h1>}
+      <div className="ml-auto flex items-center gap-2" ref={setActionsContainer} />
+    </header>
+  )
+}
+
+function ContentWithPanel({ children }) {
+  const { isOpen, setPanelContainer } = useSidePanel()
+  return (
+    <div className="flex flex-1 min-h-0 overflow-hidden">
+      <div className="flex-1 min-w-0 overflow-auto px-6 py-6">
+        {children}
+      </div>
+      <div
+        ref={setPanelContainer}
+        className={`shrink-0 border-l bg-background overflow-hidden transition-[width] duration-300 ease-in-out ${isOpen ? 'w-[70%]' : 'w-0'}`}
+      />
+    </div>
+  )
+}
+
 function AppLayout({ children }) {
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <main className="flex-1 overflow-auto">
-        <div className="max-w-5xl mx-auto px-8 py-8">
-          {children}
-        </div>
-      </main>
-    </div>
+    <SidebarProvider className="max-h-svh">
+      <AppSidebar />
+      <SidebarInset className="min-h-0 overflow-hidden">
+        <SidePanelProvider>
+          <PageHeaderProvider>
+            <AppHeader />
+            <ContentWithPanel>
+              {children}
+            </ContentWithPanel>
+          </PageHeaderProvider>
+        </SidePanelProvider>
+      </SidebarInset>
+    </SidebarProvider>
   )
 }
 

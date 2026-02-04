@@ -1,15 +1,33 @@
-import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { useI18n } from '../../lib/i18n'
 import {
   LayoutDashboard, Database, Bot, Inbox, BookOpen, Wrench, Zap,
-  Users, Settings, LogOut, PanelLeftClose, PanelLeftOpen, KeyRound,
-  Moon, Sun, Globe, CalendarClock,
+  Users, Settings, LogOut, KeyRound,
+  Moon, Sun, Globe, CalendarClock, ChevronsUpDown,
 } from 'lucide-react'
 import { useTheme } from '../../lib/theme'
-import { Separator } from '@/components/ui/separator'
-import { Button } from '@/components/ui/button'
+import {
+  Sidebar as SidebarRoot,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarRail,
+  useSidebar,
+} from '@/components/ui/sidebar'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import logoSrc from '@/assets/logo-cardynal.png'
 
 const navItems = [
   { path: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'agent'] },
@@ -27,12 +45,13 @@ const navItems = [
 
 const langOrder = ['fr', 'en', 'he']
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false)
+export function AppSidebar() {
   const { user, logout } = useAuth()
   const { dark, toggle } = useTheme()
-  const { t, locale, setLocale } = useI18n()
+  const { t, locale, setLocale, dir } = useI18n()
   const navigate = useNavigate()
+  const { state } = useSidebar()
+  const isCollapsed = state === 'collapsed'
 
   const handleLogout = () => {
     logout()
@@ -47,92 +66,104 @@ export function Sidebar() {
   const visibleItems = navItems.filter((item) => item.roles.includes(user?.role))
 
   return (
-    <aside
-      className="bg-sidebar border-e border-sidebar-border shadow-soft-sm flex flex-col h-screen shrink-0 transition-all duration-200"
-      style={{ width: collapsed ? 60 : 224 }}
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between px-3 py-4" style={{ minHeight: 56 }}>
-        {!collapsed && (
-          <span className="text-base font-semibold tracking-tight text-sidebar-active ps-2">cardynal</span>
-        )}
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setCollapsed(!collapsed)}
-          className="h-8 w-8 text-sidebar-foreground hover:text-sidebar-active hover:bg-sidebar-hover shrink-0"
-        >
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </Button>
-      </div>
+    <SidebarRoot variant="inset" collapsible="icon" side={dir === 'rtl' ? 'right' : 'left'}>
+      {/* Header — Logo */}
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <NavLink to="/">
+                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <img src={logoSrc} alt="Cardynal" className="size-5" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-semibold">cardynal</span>
+                  <span className="truncate text-xs text-sidebar-foreground">{user?.enterprise || 'Dashboard'}</span>
+                </div>
+              </NavLink>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
 
-      <Separator className="bg-sidebar-border" />
+      {/* Navigation */}
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>{t('nav.menu') || 'Menu'}</SidebarGroupLabel>
+          <SidebarMenu>
+            {visibleItems.map((item) => {
+              const Icon = item.icon
+              return (
+                <SidebarMenuItem key={item.path}>
+                  <SidebarMenuButton asChild tooltip={t(item.labelKey)}>
+                    <NavLink
+                      to={item.path}
+                      end={item.path === '/'}
+                      className={({ isActive }) => isActive ? 'font-medium' : ''}
+                      data-active={undefined}
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <Icon size={16} strokeWidth={1.8} />
+                          <span>{t(item.labelKey)}</span>
+                          {isActive && <span className="sr-only">(active)</span>}
+                        </>
+                      )}
+                    </NavLink>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )
+            })}
+          </SidebarMenu>
+        </SidebarGroup>
+      </SidebarContent>
 
-      {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-0.5">
-        {visibleItems.map((item) => {
-          const Icon = item.icon
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              end={item.path === '/'}
-              title={collapsed ? t(item.labelKey) : undefined}
-              className={({ isActive }) =>
-                `flex items-center rounded-md transition-all duration-150 ${
-                  collapsed ? 'justify-center px-0 py-2' : 'gap-3 px-3 py-2'
-                } text-[13px] ${
-                  isActive
-                    ? 'bg-sidebar-hover text-sidebar-active font-medium'
-                    : 'text-sidebar-foreground hover:text-sidebar-active hover:bg-sidebar-hover'
-                }`
-              }
-            >
-              <Icon size={16} strokeWidth={1.8} className="shrink-0" />
-              {!collapsed && <span>{t(item.labelKey)}</span>}
-            </NavLink>
-          )
-        })}
-      </nav>
+      {/* Footer — User menu */}
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  size="lg"
+                  className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                >
+                  <div className="bg-sidebar-accent text-sidebar-accent-foreground flex aspect-square size-8 items-center justify-center rounded-lg text-xs font-medium uppercase">
+                    {(user?.first_name?.[0] || user?.email?.[0] || '?')}
+                  </div>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <span className="truncate font-medium">{user?.first_name || user?.email}</span>
+                    <span className="truncate text-xs">{user?.email}</span>
+                  </div>
+                  <ChevronsUpDown className="ml-auto size-4" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                side={isCollapsed ? 'right' : 'top'}
+                align="end"
+                sideOffset={4}
+              >
+                <DropdownMenuItem onClick={toggle}>
+                  {dark ? <Sun size={14} /> : <Moon size={14} />}
+                  {dark ? t('nav.lightMode') : t('nav.darkMode')}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={cycleLang}>
+                  <Globe size={14} />
+                  {locale.toUpperCase()}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout}>
+                  <LogOut size={14} />
+                  {t('nav.logout')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
 
-      <Separator className="bg-sidebar-border" />
-
-      {/* User */}
-      <div className={`py-4 ${collapsed ? 'px-2 flex flex-col items-center' : 'px-4'}`}>
-        {!collapsed && (
-          <>
-            <div className="text-[13px] text-sidebar-active truncate">{user?.first_name || user?.email}</div>
-            <div className="text-[11px] text-sidebar-foreground truncate mt-0.5">{user?.email}</div>
-          </>
-        )}
-        <div className={`flex ${collapsed ? 'flex-col items-center gap-2 mt-2' : 'items-center gap-3 mt-3'}`}>
-          <button
-            onClick={handleLogout}
-            title={t('nav.logout')}
-            className={`flex items-center text-[12px] text-sidebar-foreground hover:text-sidebar-active transition-colors ${
-              collapsed ? 'justify-center' : 'gap-2'
-            }`}
-          >
-            <LogOut size={14} strokeWidth={1.8} />
-            {!collapsed && <span>{t('nav.logout')}</span>}
-          </button>
-          <button
-            onClick={toggle}
-            title={dark ? t('nav.lightMode') : t('nav.darkMode')}
-            className="text-sidebar-foreground hover:text-sidebar-active transition-colors"
-          >
-            {dark ? <Sun size={14} strokeWidth={1.8} /> : <Moon size={14} strokeWidth={1.8} />}
-          </button>
-          <button
-            onClick={cycleLang}
-            title={locale.toUpperCase()}
-            className="flex items-center gap-1.5 text-[12px] text-sidebar-foreground hover:text-sidebar-active transition-colors"
-          >
-            <Globe size={14} strokeWidth={1.8} />
-            {!collapsed && <span className="uppercase">{locale}</span>}
-          </button>
-        </div>
-      </div>
-    </aside>
+      <SidebarRail />
+    </SidebarRoot>
   )
 }

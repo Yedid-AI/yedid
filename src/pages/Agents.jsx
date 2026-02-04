@@ -1,15 +1,17 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAgents, useDeleteAgent } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { LayoutGrid, List } from 'lucide-react'
 
@@ -23,6 +25,8 @@ export default function Agents() {
   const [creating, setCreating] = useState(false)
   const navigate = useNavigate()
   const { t, dateLocale } = useI18n()
+  usePageTitle(t('agents.title'))
+  const { actionsContainer } = usePageHeader()
 
   const displayError = error || queryError?.message || ''
 
@@ -74,7 +78,6 @@ export default function Agents() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('agents.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('agents.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -86,28 +89,26 @@ export default function Agents() {
               <List size={14} />
             </button>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setName('') }}>
-            <DialogTrigger asChild>
-              <Button>{t('agents.newAgent')}</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-sm">
-              <DialogHeader>
-                <DialogTitle>{t('agents.dialogTitle')}</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div className="space-y-2">
-                  <Label>{t('agents.nameLabel')}</Label>
-                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('agents.namePlaceholder')} required />
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                  <Button type="submit" disabled={creating}>{creating ? t('common.saving') : t('common.create')}</Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setName('') }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{t('agents.dialogTitle')}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreate} className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('agents.nameLabel')}</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('agents.namePlaceholder')} required />
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+              <Button type="submit" disabled={creating}>{creating ? t('common.saving') : t('common.create')}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {displayError && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{displayError}</div>
@@ -179,6 +180,11 @@ export default function Agents() {
             </TableBody>
           </Table>
         </Card>
+      )}
+
+      {actionsContainer && createPortal(
+        <Button onClick={() => setDialogOpen(true)}>{t('agents.newAgent')}</Button>,
+        actionsContainer
       )}
     </div>
   )

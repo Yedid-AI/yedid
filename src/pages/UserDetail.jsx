@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useUser } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -34,6 +35,8 @@ export default function UserDetail() {
   )
 
   const { user, chatwoot_account, inboxes, agent_bots, stats } = data
+  usePageTitle([user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || '')
+
 
   return (
     <div>
@@ -42,9 +45,6 @@ export default function UserDetail() {
           <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {[user.first_name, user.last_name].filter(Boolean).join(' ') || user.email}
-          </h1>
           <p className="text-sm text-muted-foreground mt-0.5">{user.email}</p>
         </div>
         <Badge variant="secondary" className="ms-auto">{user.role}</Badge>

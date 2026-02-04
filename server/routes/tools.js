@@ -23,7 +23,7 @@ router.get('/agent-bots/:agentBotId/tools', checkRole('admin'), verifyAgentOwner
 // POST /api/agent-bots/:agentBotId/tools
 router.post('/agent-bots/:agentBotId/tools', checkRole('admin'), verifyAgentOwner, async (req, res) => {
   try {
-    const { name, description, method, url, query_parameters, headers, body_schema } = req.body
+    const { name, description, method, url, query_parameters, headers, body_schema, emoji } = req.body
     if (!name || !description || !url) {
       return res.status(400).json({ error: 'Nom, description et URL requis' })
     }
@@ -40,6 +40,7 @@ router.post('/agent-bots/:agentBotId/tools', checkRole('admin'), verifyAgentOwne
         query_parameters: query_parameters || {},
         headers: headers || {},
         body_schema: body_schema || null,
+        emoji: emoji || null,
       })
       .select()
       .single()
@@ -56,7 +57,7 @@ router.post('/agent-bots/:agentBotId/tools', checkRole('admin'), verifyAgentOwne
 router.put('/agent-bots/:agentBotId/tools/:id', checkRole('admin'), verifyAgentOwner, async (req, res) => {
   try {
     const { id } = req.params
-    const { name, description, method, url, query_parameters, headers, body_schema } = req.body
+    const { name, description, method, url, query_parameters, headers, body_schema, emoji } = req.body
 
     const updates = { updated_at: new Date().toISOString() }
     if (name !== undefined) updates.name = name
@@ -66,6 +67,7 @@ router.put('/agent-bots/:agentBotId/tools/:id', checkRole('admin'), verifyAgentO
     if (query_parameters !== undefined) updates.query_parameters = query_parameters
     if (headers !== undefined) updates.headers = headers
     if (body_schema !== undefined) updates.body_schema = body_schema
+    if (emoji !== undefined) updates.emoji = emoji || null
 
     const { data, error } = await req.supabase
       .from('tools')

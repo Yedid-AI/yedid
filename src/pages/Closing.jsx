@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { api } from '../lib/api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -85,6 +87,8 @@ No introduction. Analyze strictly based on the provided messages. Respond only i
 
 export default function Closing() {
   const { t } = useI18n()
+  usePageTitle(t('closing.title'))
+  const { actionsContainer } = usePageHeader()
   const [settings, setSettings] = useState({})
   const [values, setValues] = useState({})
   const [loading, setLoading] = useState(true)
@@ -155,12 +159,8 @@ export default function Closing() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('closing.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('closing.subtitle')}</p>
         </div>
-        <Button onClick={handleSave} disabled={saving}>
-          {saved ? <><Check size={16} className="me-2" />{t('common.saved')}</> : <><Save size={16} className="me-2" />{saving ? t('common.saving') : t('common.save')}</>}
-        </Button>
       </div>
 
       {error && (
@@ -256,6 +256,13 @@ export default function Closing() {
           </CardContent>
         </Card>
       </div>
+
+      {actionsContainer && createPortal(
+        <Button onClick={handleSave} disabled={saving}>
+          {saved ? <><Check size={16} className="me-2" />{t('common.saved')}</> : <><Save size={16} className="me-2" />{saving ? t('common.saving') : t('common.save')}</>}
+        </Button>,
+        actionsContainer
+      )}
     </div>
   )
 }

@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { EmojiPicker } from '@/components/ui/emoji-picker'
 import { LayoutGrid, List } from 'lucide-react'
 
 export default function EscalationTab({ agentBotId }) {
@@ -22,7 +23,7 @@ export default function EscalationTab({ agentBotId }) {
   const [viewMode, setViewMode] = useState('card')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const [form, setForm] = useState({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', is_active: true })
+  const [form, setForm] = useState({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', emoji: '', is_active: true })
   const [error, setError] = useState('')
 
   const handleSubmit = async (e) => {
@@ -43,7 +44,7 @@ export default function EscalationTab({ agentBotId }) {
     }
   }
 
-  const resetForm = () => setForm({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', is_active: true })
+  const resetForm = () => setForm({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', emoji: '', is_active: true })
 
   const handleEdit = (item) => {
     setEditItem(item)
@@ -53,6 +54,7 @@ export default function EscalationTab({ agentBotId }) {
       rules: item.rules || '',
       audience: item.audience || '',
       assign_to_agent: item.assign_to_agent ? String(item.assign_to_agent) : '',
+      emoji: item.emoji || '',
       is_active: item.is_active,
     })
     setDialogOpen(true)
@@ -99,9 +101,12 @@ export default function EscalationTab({ agentBotId }) {
             </SheetHeader>
             <div className="flex-1 overflow-y-auto px-6 py-4">
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>{t('common.title')}</Label>
-                <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+              <div className="flex items-end gap-3">
+                <EmojiPicker value={form.emoji} onChange={(v) => setForm({ ...form, emoji: v })} />
+                <div className="space-y-2 flex-1">
+                  <Label>{t('common.title')}</Label>
+                  <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+                </div>
               </div>
               <div className="space-y-2">
                 <Label>{t('common.audience')}</Label>
@@ -144,12 +149,13 @@ export default function EscalationTab({ agentBotId }) {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {rules.map((r) => (
-              <Card key={r.id} className="hover:shadow-soft-md transition-all py-0 gap-0">
+              <Card key={r.id} className={`hover:shadow-soft-md transition-all py-0 gap-0 ${editItem?.id === r.id ? 'ring-2 ring-primary' : ''}`}>
                 <div className="p-[15px]">
-                  <div className="flex items-center gap-2.5 mb-2">
+                  <div className="flex items-start gap-2.5 mb-2">
+                    {r.emoji && <span className="text-xl leading-none shrink-0 mt-0.5">{r.emoji}</span>}
                     <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-sm truncate leading-tight">{r.title}</h3>
-                      <span className="text-[11px] text-muted-foreground">{r.audience || '-'}</span>
+                      <p className="text-[11px] text-muted-foreground truncate">{r.audience || '-'}</p>
                     </div>
                     <Badge
                       variant={r.is_active ? 'default' : 'secondary'}
@@ -202,8 +208,8 @@ export default function EscalationTab({ agentBotId }) {
                 <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('escalation.empty')}</TableCell></TableRow>
               ) : (
                 rules.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.title}</TableCell>
+                  <TableRow key={r.id} className={editItem?.id === r.id ? 'bg-primary/5' : ''}>
+                    <TableCell className="font-medium">{r.emoji && <span className="mr-1.5">{r.emoji}</span>}{r.title}</TableCell>
                     <TableCell className="truncate max-w-[250px]">{r.trigger_description || '-'}</TableCell>
                     <TableCell>{r.audience || '-'}</TableCell>
                     <TableCell>

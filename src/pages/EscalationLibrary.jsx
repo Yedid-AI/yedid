@@ -1,20 +1,23 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useEscalationRulesLibrary, useCreateEscalationLibrary, useUpdateEscalationLibrary, useDeleteEscalationLibrary } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle, usePageHeader } from '../lib/page-header'
+import { useSidePanel } from '../lib/side-panel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { RichEditor } from '@/components/ui/rich-editor'
-import { Switch } from '@/components/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { EmojiPicker } from '@/components/ui/emoji-picker'
 import { LayoutGrid, List } from 'lucide-react'
 
 export default function EscalationLibrary() {
   const { t } = useI18n()
+  usePageTitle(t('escalation.libraryTitle'))
+  const { actionsContainer } = usePageHeader()
   const { data: rules = [], isLoading } = useEscalationRulesLibrary()
   const createEscalation = useCreateEscalationLibrary()
   const updateEscalation = useUpdateEscalationLibrary()
@@ -22,7 +25,7 @@ export default function EscalationLibrary() {
   const [viewMode, setViewMode] = useState('card')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editItem, setEditItem] = useState(null)
-  const [form, setForm] = useState({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', is_active: true })
+  const [form, setForm] = useState({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', emoji: '' })
   const [error, setError] = useState('')
 
   const handleSubmit = async (e) => {
@@ -43,7 +46,7 @@ export default function EscalationLibrary() {
     }
   }
 
-  const resetForm = () => setForm({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', is_active: true })
+  const resetForm = () => setForm({ title: '', trigger_description: '', rules: '', audience: '', assign_to_agent: '', emoji: '' })
 
   const handleEdit = (item) => {
     setEditItem(item)
@@ -53,7 +56,7 @@ export default function EscalationLibrary() {
       rules: item.rules || '',
       audience: item.audience || '',
       assign_to_agent: item.assign_to_agent ? String(item.assign_to_agent) : '',
-      is_active: item.is_active,
+      emoji: item.emoji || '',
     })
     setDialogOpen(true)
   }
@@ -66,13 +69,8 @@ export default function EscalationLibrary() {
     }
   }
 
-  const toggleActive = async (item) => {
-    try {
-      await updateEscalation.mutateAsync({ id: item.id, body: { is_active: !item.is_active } })
-    } catch (err) {
-      setError(err.message)
-    }
-  }
+  const closePanel = () => { setDialogOpen(false); setEditItem(null); resetForm() }
+  const { panelContainer } = useSidePanel(dialogOpen)
 
   if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
 
@@ -80,7 +78,6 @@ export default function EscalationLibrary() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('escalation.libraryTitle')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('escalation.librarySubtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -92,48 +89,6 @@ export default function EscalationLibrary() {
               <List size={14} />
             </button>
           </div>
-        <Sheet open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditItem(null); resetForm() } }}>
-          <SheetTrigger asChild>
-            <Button>{t('common.new')}</Button>
-          </SheetTrigger>
-          <SheetContent>
-            <SheetHeader>
-              <SheetTitle>{editItem ? t('common.edit') : t('escalation.dialogTitle')}</SheetTitle>
-            </SheetHeader>
-            <div className="flex-1 overflow-y-auto px-6 py-4">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>{t('common.title')}</Label>
-                <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('common.audience')}</Label>
-                <Input value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('escalation.trigger')}</Label>
-                <RichEditor value={form.trigger_description} onChange={(md) => setForm({ ...form, trigger_description: md })} placeholder={t('escalation.triggerPlaceholder')} minHeight="100px" />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('escalation.rules')}</Label>
-                <RichEditor value={form.rules} onChange={(md) => setForm({ ...form, rules: md })} placeholder={t('escalation.rulesPlaceholder')} minHeight="100px" />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('escalation.assignTo')}</Label>
-                <Input type="number" value={form.assign_to_agent} onChange={(e) => setForm({ ...form, assign_to_agent: e.target.value })} />
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} id="esc-active" />
-                <Label htmlFor="esc-active">{t('common.active')}</Label>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                <Button type="submit" disabled={createEscalation.isPending || updateEscalation.isPending}>{(createEscalation.isPending || updateEscalation.isPending) ? t('common.saving') : editItem ? t('common.save') : t('common.create')}</Button>
-              </div>
-            </form>
-            </div>
-          </SheetContent>
-        </Sheet>
         </div>
       </div>
 
@@ -145,44 +100,20 @@ export default function EscalationLibrary() {
         rules.length === 0 ? (
           <p className="text-center text-muted-foreground py-12">{t('escalation.empty')}</p>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className={`grid gap-4 ${dialogOpen ? 'grid-cols-1' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'}`}>
             {rules.map((r) => (
-              <Card key={r.id} className="hover:shadow-soft-md transition-all py-0 gap-0">
+              <Card key={r.id} className={`hover:shadow-soft-md transition-all py-0 gap-0 cursor-pointer ${editItem?.id === r.id ? 'ring-2 ring-primary' : ''}`} onClick={() => handleEdit(r)}>
                 <div className="p-[15px]">
-                  <div className="flex items-center gap-2.5 mb-2">
+                  <div className="flex items-start gap-2.5">
+                    {r.emoji && <span className="text-xl leading-none shrink-0 mt-0.5">{r.emoji}</span>}
                     <div className="min-w-0 flex-1">
                       <h3 className="font-semibold text-sm truncate leading-tight">{r.title}</h3>
-                      <span className="text-[11px] text-muted-foreground">{r.audience || '-'}</span>
+                      <p className="text-[11px] text-muted-foreground truncate">{r.audience || '-'}</p>
                     </div>
-                    <Badge
-                      variant={r.is_active ? 'default' : 'secondary'}
-                      className="cursor-pointer shrink-0"
-                      onClick={() => toggleActive(r)}
-                    >
-                      {r.is_active ? t('common.active') : t('common.inactive')}
-                    </Badge>
                   </div>
                   {r.trigger_description && (
-                    <p className="text-[11px] text-muted-foreground line-clamp-2 mb-2.5">{r.trigger_description}</p>
+                    <p className="text-[11px] text-muted-foreground line-clamp-2 mt-2">{r.trigger_description}</p>
                   )}
-                  <div className="flex items-center justify-end gap-1 border-t pt-2 -mx-1">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => handleEdit(r)}>{t('common.edit')}</Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive">{t('common.delete')}</Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>{t('escalation.deleteTitle')}</AlertDialogTitle>
-                          <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-                          <AlertDialogAction variant="destructive" onClick={() => handleDelete(r.id)}>{t('common.delete')}</AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
                 </div>
               </Card>
             ))}
@@ -196,28 +127,18 @@ export default function EscalationLibrary() {
                 <TableHead>{t('common.title')}</TableHead>
                 <TableHead>Trigger</TableHead>
                 <TableHead>{t('common.audience')}</TableHead>
-                <TableHead>{t('common.active')}</TableHead>
                 <TableHead>{t('common.actions')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rules.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-6">{t('escalation.empty')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground py-6">{t('escalation.empty')}</TableCell></TableRow>
               ) : (
                 rules.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="font-medium">{r.title}</TableCell>
+                  <TableRow key={r.id} className={editItem?.id === r.id ? 'bg-primary/5' : ''}>
+                    <TableCell className="font-medium">{r.emoji && <span className="mr-1.5">{r.emoji}</span>}{r.title}</TableCell>
                     <TableCell className="truncate max-w-[250px]">{r.trigger_description || '-'}</TableCell>
                     <TableCell>{r.audience || '-'}</TableCell>
-                    <TableCell>
-                      <Badge
-                        variant={r.is_active ? 'default' : 'secondary'}
-                        className="cursor-pointer"
-                        onClick={() => toggleActive(r)}
-                      >
-                        {r.is_active ? t('common.active') : t('common.inactive')}
-                      </Badge>
-                    </TableCell>
                     <TableCell className="flex gap-2">
                       <Button size="sm" variant="ghost" onClick={() => handleEdit(r)}>{t('common.edit')}</Button>
                       <AlertDialog>
@@ -242,6 +163,70 @@ export default function EscalationLibrary() {
             </TableBody>
           </Table>
         </Card>
+      )}
+
+      {panelContainer && createPortal(
+        <div className="w-full h-full flex flex-col">
+          <div className="flex items-center justify-between px-6 py-3 border-b shrink-0">
+            <h3 className="text-sm font-semibold">{editItem ? t('common.edit') : t('escalation.dialogTitle')}</h3>
+            <div className="flex items-center gap-2">
+              {editItem && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive">{t('common.delete')}</Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{t('escalation.deleteTitle')}</AlertDialogTitle>
+                      <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                      <AlertDialogAction variant="destructive" onClick={() => { handleDelete(editItem.id); closePanel() }}>{t('common.delete')}</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={closePanel}>{t('common.cancel')}</Button>
+              <Button size="sm" className="h-7 text-xs" type="submit" form="escalation-form" disabled={createEscalation.isPending || updateEscalation.isPending}>
+                {(createEscalation.isPending || updateEscalation.isPending) ? t('common.saving') : editItem ? t('common.save') : t('common.create')}
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto px-6 py-4">
+            <form id="escalation-form" onSubmit={handleSubmit} className="space-y-4">
+              <div className="flex items-end gap-3">
+                <EmojiPicker value={form.emoji} onChange={(v) => setForm({ ...form, emoji: v })} />
+                <div className="space-y-2 flex-1">
+                  <Label>{t('common.title')}</Label>
+                  <Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} required />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('common.audience')}</Label>
+                <Input value={form.audience} onChange={(e) => setForm({ ...form, audience: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('escalation.trigger')}</Label>
+                <RichEditor value={form.trigger_description} onChange={(md) => setForm({ ...form, trigger_description: md })} placeholder={t('escalation.triggerPlaceholder')} minHeight="100px" />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('escalation.rules')}</Label>
+                <RichEditor value={form.rules} onChange={(md) => setForm({ ...form, rules: md })} placeholder={t('escalation.rulesPlaceholder')} minHeight="100px" />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('escalation.assignTo')}</Label>
+                <Input type="number" value={form.assign_to_agent} onChange={(e) => setForm({ ...form, assign_to_agent: e.target.value })} />
+              </div>
+            </form>
+          </div>
+        </div>,
+        panelContainer
+      )}
+
+      {actionsContainer && createPortal(
+        <Button onClick={() => setDialogOpen(true)}>{t('common.new')}</Button>,
+        actionsContainer
       )}
     </div>
   )

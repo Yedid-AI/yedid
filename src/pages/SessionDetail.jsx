@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle } from '../lib/page-header'
 import { useSession, useSessionMessages } from '../hooks/queries'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,6 +10,7 @@ import { ArrowLeft, User, Bot } from 'lucide-react'
 export default function SessionDetail() {
   const { id } = useParams()
   const { t, dateLocale } = useI18n()
+  usePageTitle(t('sessions.detail'))
   const navigate = useNavigate()
   const { data: session, isLoading: sessionLoading } = useSession(id)
   const { data: messages = [], isLoading: messagesLoading } = useSessionMessages(id)
@@ -25,7 +27,6 @@ export default function SessionDetail() {
           <ArrowLeft size={16} />
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('sessions.detail')}</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {t('sessions.sessionId', { id: String(session.id).slice(0, 8) })} — {new Date(session.created_at).toLocaleString(dateLocale)}
           </p>

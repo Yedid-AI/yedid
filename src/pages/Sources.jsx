@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useSources, useCreateSource, useDeleteSource } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,6 +21,7 @@ const statusVariant = {
 
 export default function Sources() {
   const { t, dateLocale } = useI18n()
+  usePageTitle(t('sources.title'))
   const { data: sources = [], isLoading, error: queryError } = useSources()
   const createSource = useCreateSource()
   const deleteSource = useDeleteSource()
@@ -72,7 +74,6 @@ export default function Sources() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('sources.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('sources.subtitle')}</p>
         </div>
         <div className="flex items-center gap-0.5 border rounded-lg p-0.5">

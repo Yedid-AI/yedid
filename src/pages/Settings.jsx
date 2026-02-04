@@ -1,5 +1,6 @@
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle } from '../lib/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
@@ -7,11 +8,11 @@ import { Separator } from '@/components/ui/separator'
 export default function Settings() {
   const { user } = useAuth()
   const { t } = useI18n()
+  usePageTitle(t('settings.title'))
 
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">{t('settings.title')}</h1>
         <p className="text-sm text-muted-foreground mt-1">{t('settings.subtitle')}</p>
       </div>
 

@@ -23,7 +23,7 @@ router.get('/tools', checkRole('admin'), async (req, res) => {
 // POST /api/tools — create tool
 router.post('/tools', checkRole('admin'), async (req, res) => {
   try {
-    const { name, description, method, url, query_parameters, headers, body_schema } = req.body
+    const { name, description, method, url, query_parameters, headers, body_schema, emoji } = req.body
     if (!name || !description || !url) {
       return res.status(400).json({ error: 'Nom, description et URL requis' })
     }
@@ -39,6 +39,7 @@ router.post('/tools', checkRole('admin'), async (req, res) => {
         query_parameters: query_parameters || {},
         headers: headers || {},
         body_schema: body_schema || null,
+        emoji: emoji || null,
       })
       .select()
       .single()
@@ -55,7 +56,7 @@ router.post('/tools', checkRole('admin'), async (req, res) => {
 router.put('/tools/:id', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const { name, description, method, url, query_parameters, headers, body_schema } = req.body
+    const { name, description, method, url, query_parameters, headers, body_schema, emoji } = req.body
 
     const updates = { updated_at: new Date().toISOString() }
     if (name !== undefined) updates.name = name
@@ -65,6 +66,7 @@ router.put('/tools/:id', checkRole('admin'), async (req, res) => {
     if (query_parameters !== undefined) updates.query_parameters = query_parameters
     if (headers !== undefined) updates.headers = headers
     if (body_schema !== undefined) updates.body_schema = body_schema
+    if (emoji !== undefined) updates.emoji = emoji || null
 
     const { data, error } = await req.supabase
       .from('tools')

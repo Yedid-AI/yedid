@@ -1,19 +1,23 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, useProvisionChat } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default function Users() {
   const { t } = useI18n()
+  usePageTitle(t('users.title'))
+  const { actionsContainer } = usePageHeader()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
   const [provisioningId, setProvisioningId] = useState(null)
@@ -88,72 +92,69 @@ export default function Users() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('users.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('users.subtitle')}</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditUser(null); resetForm() } }}>
-          <DialogTrigger asChild>
-            <Button>{t('common.new')}</Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-md">
-            <DialogHeader>
-              <DialogTitle>{editUser ? t('users.editTitle') : t('users.dialogTitle')}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label>{t('common.email')}</Label>
-                <Input
-                  type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
-                  disabled={!!editUser}
-                  required={!editUser}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>{editUser ? t('users.newPasswordLabel') : t('common.password')}</Label>
-                <Input
-                  type="password"
-                  value={form.password}
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  required={!editUser}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>{t('users.firstName')}</Label>
-                  <Input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} />
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('users.lastName')}</Label>
-                  <Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>{t('users.role')}</Label>
-                  <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="agent">Agent</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="super_admin">Super Admin</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>{t('users.enterprise')}</Label>
-                  <Input value={form.enterprise} onChange={(e) => setForm({ ...form, enterprise: e.target.value })} />
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-                <Button type="submit">{editUser ? t('common.save') : t('common.create')}</Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditUser(null); resetForm() } }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editUser ? t('users.editTitle') : t('users.dialogTitle')}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('common.email')}</Label>
+              <Input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                disabled={!!editUser}
+                required={!editUser}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>{editUser ? t('users.newPasswordLabel') : t('common.password')}</Label>
+              <Input
+                type="password"
+                value={form.password}
+                onChange={(e) => setForm({ ...form, password: e.target.value })}
+                required={!editUser}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>{t('users.firstName')}</Label>
+                <Input value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('users.lastName')}</Label>
+                <Input value={form.last_name} onChange={(e) => setForm({ ...form, last_name: e.target.value })} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>{t('users.role')}</Label>
+                <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="agent">Agent</SelectItem>
+                    <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('users.enterprise')}</Label>
+                <Input value={form.enterprise} onChange={(e) => setForm({ ...form, enterprise: e.target.value })} />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+              <Button type="submit">{editUser ? t('common.save') : t('common.create')}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {error && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">
@@ -221,6 +222,11 @@ export default function Users() {
           </TableBody>
         </Table>
       </Card>
+
+      {actionsContainer && createPortal(
+        <Button onClick={() => setDialogOpen(true)}>{t('common.new')}</Button>,
+        actionsContainer
+      )}
     </div>
   )
 }

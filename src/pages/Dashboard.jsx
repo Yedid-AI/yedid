@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle } from '../lib/page-header'
 import { useAgents, useInboxes, useSources, useSessions, useSessionMessages, useUsers } from '../hooks/queries'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ import { Database, Bot, Inbox, Users, MessageSquare, CheckCircle, CircleDot, Bra
 export default function Dashboard() {
   const { user } = useAuth()
   const { t, locale, dateLocale } = useI18n()
+  usePageTitle(t('dashboard.title'))
   const [filterStatus, setFilterStatus] = useState('all')
   const [filterInbox, setFilterInbox] = useState('all')
   const [filterDateRange, setFilterDateRange] = useState('last30')
@@ -148,7 +150,6 @@ export default function Dashboard() {
   return (
     <div>
       <div className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">{t('dashboard.title')}</h1>
         <p className="text-sm text-muted-foreground mt-1">
           {t('dashboard.welcome', { name: user?.first_name || user?.email })}
         </p>

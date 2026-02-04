@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { useSettings, useUpdateSettings } from '../hooks/queries'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -68,6 +70,8 @@ const GROUPS = [
 
 export default function Environment() {
   const { t } = useI18n()
+  usePageTitle(t('environment.title'))
+  const { actionsContainer } = usePageHeader()
   const { data: settings = {}, isLoading } = useSettings()
   const updateSettings = useUpdateSettings()
   const [values, setValues] = useState({})
@@ -123,12 +127,8 @@ export default function Environment() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('environment.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('environment.subtitle')}</p>
         </div>
-        <Button onClick={handleSave} disabled={saving}>
-          {saved ? <><Check size={16} className="me-2" />{t('common.saved')}</> : <><Save size={16} className="me-2" />{saving ? t('common.saving') : t('common.save')}</>}
-        </Button>
       </div>
 
       {error && (
@@ -188,6 +188,13 @@ export default function Environment() {
           </Card>
         ))}
       </div>
+
+      {actionsContainer && createPortal(
+        <Button onClick={handleSave} disabled={saving}>
+          {saved ? <><Check size={16} className="me-2" />{t('common.saved')}</> : <><Save size={16} className="me-2" />{saving ? t('common.saving') : t('common.save')}</>}
+        </Button>,
+        actionsContainer
+      )}
     </div>
   )
 }

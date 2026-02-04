@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useAgent } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -14,6 +15,8 @@ export default function AgentDetail() {
   const navigate = useNavigate()
   const { t, dateLocale } = useI18n()
   const { data: agent, isLoading, error: queryError } = useAgent(id)
+  usePageTitle(agent?.name || '')
+
 
   if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
   if (queryError) return (
@@ -32,7 +35,6 @@ export default function AgentDetail() {
           <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
         </Button>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{agent.name}</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {t('common.createdAt')} {new Date(agent.created_at).toLocaleDateString(dateLocale)}
           </p>

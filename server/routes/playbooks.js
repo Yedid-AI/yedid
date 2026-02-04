@@ -8,7 +8,7 @@ const router = Router()
 // POST /api/agent-bots/:agentBotId/playbooks
 router.post('/agent-bots/:agentBotId/playbooks', checkRole('admin'), verifyAgentOwner, async (req, res) => {
   try {
-    const { title, content, audience, rules, tool_id, is_active } = req.body
+    const { title, content, audience, rules, tool_id, is_active, emoji } = req.body
     if (!title || !content) {
       return res.status(400).json({ error: 'Titre et contenu requis' })
     }
@@ -24,6 +24,7 @@ router.post('/agent-bots/:agentBotId/playbooks', checkRole('admin'), verifyAgent
         rules: rules || null,
         tool_id: tool_id || null,
         is_active: is_active !== undefined ? is_active : true,
+        emoji: emoji || null,
       })
       .select('*, tools(id, name)')
       .single()
@@ -40,7 +41,7 @@ router.post('/agent-bots/:agentBotId/playbooks', checkRole('admin'), verifyAgent
 router.put('/agent-bots/:agentBotId/playbooks/:id', checkRole('admin'), verifyAgentOwner, async (req, res) => {
   try {
     const { id } = req.params
-    const { title, content, audience, rules, tool_id, is_active } = req.body
+    const { title, content, audience, rules, tool_id, is_active, emoji } = req.body
 
     const updates = { updated_at: new Date().toISOString() }
     if (title !== undefined) updates.title = title
@@ -49,6 +50,7 @@ router.put('/agent-bots/:agentBotId/playbooks/:id', checkRole('admin'), verifyAg
     if (rules !== undefined) updates.rules = rules
     if (tool_id !== undefined) updates.tool_id = tool_id
     if (is_active !== undefined) updates.is_active = is_active
+    if (emoji !== undefined) updates.emoji = emoji || null
 
     const { data, error } = await req.supabase
       .from('playbooks')

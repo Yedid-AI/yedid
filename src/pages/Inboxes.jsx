@@ -1,15 +1,17 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useInboxes, useCreateInbox, useConnectWhatsApp } from '../hooks/queries'
 import { api } from '../lib/api'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
 import { LayoutGrid, List, Globe, MessageCircle, Instagram, Facebook, Settings, ExternalLink, Bot, CircleDot, CheckCircle, Loader2 } from 'lucide-react'
 
@@ -35,6 +37,8 @@ export default function Inboxes() {
   const [error, setError] = useState('')
   const navigate = useNavigate()
   const { t } = useI18n()
+  usePageTitle(t('inboxes.title'))
+  const { actionsContainer } = usePageHeader()
 
   const { data: inboxes = [], isLoading } = useInboxes()
   const createInbox = useCreateInbox()
@@ -95,7 +99,6 @@ export default function Inboxes() {
     <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t('inboxes.title')}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('inboxes.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
@@ -107,93 +110,91 @@ export default function Inboxes() {
               <List size={14} />
             </button>
           </div>
-          <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetDialog() }}>
-            <DialogTrigger asChild>
-              <Button>{t('inboxes.newInbox')}</Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>{t('inboxes.dialogTitle')}</DialogTitle>
-              </DialogHeader>
-
-              {error && (
-                <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
-              )}
-
-              {!channelStep ? (
-                <div className="space-y-3">
-                  <p className="text-sm text-muted-foreground">{t('inboxes.chooseChannel')}</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
-                      onClick={() => setChannelStep('web')}
-                    >
-                      <Globe size={24} className="text-primary" />
-                      <span className="text-sm font-medium">{t('inboxes.channelWeb')}</span>
-                      <span className="text-[11px] text-muted-foreground text-center">{t('inboxes.webDescription')}</span>
-                    </button>
-                    <button
-                      type="button"
-                      className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-emerald-500 hover:bg-emerald-500/5 transition-colors"
-                      onClick={handleConnectWhatsApp}
-                      disabled={connectWhatsApp.isPending}
-                    >
-                      {connectWhatsApp.isPending ? (
-                        <Loader2 size={24} className="text-emerald-500 animate-spin" />
-                      ) : (
-                        <MessageCircle size={24} className="text-emerald-500" />
-                      )}
-                      <span className="text-sm font-medium">WhatsApp</span>
-                      <span className="text-[11px] text-muted-foreground text-center">{t('inboxes.whatsappDescription')}</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <form onSubmit={handleCreate} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>{t('common.name')}</Label>
-                    <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('inboxes.namePlaceholder')} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t('inboxes.websiteUrl')}</Label>
-                    <Input value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder={t('inboxes.websiteUrlPlaceholder')} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t('inboxes.welcomeTitle')}</Label>
-                    <Input value={form.welcome_title} onChange={(e) => setForm({ ...form, welcome_title: e.target.value })} placeholder={t('inboxes.welcomeTitlePlaceholder')} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t('inboxes.welcomeTagline')}</Label>
-                    <Input value={form.welcome_tagline} onChange={(e) => setForm({ ...form, welcome_tagline: e.target.value })} placeholder={t('inboxes.welcomeTaglinePlaceholder')} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t('inboxes.widgetColor')}</Label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="color"
-                        value={form.widget_color}
-                        onChange={(e) => setForm({ ...form, widget_color: e.target.value })}
-                        className="w-9 h-9 rounded-md border cursor-pointer p-0.5"
-                      />
-                      <Input
-                        value={form.widget_color}
-                        onChange={(e) => setForm({ ...form, widget_color: e.target.value })}
-                        className="w-[100px] font-mono text-sm"
-                        maxLength={7}
-                      />
-                    </div>
-                  </div>
-                  <div className="flex gap-2 justify-end">
-                    <Button type="button" variant="outline" onClick={() => setChannelStep(null)}>{t('common.back')}</Button>
-                    <Button type="submit" disabled={createInbox.isPending}>{createInbox.isPending ? t('common.saving') : t('common.create')}</Button>
-                  </div>
-                </form>
-              )}
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) resetDialog() }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t('inboxes.dialogTitle')}</DialogTitle>
+          </DialogHeader>
+
+          {error && (
+            <div className="p-3 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
+          )}
+
+          {!channelStep ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">{t('inboxes.chooseChannel')}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-primary hover:bg-primary/5 transition-colors"
+                  onClick={() => setChannelStep('web')}
+                >
+                  <Globe size={24} className="text-primary" />
+                  <span className="text-sm font-medium">{t('inboxes.channelWeb')}</span>
+                  <span className="text-[11px] text-muted-foreground text-center">{t('inboxes.webDescription')}</span>
+                </button>
+                <button
+                  type="button"
+                  className="flex flex-col items-center gap-2 p-4 rounded-lg border hover:border-emerald-500 hover:bg-emerald-500/5 transition-colors"
+                  onClick={handleConnectWhatsApp}
+                  disabled={connectWhatsApp.isPending}
+                >
+                  {connectWhatsApp.isPending ? (
+                    <Loader2 size={24} className="text-emerald-500 animate-spin" />
+                  ) : (
+                    <MessageCircle size={24} className="text-emerald-500" />
+                  )}
+                  <span className="text-sm font-medium">WhatsApp</span>
+                  <span className="text-[11px] text-muted-foreground text-center">{t('inboxes.whatsappDescription')}</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div className="space-y-2">
+                <Label>{t('common.name')}</Label>
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('inboxes.namePlaceholder')} required />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('inboxes.websiteUrl')}</Label>
+                <Input value={form.website_url} onChange={(e) => setForm({ ...form, website_url: e.target.value })} placeholder={t('inboxes.websiteUrlPlaceholder')} />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('inboxes.welcomeTitle')}</Label>
+                <Input value={form.welcome_title} onChange={(e) => setForm({ ...form, welcome_title: e.target.value })} placeholder={t('inboxes.welcomeTitlePlaceholder')} />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('inboxes.welcomeTagline')}</Label>
+                <Input value={form.welcome_tagline} onChange={(e) => setForm({ ...form, welcome_tagline: e.target.value })} placeholder={t('inboxes.welcomeTaglinePlaceholder')} />
+              </div>
+              <div className="space-y-2">
+                <Label>{t('inboxes.widgetColor')}</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={form.widget_color}
+                    onChange={(e) => setForm({ ...form, widget_color: e.target.value })}
+                    className="w-9 h-9 rounded-md border cursor-pointer p-0.5"
+                  />
+                  <Input
+                    value={form.widget_color}
+                    onChange={(e) => setForm({ ...form, widget_color: e.target.value })}
+                    className="w-[100px] font-mono text-sm"
+                    maxLength={7}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-2 justify-end">
+                <Button type="button" variant="outline" onClick={() => setChannelStep(null)}>{t('common.back')}</Button>
+                <Button type="submit" disabled={createInbox.isPending}>{createInbox.isPending ? t('common.saving') : t('common.create')}</Button>
+              </div>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {error && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
@@ -303,6 +304,11 @@ export default function Inboxes() {
             </TableBody>
           </Table>
         </Card>
+      )}
+
+      {actionsContainer && createPortal(
+        <Button onClick={() => setDialogOpen(true)}>{t('inboxes.newInbox')}</Button>,
+        actionsContainer
       )}
     </div>
   )

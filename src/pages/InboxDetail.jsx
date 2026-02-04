@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useInbox, useAgents, useSessions, useAssignAgent, useDeleteInbox, useInboxChatwoot, useUpdateInbox, useUploadInboxAvatar, useChatwootAgents, useInboxMembers, useUpdateInboxMembers, useUpdateInboxAiSettings, useWhatsAppStatus, useWhatsAppReconnect } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
+import { usePageTitle } from '../lib/page-header'
 import { useTheme } from '../lib/theme'
 import { localeConfig } from '../locales/index.js'
 import { Button } from '@/components/ui/button'
@@ -37,6 +38,8 @@ export default function InboxDetail() {
   const { dark } = useTheme()
 
   const { data: inbox, isLoading: inboxLoading } = useInbox(id)
+  usePageTitle(inbox?.name || '')
+
   const { data: agents = [], isLoading: agentsLoading } = useAgents()
   const { data: sessionData, isLoading: sessionsLoading } = useSessions({ inbox_id: id })
   const assignAgent = useAssignAgent()
@@ -300,69 +303,67 @@ export default function InboxDetail() {
 
   return (
     <div>
-      <div className="flex items-center gap-4 mb-8">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/inboxes')}>
-          <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
-        </Button>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{inbox.name || 'Inbox'}</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {t('common.createdAt')} {new Date(inbox.created_at).toLocaleDateString(dateLocale)}
-          </p>
-        </div>
-        {inbox.agent_bots && (
-          <Badge variant="default" className="ms-auto">{inbox.agent_bots.name}</Badge>
-        )}
-      </div>
-
       {error && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
       )}
 
       <Tabs defaultValue="info">
-        <TabsList>
-          <TabsTrigger value="info"><Info className="me-1.5 h-4 w-4" />{t('inboxes.info')}</TabsTrigger>
-          <TabsTrigger value="sessions"><MessageSquare className="me-1.5 h-4 w-4" />{t('inboxes.sessions')}</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="info" className="mt-6 space-y-6">
-          {/* Inline details bar */}
-          <Card className="py-[15px]">
-            <CardContent className="px-4">
-              <div className="flex items-center gap-5 text-sm flex-wrap">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Inbox</span>
-                  <span className="font-medium">{inbox.inbox_id}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="text-muted-foreground">Account</span>
-                  <span className="font-medium">{inbox.chatwoot_account_id}</span>
-                </div>
-                {inbox.website_token && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground">Token</span>
-                    <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded select-all">{inbox.website_token}</code>
-                    <button
-                      type="button"
-                      onClick={handleCopyToken}
-                      className="text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
-                    </button>
-                  </div>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="ms-auto gap-1.5"
-                  onClick={handleSSO}
-                >
-                  <ExternalLink size={14} />
-                  {t('inboxes.openInbox')}
-                </Button>
+        {/* Header Card */}
+        <Card className="mb-6">
+          {/* Line 1: Back + Name/Date + CTA */}
+          <div className="flex items-center justify-between px-5 pt-4 pb-3">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => navigate('/inboxes')}>
+                <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
+              </Button>
+              <div className="w-px h-5 bg-border" />
+              <div>
+                <h1 className="text-base font-semibold tracking-tight">{inbox.name || 'Inbox'}</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {t('common.createdAt')} {new Date(inbox.created_at).toLocaleDateString(dateLocale)}
+                </p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={handleSSO}>
+              <ExternalLink size={14} />
+              {t('inboxes.openInbox')}
+            </Button>
+          </div>
+
+          {/* Line 2: Tabs left + Metadata right */}
+          <div className="flex items-center justify-between px-5 pb-3 border-t pt-3">
+            <TabsList>
+              <TabsTrigger value="info"><Info className="me-1.5 h-4 w-4" />{t('inboxes.info')}</TabsTrigger>
+              <TabsTrigger value="sessions"><MessageSquare className="me-1.5 h-4 w-4" />{t('inboxes.sessions')}</TabsTrigger>
+            </TabsList>
+
+            <div className="flex items-center gap-5 text-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">Inbox</span>
+                <span className="font-medium">{inbox.inbox_id}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">Account</span>
+                <span className="font-medium">{inbox.chatwoot_account_id}</span>
+              </div>
+              {inbox.website_token && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-muted-foreground">Token</span>
+                  <code className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded select-all">{inbox.website_token}</code>
+                  <button
+                    type="button"
+                    onClick={handleCopyToken}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {copied ? <Check size={14} className="text-emerald-500" /> : <Copy size={14} />}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        <TabsContent value="info" className="space-y-6">
 
           {/* WhatsApp Connection Status */}
           {isWhatsApp && (
