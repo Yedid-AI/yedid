@@ -463,6 +463,9 @@ export default {
   'calls.noRecording': 'Aucun enregistrement disponible',
   'calls.allData': 'Toutes les donnees',
   'calls.metadata': 'Metadonnees',
+  'calls.sync': 'Synchroniser',
+  'calls.syncing': 'Synchronisation...',
+  'calls.lastSync': 'Derniere sync',
 
   // branches
   'branches.title': 'Branches',

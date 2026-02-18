@@ -27,6 +27,7 @@ import dispatchConfigRoutes from './routes/dispatch-config.js'
 import callsRoutes from './routes/calls.js'
 import { loadSettings } from './settings.js'
 import { startClosingCron } from './engine/closing-cron.js'
+import { startCallsCron } from './engine/calls-cron.js'
 
 // --- Validate required env vars at startup ---
 const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY']
@@ -185,4 +186,5 @@ app.listen(PORT, async () => {
   await loadSettings(supabase)
   await seedAdmin()
   startClosingCron(supabaseAdmin)
+  startCallsCron(supabaseAdmin)
 })

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useCalls, useCallRecording, useCallMetadata } from '../hooks/queries'
+import { useCalls, useCallRecording, useCallMetadata, useCallSync, useCallSyncStatus } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { useSidePanel } from '../lib/side-panel'
@@ -16,7 +16,7 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Download, Clock, Timer } from 'lucide-react'
+import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Download, Clock, Timer, RefreshCw, Loader2 } from 'lucide-react'
 
 const calendarLocales = { fr: frLocale, en: enUS, he: heLocale }
 
@@ -69,6 +69,10 @@ export default function Calls() {
   // Pagination
   const [pageSize, setPageSize] = useState(50)
   const [currentPage, setCurrentPage] = useState(0)
+
+  // Sync
+  const callSync = useCallSync()
+  const { data: syncStatus } = useCallSyncStatus()
 
   // Side panel
   const [selectedCall, setSelectedCall] = useState(null)
@@ -308,6 +312,29 @@ export default function Calls() {
       {panelContainer && selectedCall && createPortal(
         <CallDetailPanel call={selectedCall} onClose={closePanel} t={t} />,
         panelContainer
+      )}
+
+      {/* Header actions — Sync button */}
+      {actionsContainer && createPortal(
+        <div className="flex items-center gap-3">
+          {syncStatus?.last_synced && (
+            <span className="text-xs text-muted-foreground">
+              {t('calls.lastSync')}: {new Date(syncStatus.last_synced).toLocaleString()}
+            </span>
+          )}
+          <Button
+            onClick={() => callSync.mutate({ days: 30 })}
+            disabled={callSync.isPending}
+            variant="outline"
+            className="gap-2"
+          >
+            {callSync.isPending
+              ? <><Loader2 size={16} className="animate-spin" />{t('calls.syncing')}</>
+              : <><RefreshCw size={16} />{t('calls.sync')}</>
+            }
+          </Button>
+        </div>,
+        actionsContainer
       )}
     </div>
   )

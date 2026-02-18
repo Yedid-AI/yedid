@@ -740,6 +740,22 @@ export function useCallMetadata(uuid) {
   })
 }
 
+export function useCallSync() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body = {}) => api.post('/calls/sync', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['calls'] }),
+  })
+}
+
+export function useCallSyncStatus() {
+  return useQuery({
+    queryKey: queryKeys.callSyncStatus,
+    queryFn: () => api.get('/calls/sync/status'),
+    staleTime: 60_000,
+  })
+}
+
 // ─── City-Branch Index ──────────────────────────────────
 export function useCityIndex() {
   return useQuery({

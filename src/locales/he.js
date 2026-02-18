@@ -463,6 +463,9 @@ export default {
   'calls.noRecording': 'אין הקלטה זמינה',
   'calls.allData': 'כל הנתונים',
   'calls.metadata': 'מטא-דאטה',
+  'calls.sync': 'סנכרון',
+  'calls.syncing': '...מסנכרן',
+  'calls.lastSync': 'סנכרון אחרון',
 
   // branches
   'branches.title': 'סניפים',

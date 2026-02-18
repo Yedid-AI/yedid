@@ -46,4 +46,5 @@ export const queryKeys = {
   calls: (filters) => ['calls', filters || {}],
   callRecording: (uuid) => ['calls', 'recording', uuid],
   callMetadata: (uuid) => ['calls', 'metadata', uuid],
+  callSyncStatus: ['calls', 'sync-status'],
 }
