@@ -112,7 +112,7 @@ router.post('/calls/sync', checkRole('admin'), async (req, res) => {
         cdr_meta_data: metaData,
         raw_data: row,
         synced_at: new Date().toISOString(),
-      }}))
+      }})
 
       const { error: upsertError } = await req.supabaseAdmin
         .from('calls')
