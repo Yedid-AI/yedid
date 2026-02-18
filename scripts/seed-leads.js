@@ -65,6 +65,53 @@ function readCSV(filename) {
 
 function clean(s) { return (s || '').trim().replace(/\u200f|\u200e/g, '') }
 
+// Parse date string into ISO timestamp (or null)
+function parseDate(dateStr, timeStr) {
+  const d = clean(dateStr)
+  const t = clean(timeStr)
+  if (!d) return null
+
+  // Format: YYYY-MM-DD HH:MM:SS (caregiver)
+  if (/^\d{4}-\d{2}-\d{2}/.test(d)) {
+    const dt = new Date(d)
+    return isNaN(dt.getTime()) ? null : dt.toISOString()
+  }
+
+  // Format: DD/MM/YYYY (patient, aviezer)
+  const m = d.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (m) {
+    const year = parseInt(m[3])
+    if (year < 2000) return null // skip bogus dates like 1907
+    let iso = `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+    if (t && /^\d{1,2}:\d{2}/.test(t)) {
+      const timePart = t.includes(':') && t.split(':').length >= 3 ? t : t + ':00'
+      iso += `T${timePart}`
+    } else {
+      iso += 'T00:00:00'
+    }
+    const dt = new Date(iso)
+    return isNaN(dt.getTime()) ? null : dt.toISOString()
+  }
+
+  // Hebrew month names: "יוני 16, 2025"
+  const heMonths = { 'ינואר': '01', 'פברואר': '02', 'מרץ': '03', 'אפריל': '04', 'מאי': '05', 'יוני': '06', 'יולי': '07', 'אוגוסט': '08', 'ספטמבר': '09', 'אוקטובר': '10', 'נובמבר': '11', 'דצמבר': '12' }
+  const heMatch = d.match(/^(.+?)\s+(\d{1,2}),\s*(\d{4})$/)
+  if (heMatch && heMonths[heMatch[1]]) {
+    const iso = `${heMatch[3]}-${heMonths[heMatch[1]]}-${heMatch[2].padStart(2, '0')}T00:00:00`
+    const dt = new Date(iso)
+    return isNaN(dt.getTime()) ? null : dt.toISOString()
+  }
+
+  // Excel serial date number (days since 1899-12-30)
+  if (/^\d{5}$/.test(d)) {
+    const serial = parseInt(d)
+    const dt = new Date(Date.UTC(1899, 11, 30 + serial))
+    return isNaN(dt.getTime()) ? null : dt.toISOString()
+  }
+
+  return null
+}
+
 // ─── Import Functions ────────────────────────────────────
 
 async function importBranches() {
@@ -141,6 +188,8 @@ async function importPatientLeads() {
     const phone = clean(r[5])
     if (!name || !phone) { skipped++; continue }
 
+    const createdAt = parseDate(r[1], r[2])
+
     values.push([
       babaitUserId, 'babait', 'patient',
       name, phone,
@@ -159,6 +208,7 @@ async function importPatientLeads() {
       clean(r[12]) || null, // ip
       null, // campaign
       '{}', // custom_fields
+      createdAt, // created_at
     ])
   }
 
@@ -166,13 +216,14 @@ async function importPatientLeads() {
   for (let i = 0; i < values.length; i += 500) {
     const chunk = values.slice(i, i + 500)
     const placeholders = chunk.map((_, idx) => {
-      const base = idx * 20
-      return `(${Array.from({ length: 20 }, (_, j) => `$${base + j + 1}`).join(', ')})`
+      const base = idx * 21
+      const cols = Array.from({ length: 20 }, (_, j) => `$${base + j + 1}`).join(', ')
+      return `(${cols}, COALESCE($${base + 21}, now()))`
     }).join(', ')
     const flat = chunk.flat()
 
     await client.query(
-      `INSERT INTO leads (user_id, company, type, name, phone, email, city, branch, coordinator, source, lead_channel, service_requested, service_type, details, status, position_type, experience, ip_address, campaign, custom_fields)
+      `INSERT INTO leads (user_id, company, type, name, phone, email, city, branch, coordinator, source, lead_channel, service_requested, service_type, details, status, position_type, experience, ip_address, campaign, custom_fields, created_at)
        VALUES ${placeholders}`,
       flat
     )
@@ -206,6 +257,8 @@ async function importCaregiverLeads() {
     const status = statusMap[rawStatus] || 'new'
     const exp = ['כן', 'yes', 'true', '1'].includes(clean(r[9]).toLowerCase())
 
+    const createdAt = parseDate(r[1])
+
     values.push([
       babaitUserId, 'babait', 'caregiver',
       name, phone,
@@ -224,19 +277,21 @@ async function importCaregiverLeads() {
       null, // ip
       clean(r[2]) || null, // campaign
       '{}', // custom_fields
+      createdAt, // created_at
     ])
   }
 
   for (let i = 0; i < values.length; i += 500) {
     const chunk = values.slice(i, i + 500)
     const placeholders = chunk.map((_, idx) => {
-      const base = idx * 20
-      return `(${Array.from({ length: 20 }, (_, j) => `$${base + j + 1}`).join(', ')})`
+      const base = idx * 21
+      const cols = Array.from({ length: 20 }, (_, j) => `$${base + j + 1}`).join(', ')
+      return `(${cols}, COALESCE($${base + 21}, now()))`
     }).join(', ')
     const flat = chunk.flat()
 
     await client.query(
-      `INSERT INTO leads (user_id, company, type, name, phone, email, city, branch, coordinator, source, lead_channel, service_requested, service_type, details, status, position_type, experience, ip_address, campaign, custom_fields)
+      `INSERT INTO leads (user_id, company, type, name, phone, email, city, branch, coordinator, source, lead_channel, service_requested, service_type, details, status, position_type, experience, ip_address, campaign, custom_fields, created_at)
        VALUES ${placeholders}`,
       flat
     )
@@ -269,6 +324,8 @@ async function importAviezerLeads() {
     const rawStatus = clean(r[8])
     const status = statusMap[rawStatus] || 'new'
 
+    const createdAt = parseDate(r[2], r[3])
+
     values.push([
       aviezerUserId, 'aviezer', 'foreign_caregiver',
       name, phone,
@@ -287,19 +344,21 @@ async function importAviezerLeads() {
       null, // ip
       null, // campaign
       '{}', // custom_fields
+      createdAt, // created_at
     ])
   }
 
   for (let i = 0; i < values.length; i += 500) {
     const chunk = values.slice(i, i + 500)
     const placeholders = chunk.map((_, idx) => {
-      const base = idx * 20
-      return `(${Array.from({ length: 20 }, (_, j) => `$${base + j + 1}`).join(', ')})`
+      const base = idx * 21
+      const cols = Array.from({ length: 20 }, (_, j) => `$${base + j + 1}`).join(', ')
+      return `(${cols}, COALESCE($${base + 21}, now()))`
     }).join(', ')
     const flat = chunk.flat()
 
     await client.query(
-      `INSERT INTO leads (user_id, company, type, name, phone, email, city, branch, coordinator, source, lead_channel, service_requested, service_type, details, status, position_type, experience, ip_address, campaign, custom_fields)
+      `INSERT INTO leads (user_id, company, type, name, phone, email, city, branch, coordinator, source, lead_channel, service_requested, service_type, details, status, position_type, experience, ip_address, campaign, custom_fields, created_at)
        VALUES ${placeholders}`,
       flat
     )
@@ -314,6 +373,13 @@ async function main() {
   console.log('Connected to database')
   console.log(`Babait user_id: ${babaitUserId}`)
   console.log(`Aviezer user_id: ${aviezerUserId}`)
+
+  // Clean existing data before re-import
+  console.log('\n--- Cleaning existing data ---')
+  const { rowCount: leadsDeleted } = await client.query('DELETE FROM leads WHERE user_id IN ($1, $2)', [babaitUserId, aviezerUserId])
+  const { rowCount: citiesDeleted } = await client.query('DELETE FROM city_branch_index WHERE user_id = $1', [babaitUserId])
+  const { rowCount: branchesDeleted } = await client.query('DELETE FROM branches WHERE user_id = $1', [babaitUserId])
+  console.log(`  Deleted ${leadsDeleted} leads, ${citiesDeleted} city entries, ${branchesDeleted} branches`)
 
   await importBranches()
   await importCityIndex()

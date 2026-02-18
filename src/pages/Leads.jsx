@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields } from '../hooks/queries'
+import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField } from '../hooks/queries'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
@@ -21,7 +21,14 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, Send } from 'lucide-react'
+import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, Send, Settings, Plus, Trash2 } from 'lucide-react'
+import babaitLogo from '@/assets/babaitlogo.png'
+import aviezerLogo from '@/assets/aviezer logo.png'
+
+const COMPANY_LOGOS = {
+  babait: { src: babaitLogo, label: 'בבית' },
+  aviezer: { src: aviezerLogo, label: 'אביעזר' },
+}
 
 const calendarLocales = { fr: frLocale, en: enUS, he: heLocale }
 
@@ -66,6 +73,7 @@ export default function Leads() {
   const [form, setForm] = useState(emptyForm)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [fieldsDialogOpen, setFieldsDialogOpen] = useState(false)
   const [error, setError] = useState('')
 
   const { panelContainer } = useSidePanel(!!selectedLead)
@@ -462,7 +470,14 @@ export default function Leads() {
                     <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{lead.source || '-'}</TableCell>
-                  {user?.role === 'super_admin' && <TableCell><Badge variant="outline">{lead.company}</Badge></TableCell>}
+                  {user?.role === 'super_admin' && <TableCell>
+                    {COMPANY_LOGOS[lead.company] ? (
+                      <div className="flex items-center gap-1.5">
+                        <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-5 w-5 rounded-sm object-contain" />
+                        <span className="text-xs font-medium">{COMPANY_LOGOS[lead.company].label}</span>
+                      </div>
+                    ) : <Badge variant="outline">{lead.company}</Badge>}
+                  </TableCell>}
                   <TableCell className="text-muted-foreground">{new Date(lead.created_at).toLocaleDateString()}</TableCell>
                 </TableRow>
               )
@@ -683,9 +698,21 @@ export default function Leads() {
         </DialogContent>
       </Dialog>
 
+      {/* Fields management dialog */}
+      <FieldsDialog
+        open={fieldsDialogOpen}
+        onOpenChange={setFieldsDialogOpen}
+        leadFields={leadFields}
+        t={t}
+      />
+
       {/* Header actions */}
       {actionsContainer && createPortal(
         <div className="flex gap-2">
+          <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setFieldsDialogOpen(true)}>
+            <Settings size={14} />
+            {t('leads.manageFields')}
+          </Button>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setImportDialogOpen(true)}>
             <Upload size={14} />
             {t('leads.import')}
@@ -853,7 +880,12 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
           <Card>
             <CardContent className="pt-3 pb-3">
               <div className="text-xs text-muted-foreground">{t('leads.company')}</div>
-              <Badge variant="outline" className="mt-1">{lead.company}</Badge>
+              {COMPANY_LOGOS[lead.company] ? (
+                <div className="flex items-center gap-2 mt-1">
+                  <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-6 w-6 rounded-sm object-contain" />
+                  <span className="text-sm font-semibold">{COMPANY_LOGOS[lead.company].label}</span>
+                </div>
+              ) : <Badge variant="outline" className="mt-1">{lead.company}</Badge>}
             </CardContent>
           </Card>
         )}
@@ -909,6 +941,177 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
         </div>
       )}
     </div>
+  )
+}
+
+// ─── Fields Management Dialog ────────────────────────────
+function FieldsDialog({ open, onOpenChange, leadFields, t }) {
+  const createField = useCreateLeadField()
+  const updateField = useUpdateLeadField()
+  const deleteField = useDeleteLeadField()
+
+  const emptyField = { field_key: '', label: '', field_type: 'text', options: [], required: false }
+  const [newField, setNewField] = useState(emptyField)
+  const [optionsText, setOptionsText] = useState('')
+  const [editingId, setEditingId] = useState(null)
+  const [error, setError] = useState('')
+
+  const FIELD_TYPES = [
+    { value: 'text', label: t('leads.fieldTypeText') },
+    { value: 'number', label: t('leads.fieldTypeNumber') },
+    { value: 'boolean', label: t('leads.fieldTypeBoolean') },
+    { value: 'select', label: t('leads.fieldTypeSelect') },
+    { value: 'date', label: t('leads.fieldTypeDate') },
+  ]
+
+  const resetForm = () => {
+    setNewField(emptyField)
+    setOptionsText('')
+    setEditingId(null)
+    setError('')
+  }
+
+  const startEdit = (fd) => {
+    setEditingId(fd.id)
+    setNewField({ field_key: fd.field_key, label: fd.label, field_type: fd.field_type, options: fd.options || [], required: fd.required || false })
+    setOptionsText((fd.options || []).join(', '))
+  }
+
+  const handleSave = async () => {
+    setError('')
+    const key = newField.field_key.trim()
+    const label = newField.label.trim()
+    if (!key || !label) { setError(t('leads.fieldKeyLabelRequired')); return }
+
+    const body = {
+      field_key: key,
+      label,
+      field_type: newField.field_type,
+      options: newField.field_type === 'select' ? optionsText.split(',').map(s => s.trim()).filter(Boolean) : null,
+      required: newField.required,
+    }
+
+    try {
+      if (editingId) {
+        await updateField.mutateAsync({ id: editingId, body })
+      } else {
+        await createField.mutateAsync(body)
+      }
+      resetForm()
+    } catch (err) { setError(err.message) }
+  }
+
+  const handleDelete = async (id) => {
+    try {
+      await deleteField.mutateAsync(id)
+    } catch (err) { setError(err.message) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { onOpenChange(v); if (!v) resetForm() }}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{t('leads.manageFields')}</DialogTitle>
+        </DialogHeader>
+
+        {/* Existing fields */}
+        {leadFields.length > 0 && (
+          <div className="space-y-2">
+            {leadFields.map((fd) => (
+              <div key={fd.id} className={`flex items-center gap-2 p-2 rounded-md border ${editingId === fd.id ? 'border-primary bg-primary/5' : ''}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium truncate">{fd.label}</div>
+                  <div className="text-xs text-muted-foreground">{fd.field_key} · {fd.field_type}{fd.options?.length ? ` (${fd.options.length} options)` : ''}</div>
+                </div>
+                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => editingId === fd.id ? resetForm() : startEdit(fd)}>
+                  <Settings size={12} />
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive">
+                      <Trash2 size={12} />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>{t('leads.deleteFieldTitle')}</AlertDialogTitle>
+                      <AlertDialogDescription>{t('leads.deleteFieldDesc', { label: fd.label })}</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                      <AlertDialogAction variant="destructive" onClick={() => handleDelete(fd.id)}>{t('common.delete')}</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {leadFields.length === 0 && (
+          <p className="text-sm text-muted-foreground text-center py-4">{t('leads.noCustomFields')}</p>
+        )}
+
+        {/* Add / Edit form */}
+        <div className="space-y-3 border-t pt-3">
+          <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            {editingId ? t('leads.editField') : t('leads.addField')}
+          </div>
+          {error && <div className="text-sm text-destructive">{error}</div>}
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">{t('leads.fieldKey')}</Label>
+              <Input
+                className="h-8 text-sm"
+                placeholder="e.g. urgency"
+                value={newField.field_key}
+                onChange={(e) => setNewField({ ...newField, field_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
+                disabled={!!editingId}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">{t('leads.fieldLabel')}</Label>
+              <Input
+                className="h-8 text-sm"
+                placeholder="e.g. Urgency"
+                value={newField.label}
+                onChange={(e) => setNewField({ ...newField, label: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">{t('leads.fieldType')}</Label>
+            <Select value={newField.field_type} onValueChange={(v) => setNewField({ ...newField, field_type: v })}>
+              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {FIELD_TYPES.map((ft) => <SelectItem key={ft.value} value={ft.value}>{ft.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {newField.field_type === 'select' && (
+            <div className="space-y-1">
+              <Label className="text-xs">{t('leads.fieldOptions')}</Label>
+              <Input
+                className="h-8 text-sm"
+                placeholder="low, medium, high"
+                value={optionsText}
+                onChange={(e) => setOptionsText(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">{t('leads.fieldOptionsHint')}</p>
+            </div>
+          )}
+          <div className="flex gap-2">
+            {editingId && (
+              <Button variant="outline" size="sm" onClick={resetForm}>{t('common.cancel')}</Button>
+            )}
+            <Button size="sm" className="gap-1" onClick={handleSave} disabled={createField.isPending || updateField.isPending}>
+              <Plus size={12} />
+              {editingId ? t('common.save') : t('leads.addField')}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 

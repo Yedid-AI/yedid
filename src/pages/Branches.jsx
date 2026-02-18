@@ -12,7 +12,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Building2, MapPin, Trash2 } from 'lucide-react'
+import { Building2, Home, MapPin, Trash2 } from 'lucide-react'
+
+const AVATAR_COLORS = [
+  'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
+  'bg-rose-500', 'bg-cyan-500', 'bg-fuchsia-500', 'bg-lime-600',
+  'bg-indigo-500', 'bg-orange-500', 'bg-teal-500', 'bg-pink-500',
+]
+
+function nameColor(name) {
+  let h = 0
+  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
+  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
 
 const emptyBranchForm = { name: '', contact_name: '', email: '', phone: '', mobile: '', address: '', whatsapp_phone: '' }
 const emptyCityForm = { city: '', branch_name: '' }
@@ -175,8 +187,22 @@ export default function Branches() {
                   </TableRow>
                 ) : branches.map((b) => (
                   <TableRow key={b.id}>
-                    <TableCell className="font-medium">{b.name}</TableCell>
-                    <TableCell>{b.contact_name || '-'}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Home size={14} className="text-muted-foreground shrink-0" />
+                        {b.name}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      {b.contact_name ? (
+                        <span className="inline-flex items-center gap-2">
+                          <span className={`${nameColor(b.contact_name)} text-white shrink-0 size-6 rounded-full flex items-center justify-center text-xs font-medium`}>
+                            {b.contact_name.charAt(0).toUpperCase()}
+                          </span>
+                          {b.contact_name}
+                        </span>
+                      ) : '-'}
+                    </TableCell>
                     <TableCell>{b.phone || b.mobile || '-'}</TableCell>
                     <TableCell className="max-w-[200px] truncate">{b.address || '-'}</TableCell>
                     <TableCell>

@@ -127,6 +127,15 @@ body {
   transform: scaleX(-1);
 }
 
+/* RTL: tables should respect document direction */
+[dir="rtl"] table {
+  direction: rtl;
+}
+[dir="rtl"] th,
+[dir="rtl"] td {
+  text-align: right;
+}
+
 /* Softer focus rings */
 @layer base {
   *:focus-visible {

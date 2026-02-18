@@ -2,11 +2,12 @@
 import { getSetting } from './settings.js'
 
 function getConfig() {
-  const dsnUrl = (getSetting('UNIPILE_DSN_URL') || '').trim().replace(/\/+$/, '')
+  let dsnUrl = (getSetting('UNIPILE_DSN_URL') || '').trim().replace(/\/+$/, '')
   const apiKey = (getSetting('UNIPILE_API_KEY') || '').trim()
   if (!dsnUrl || !apiKey) {
     throw new Error('Unipile non configure. Ajoutez UNIPILE_DSN_URL et UNIPILE_API_KEY dans Environnement.')
   }
+  if (!/^https?:\/\//.test(dsnUrl)) dsnUrl = `https://${dsnUrl}`
   return { dsnUrl, apiKey }
 }
 
