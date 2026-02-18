@@ -17,12 +17,28 @@ async function maskyooApi(service, params = {}) {
   const url = `${apiUrl}/api/?${qs}`
   console.log(`[maskyoo] GET ${url.replace(token, '***')}`)
 
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: { 'Authorization': `Bearer ${token}` },
-  })
+  // 30 second timeout
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30_000)
+
+  let res
+  try {
+    res = await fetch(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${token}` },
+      signal: controller.signal,
+    })
+  } catch (err) {
+    clearTimeout(timeout)
+    if (err.name === 'AbortError') {
+      throw new Error('Maskyoo: timeout apres 30s')
+    }
+    throw new Error(`Maskyoo: erreur reseau — ${err.message}`)
+  }
+  clearTimeout(timeout)
 
   const text = await res.text()
+  console.log(`[maskyoo] Response: ${res.status} — ${text.length} chars`)
 
   // Maskyoo returns text errors for auth/IP issues
   if (!res.ok || text.startsWith('The ip address') || text.startsWith('Token')) {
@@ -30,7 +46,9 @@ async function maskyooApi(service, params = {}) {
   }
 
   try {
-    return JSON.parse(text)
+    const json = JSON.parse(text)
+    console.log(`[maskyoo] Parsed: ${Array.isArray(json) ? json.length + ' rows' : typeof json}`)
+    return json
   } catch {
     throw new Error(`Maskyoo: reponse invalide — ${text.slice(0, 200)}`)
   }

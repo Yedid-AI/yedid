@@ -68,7 +68,12 @@ async function runCallsSync(supabase) {
     return
   }
 
-  if (!Array.isArray(data) || data.length === 0) return
+  if (!Array.isArray(data) || data.length === 0) {
+    console.log('[Calls Cron] No calls returned from Maskyoo (empty result)')
+    return
+  }
+
+  console.log(`[Calls Cron] Fetched ${data.length} calls from Maskyoo`)
 
   // We need to upsert for all users that have Maskyoo configured.
   // Since this is a shared Maskyoo account, assign to all admin users.
