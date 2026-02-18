@@ -550,4 +550,5 @@ function parseCSV(text) {
   return rows
 }
 
+export { dispatchLead }
 export default router

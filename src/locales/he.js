@@ -320,6 +320,7 @@ export default {
   'environment.agentApiTitle': 'API עוזר',
   'environment.agentApiDesc': 'אימות עבור קריאות עוזר',
   'environment.agentApiKeyPlaceholder': '...מפתח סודי',
+  'environment.publicLeadDesc': 'נקודת קצה ציבורית לקבלת לידים מטפסים חיצוניים',
   'environment.unipileTitle': 'Unipile',
   'environment.unipileDesc': 'אינטגרציית WhatsApp דרך Unipile',
   'environment.unipileApiKeyPlaceholder': '...מפתח API של Unipile',

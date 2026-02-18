@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { checkRole } from '../middleware.js'
-import { queryCdr, getRecording, getCallMetadata } from '../maskyoo.js'
+import { queryCdr, getCallMetadata, getRecordingUrl } from '../maskyoo.js'
 
 const router = Router()
 
@@ -10,14 +10,9 @@ router.get('/calls', checkRole('admin'), async (req, res) => {
     const { date_from, date_to, page = 0, page_size = 50, search } = req.query
     const limit = Math.min(Number(page_size) || 50, 200)
     const offset = (Number(page) || 0) * limit
-    const userId = req.user.user_id
 
-    // Build Supabase query
+    // Calls are shared (single Maskyoo account) — all admin+ see all calls
     let query = req.supabaseAdmin.from('calls').select('*', { count: 'exact' })
-
-    if (req.user.role !== 'super_admin') {
-      query = query.eq('user_id', userId)
-    }
 
     if (date_from) query = query.gte('start_call', date_from)
     if (date_to) query = query.lte('start_call', date_to)
@@ -137,11 +132,7 @@ router.post('/calls/sync', checkRole('admin'), async (req, res) => {
 // ─── GET /calls/sync/status — check last sync info ──────
 router.get('/calls/sync/status', checkRole('admin'), async (req, res) => {
   try {
-    const userId = req.user.user_id
     let query = req.supabaseAdmin.from('calls').select('synced_at', { count: 'exact' })
-    if (req.user.role !== 'super_admin') {
-      query = query.eq('user_id', userId)
-    }
     query = query.order('synced_at', { ascending: false }).limit(1)
 
     const { data, count, error } = await query
@@ -157,14 +148,59 @@ router.get('/calls/sync/status', checkRole('admin'), async (req, res) => {
   }
 })
 
-// ─── GET /calls/:uuid/recording — live from Maskyoo ─────
+// ─── GET /calls/:uuid/recording — proxy MP3 from Maskyoo ─────
 router.get('/calls/:uuid/recording', checkRole('admin'), async (req, res) => {
   try {
-    const data = await getRecording(req.params.uuid, req.query.type || 'mp3')
-    res.json(data)
+    const url = getRecordingUrl(req.params.uuid, req.query.type || 'mp3')
+
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30_000)
+
+    const upstream = await fetch(url.url, {
+      headers: { 'Authorization': `Bearer ${url.token}` },
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+
+    const contentType = upstream.headers.get('content-type') || ''
+
+    // If Maskyoo returns JSON, it's an error (e.g. 3002 = no recording)
+    if (contentType.includes('json') || contentType.includes('text')) {
+      const text = await upstream.text()
+      try {
+        const json = JSON.parse(text)
+        if (json.status?.code && json.status.code !== 200) {
+          return res.status(404).json({ error: json.status.description || 'Recording not available' })
+        }
+        return res.json(json)
+      } catch {
+        return res.status(404).json({ error: 'No recording available' })
+      }
+    }
+
+    // Binary audio — proxy to client
+    res.setHeader('Content-Type', contentType || 'audio/mpeg')
+    if (upstream.headers.get('content-length')) {
+      res.setHeader('Content-Length', upstream.headers.get('content-length'))
+    }
+    res.setHeader('Accept-Ranges', 'bytes')
+
+    // Stream the response body
+    const reader = upstream.body.getReader()
+    const pump = async () => {
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        res.write(value)
+      }
+      res.end()
+    }
+    await pump()
   } catch (err) {
     console.error('[calls] Recording error:', err.message)
-    res.status(502).json({ error: err.message })
+    if (!res.headersSent) {
+      res.status(502).json({ error: err.message })
+    }
   }
 })
 

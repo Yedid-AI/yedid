@@ -25,6 +25,7 @@ import leadsRoutes from './routes/leads.js'
 import branchesRoutes from './routes/branches.js'
 import dispatchConfigRoutes from './routes/dispatch-config.js'
 import callsRoutes from './routes/calls.js'
+import publicLeadsRoutes from './routes/public-leads.js'
 import { loadSettings } from './settings.js'
 import { startClosingCron } from './engine/closing-cron.js'
 import { startCallsCron } from './engine/calls-cron.js'
@@ -76,6 +77,15 @@ const webhookLimiter = rateLimit({
   legacyHeaders: false,
 })
 
+// Rate limiting — public leads endpoint
+const publicLeadsLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  message: { error: 'Rate limit exceeded' },
+  standardHeaders: true,
+  legacyHeaders: false,
+})
+
 // Middleware
 app.use(express.json({ limit: '10mb' }))
 
@@ -94,6 +104,10 @@ app.get('/api/health', (req, res) => {
 // Rate limiters on specific endpoints
 app.use('/api/login', loginLimiter)
 app.use('/api/webhook', webhookLimiter)
+app.use('/api/public', publicLeadsLimiter)
+
+// Public routes (no auth required)
+app.use('/api', publicLeadsRoutes)
 
 // API routes
 app.use('/api', authRoutes)

@@ -17,6 +17,9 @@ const CONFIGURABLE_KEYS = [
   // Maskyoo (Call Tracking)
   'MASKYOO_API_URL',
   'MASKYOO_API_TOKEN',
+  // Public Lead API
+  'LEAD_API_KEY',
+  'LEAD_DEFAULT_USER_ID',
   // Closing & Billing
   'CLOSING_ENABLED',
   'CLOSING_INTERVAL_MINUTES',

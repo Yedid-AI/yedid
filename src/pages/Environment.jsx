@@ -75,6 +75,14 @@ const GROUPS = [
       { key: 'AGENT_API_KEY', label: 'API Key', placeholderKey: 'environment.agentApiKeyPlaceholder' },
     ],
   },
+  {
+    title: 'Public Lead API',
+    descriptionKey: 'environment.publicLeadDesc',
+    keys: [
+      { key: 'LEAD_API_KEY', label: 'API Key', placeholder: 'Cle secrete pour endpoint public...' },
+      { key: 'LEAD_DEFAULT_USER_ID', label: 'User ID par defaut', placeholder: '1' },
+    ],
+  },
 ]
 
 export default function Environment() {

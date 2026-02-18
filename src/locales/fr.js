@@ -320,6 +320,7 @@ export default {
   'environment.agentApiTitle': 'API Assistant',
   'environment.agentApiDesc': 'Authentification pour les appels assistant',
   'environment.agentApiKeyPlaceholder': 'Cle secrete...',
+  'environment.publicLeadDesc': 'Endpoint public pour recevoir des leads depuis des formulaires externes',
   'environment.unipileTitle': 'Unipile',
   'environment.unipileDesc': 'Integration WhatsApp via Unipile',
   'environment.maskyooTitle': 'Maskyoo',

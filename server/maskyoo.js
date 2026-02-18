@@ -86,12 +86,11 @@ export async function queryByDateRange(startTime, endTime) {
   })
 }
 
-// Get call recording URL by call UUID
-export async function getRecording(callUuid, type = 'mp3') {
-  return maskyooApi('get_record_by_call_uuid', {
-    call_uuid: callUuid,
-    type,
-  })
+// Build recording URL + auth (returns binary MP3, not JSON — needs proxy)
+export function getRecordingUrl(callUuid, type = 'mp3') {
+  const { apiUrl, token } = getConfig()
+  const qs = new URLSearchParams({ service: 'get_record_by_call_uuid', format: 'json', call_uuid: callUuid, type })
+  return { url: `${apiUrl}/api/?${qs}`, token }
 }
 
 // Get call metadata by call UUID

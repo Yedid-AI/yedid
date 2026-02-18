@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useCalls, useCallRecording, useCallMetadata, useCallSync, useCallSyncStatus } from '../hooks/queries'
+import { useCalls, useCallMetadata, useCallSync, useCallSyncStatus } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { useSidePanel } from '../lib/side-panel'
@@ -340,10 +340,66 @@ export default function Calls() {
   )
 }
 
+// ─── Recording Player (fetch blob via auth'd proxy) ─────
+function RecordingPlayer({ uuid, t }) {
+  const [blobUrl, setBlobUrl] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  useEffect(() => {
+    if (!uuid) return
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    setBlobUrl(null)
+
+    const token = localStorage.getItem('token')
+    fetch(`/api/calls/${encodeURIComponent(uuid)}/recording`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(async (res) => {
+        if (cancelled) return
+        const ct = res.headers.get('content-type') || ''
+        if (!res.ok || ct.includes('json')) {
+          const body = await res.json().catch(() => ({}))
+          throw new Error(body.error || 'Recording not available')
+        }
+        return res.blob()
+      })
+      .then((blob) => {
+        if (cancelled || !blob) return
+        setBlobUrl(URL.createObjectURL(blob))
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+      setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
+    }
+  }, [uuid])
+
+  if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={14} className="animate-spin" />{t('common.loading')}</div>
+  if (error) return <div className="text-sm text-muted-foreground">{error}</div>
+  if (!blobUrl) return null
+
+  return (
+    <div className="flex items-center gap-2">
+      <audio controls src={blobUrl} className="w-full h-8" preload="auto" />
+      <a href={blobUrl} download={`${uuid}.mp3`} className="shrink-0">
+        <Button variant="ghost" size="icon" className="h-8 w-8"><Download size={14} /></Button>
+      </a>
+    </div>
+  )
+}
+
 // ─── Call Detail Panel ──────────────────────────────────
 function CallDetailPanel({ call, onClose, t }) {
   const uuid = call.cdr_uniqueid
-  const { data: recording, isLoading: loadingRec } = useCallRecording(uuid)
   const { data: metadata, isLoading: loadingMeta } = useCallMetadata(uuid)
   const sc = getCallStatusConfig(call.call_status)
 
@@ -379,29 +435,11 @@ function CallDetailPanel({ call, onClose, t }) {
         </div>
 
         {/* Recording */}
-        {uuid && (
+        {uuid && call.call_status?.toUpperCase().includes('ANSWER') && (
           <Card>
             <CardContent className="pt-3 pb-3">
               <div className="text-xs text-muted-foreground mb-2">{t('calls.recording')}</div>
-              {loadingRec ? (
-                <p className="text-sm text-muted-foreground">{t('common.loading')}</p>
-              ) : recording?.url || recording?.link || recording?.record_url ? (
-                <div className="flex items-center gap-3">
-                  <audio controls className="flex-1 h-8" src={recording.url || recording.link || recording.record_url} />
-                  <a
-                    href={recording.url || recording.link || recording.record_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0"
-                  >
-                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                      <Download size={14} />
-                    </Button>
-                  </a>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">{t('calls.noRecording')}</p>
-              )}
+              <RecordingPlayer uuid={uuid} t={t} />
             </CardContent>
           </Card>
         )}

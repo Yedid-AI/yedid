@@ -75,59 +75,55 @@ async function runCallsSync(supabase) {
 
   console.log(`[Calls Cron] Fetched ${data.length} calls from Maskyoo`)
 
-  // We need to upsert for all users that have Maskyoo configured.
-  // Since this is a shared Maskyoo account, assign to all admin users.
-  const { data: users, error: usersErr } = await supabase
+  // Pick the first super_admin as the owner (shared Maskyoo account → store once)
+  const { data: owner, error: ownerErr } = await supabase
     .from('users')
     .select('id')
-    .in('role', ['admin', 'super_admin'])
+    .eq('role', 'super_admin')
+    .limit(1)
+    .maybeSingle()
 
-  if (usersErr || !users?.length) return
+  if (ownerErr || !owner) return
 
-  let totalSynced = 0
+  const batch = data.map(row => {
+    let metaData = row.cdr_meta_data || null
+    if (typeof metaData === 'string') {
+      try { metaData = JSON.parse(metaData) } catch { /* keep as-is */ }
+    }
+    return {
+      user_id: owner.id,
+      cdr_uniqueid: row.cdr_uniqueid || row.id || `unknown_${Date.now()}_${Math.random()}`,
+      start_call: row.start_call || null,
+      end_call: row.end_call || null,
+      call_duration: Number(row.call_duration) || 0,
+      cdr_ani: row.cdr_ani || null,
+      cdr_ddi: row.cdr_ddi || null,
+      user_phone: row.user_phone || null,
+      user_name: row.user_name || null,
+      call_status: row.call_status || null,
+      onetouch: row.onetouch || null,
+      gclid: row.gclid || null,
+      cdr_meta_data: metaData,
+      raw_data: row,
+      synced_at: new Date().toISOString(),
+    }
+  })
 
-  for (const user of users) {
-    const batch = data.map(row => {
-      // Parse cdr_meta_data if it's a JSON string
-      let metaData = row.cdr_meta_data || null
-      if (typeof metaData === 'string') {
-        try { metaData = JSON.parse(metaData) } catch { /* keep as-is */ }
-      }
-      return {
-        user_id: user.id,
-        cdr_uniqueid: row.cdr_uniqueid || row.id || `unknown_${Date.now()}_${Math.random()}`,
-        start_call: row.start_call || null,
-        end_call: row.end_call || null,
-        call_duration: Number(row.call_duration) || 0,
-        cdr_ani: row.cdr_ani || null,
-        cdr_ddi: row.cdr_ddi || null,
-        user_phone: row.user_phone || null,
-        user_name: row.user_name || null,
-        call_status: row.call_status || null,
-        onetouch: row.onetouch || null,
-        gclid: row.gclid || null,
-        cdr_meta_data: metaData,
-        raw_data: row,
-        synced_at: new Date().toISOString(),
-      }
-    })
+  let synced = 0
+  for (let i = 0; i < batch.length; i += 500) {
+    const chunk = batch.slice(i, i + 500)
+    const { error } = await supabase
+      .from('calls')
+      .upsert(chunk, { onConflict: 'user_id,cdr_uniqueid' })
 
-    // Upsert in chunks of 500
-    for (let i = 0; i < batch.length; i += 500) {
-      const chunk = batch.slice(i, i + 500)
-      const { error } = await supabase
-        .from('calls')
-        .upsert(chunk, { onConflict: 'user_id,cdr_uniqueid' })
-
-      if (error) {
-        console.error(`[Calls Cron] Upsert error for user ${user.id}:`, error.message)
-      } else {
-        totalSynced += chunk.length
-      }
+    if (error) {
+      console.error(`[Calls Cron] Upsert error:`, error.message)
+    } else {
+      synced += chunk.length
     }
   }
 
-  if (totalSynced > 0) {
-    console.log(`[Calls Cron] Synced ${totalSynced} records (${data.length} calls × ${users.length} users)`)
+  if (synced > 0) {
+    console.log(`[Calls Cron] Synced ${synced} calls`)
   }
 }
