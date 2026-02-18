@@ -3,13 +3,27 @@ import { checkRole } from '../middleware.js'
 
 const router = Router()
 
-// GET /api/playbooks — list all playbooks for current user
+/**
+ * Helper: get all agent_bot IDs owned by current user.
+ */
+async function getUserBotIds(supabase, userId) {
+  const { data } = await supabase
+    .from('agent_bots')
+    .select('id')
+    .eq('user_id', userId)
+  return (data || []).map(b => b.id)
+}
+
+// GET /api/playbooks — list all playbooks for current user (via agent_bots ownership)
 router.get('/playbooks', checkRole('admin'), async (req, res) => {
   try {
-    const { data, error } = await req.supabase
+    const botIds = await getUserBotIds(req.supabaseAdmin, req.user.user_id)
+    if (botIds.length === 0) return res.json({ playbooks: [] })
+
+    const { data, error } = await req.supabaseAdmin
       .from('playbooks')
       .select('*, tools(id, name)')
-      .eq('user_id', req.user.user_id)
+      .in('agent_bot_id', botIds)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -18,7 +32,7 @@ router.get('/playbooks', checkRole('admin'), async (req, res) => {
     const pbIds = data.map((pb) => pb.id)
     let statsMap = {}
     if (pbIds.length > 0) {
-      const { data: msgs } = await req.supabase
+      const { data: msgs } = await req.supabaseAdmin
         .from('conversation_messages')
         .select('playbook_id, session_id, sessions(billable, ai_reason)')
         .eq('user_id', req.user.user_id)
@@ -47,7 +61,7 @@ router.get('/playbooks', checkRole('admin'), async (req, res) => {
   }
 })
 
-// POST /api/playbooks — create playbook
+// POST /api/playbooks — create playbook (auto-assigns to user's first agent_bot)
 router.post('/playbooks', checkRole('admin'), async (req, res) => {
   try {
     const { title, content, audience, rules, tool_id, is_active, emoji } = req.body
@@ -55,10 +69,14 @@ router.post('/playbooks', checkRole('admin'), async (req, res) => {
       return res.status(400).json({ error: 'Titre et contenu requis' })
     }
 
-    const { data, error } = await req.supabase
+    // Auto-assign to user's first agent_bot
+    const botIds = await getUserBotIds(req.supabaseAdmin, req.user.user_id)
+    const agentBotId = req.body.agent_bot_id || botIds[0] || null
+
+    const { data, error } = await req.supabaseAdmin
       .from('playbooks')
       .insert({
-        user_id: req.user.user_id,
+        agent_bot_id: agentBotId,
         title,
         content,
         audience: audience || null,
@@ -84,6 +102,10 @@ router.put('/playbooks/:id', checkRole('admin'), async (req, res) => {
     const { id } = req.params
     const { title, content, audience, rules, tool_id, is_active, emoji } = req.body
 
+    // Verify ownership via agent_bots
+    const botIds = await getUserBotIds(req.supabaseAdmin, req.user.user_id)
+    if (botIds.length === 0) return res.status(404).json({ error: 'Playbook introuvable' })
+
     const updates = { updated_at: new Date().toISOString() }
     if (title !== undefined) updates.title = title
     if (content !== undefined) updates.content = content
@@ -93,11 +115,11 @@ router.put('/playbooks/:id', checkRole('admin'), async (req, res) => {
     if (is_active !== undefined) updates.is_active = is_active
     if (emoji !== undefined) updates.emoji = emoji || null
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.supabaseAdmin
       .from('playbooks')
       .update(updates)
       .eq('id', id)
-      .eq('user_id', req.user.user_id)
+      .in('agent_bot_id', botIds)
       .select('*, tools(id, name)')
       .single()
 
@@ -114,11 +136,14 @@ router.put('/playbooks/:id', checkRole('admin'), async (req, res) => {
 router.delete('/playbooks/:id', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const { error } = await req.supabase
+    const botIds = await getUserBotIds(req.supabaseAdmin, req.user.user_id)
+    if (botIds.length === 0) return res.status(404).json({ error: 'Playbook introuvable' })
+
+    const { error } = await req.supabaseAdmin
       .from('playbooks')
       .delete()
       .eq('id', id)
-      .eq('user_id', req.user.user_id)
+      .in('agent_bot_id', botIds)
 
     if (error) throw error
     res.json({ success: true })

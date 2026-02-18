@@ -6,10 +6,13 @@
 
 /**
  * Build a tool definition for function calling from a DB tool row.
+ * Supports both 'api' (HTTP) and 'internal' (server-side handler) tool types.
  * @param {Object} tool - Tool row from the `tools` table
  * @returns {Object} Tool definition compatible with LLM function calling
  */
 export function buildToolDef(tool) {
+  const prefix = tool.type === 'internal' ? 'internal_tool' : 'api_tool'
+
   // Build parameters schema from body_schema
   let parametersSchema = { type: 'object', properties: {} }
 
@@ -34,8 +37,8 @@ export function buildToolDef(tool) {
   }
 
   return {
-    name: `api_tool_${tool.id}`,
-    description: tool.description || `Call the ${tool.name} API`,
+    name: `${prefix}_${tool.id}`,
+    description: tool.description || `Call the ${tool.name} tool`,
     parameters: parametersSchema,
   }
 }

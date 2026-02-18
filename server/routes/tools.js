@@ -23,20 +23,29 @@ router.get('/agent-bots/:agentBotId/tools', checkRole('admin'), verifyAgentOwner
 // POST /api/agent-bots/:agentBotId/tools
 router.post('/agent-bots/:agentBotId/tools', checkRole('admin'), verifyAgentOwner, async (req, res) => {
   try {
-    const { name, description, method, url, query_parameters, headers, body_schema, emoji } = req.body
-    if (!name || !description || !url) {
-      return res.status(400).json({ error: 'Nom, description et URL requis' })
+    const { name, description, method, url, query_parameters, headers, body_schema, emoji, type, handler } = req.body
+    const toolType = type || 'api'
+
+    if (!name || !description) {
+      return res.status(400).json({ error: 'Nom et description requis' })
+    }
+    if (toolType === 'api' && !url) {
+      return res.status(400).json({ error: 'URL requise pour les tools API' })
+    }
+    if (toolType === 'internal' && !handler) {
+      return res.status(400).json({ error: 'Handler requis pour les tools internes' })
     }
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.supabaseAdmin
       .from('tools')
       .insert({
-        user_id: req.user.user_id,
         agent_bot_id: parseInt(req.params.agentBotId),
         name,
         description,
-        method: method || 'GET',
-        url,
+        type: toolType,
+        handler: toolType === 'internal' ? handler : null,
+        method: method || (toolType === 'api' ? 'GET' : null),
+        url: url || null,
         query_parameters: query_parameters || {},
         headers: headers || {},
         body_schema: body_schema || null,

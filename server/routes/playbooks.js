@@ -13,10 +13,9 @@ router.post('/agent-bots/:agentBotId/playbooks', checkRole('admin'), verifyAgent
       return res.status(400).json({ error: 'Titre et contenu requis' })
     }
 
-    const { data, error } = await req.supabase
+    const { data, error } = await req.supabaseAdmin
       .from('playbooks')
       .insert({
-        user_id: req.user.user_id,
         agent_bot_id: parseInt(req.params.agentBotId),
         title,
         content,

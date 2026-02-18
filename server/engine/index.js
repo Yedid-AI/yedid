@@ -200,7 +200,7 @@ async function loadAgentConfig(supabase, inboxId) {
     supabase.from('agent_bots').select('bot_token').eq('id', agentBotId).limit(1),
     supabase.from('agent_config').select('*').eq('agent_bot_id', agentBotId).limit(1),
     supabase.from('agent_bot_playbooks')
-      .select('playbook_id, playbooks(id, title, content, audience, rules, is_active, tools(id, name, description, method, url, query_parameters, headers, body_schema))')
+      .select('playbook_id, playbooks(id, title, content, audience, rules, is_active, tools(id, name, description, method, url, query_parameters, headers, body_schema, type, handler))')
       .eq('agent_bot_id', agentBotId),
     supabase.from('agent_bot_escalation_rules')
       .select('escalation_rule_id, escalation_rules(*)')

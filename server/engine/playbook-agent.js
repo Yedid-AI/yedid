@@ -1,6 +1,7 @@
 import { createCompletion, buildToolResultMessage, buildAssistantToolCallMessage } from './llm.js'
 import { searchKnowledgeBase, formatKBResults, knowledgeBaseToolDef } from './knowledge-base.js'
 import { buildToolDef, executeTool } from './tools.js'
+import { executeInternalTool } from './internal-tools.js'
 
 const MAX_TOOL_ROUNDS = 5
 
@@ -122,6 +123,10 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
           const kbResults = await searchKnowledgeBase(supabase, query, userId)
           toolResult = formatKBResults(kbResults) || 'No relevant information found in the knowledge base.'
           metadata.kb_searches.push({ query, results_count: kbResults.length })
+        } else if (toolCall.name.startsWith('internal_tool_') && apiTool && apiTool.type === 'internal') {
+          // Internal tool (server-side handler)
+          toolResult = await executeInternalTool(apiTool.handler, toolCall.arguments, { supabase, userId })
+          metadata.tool_calls.push({ name: apiTool.name, handler: apiTool.handler, arguments: toolCall.arguments })
         } else if (toolCall.name.startsWith('api_tool_') && apiTool) {
           // Dynamic API tool
           toolResult = await executeTool(apiTool, toolCall.arguments?.body || toolCall.arguments)
