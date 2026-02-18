@@ -47,7 +47,45 @@ async function maskyooApi(service, params = {}) {
 
   try {
     const json = JSON.parse(text)
-    console.log(`[maskyoo] Parsed: ${Array.isArray(json) ? json.length + ' rows' : typeof json}`)
+
+    // If response is already an array, return it
+    if (Array.isArray(json)) {
+      console.log(`[maskyoo] Parsed: ${json.length} rows (array)`)
+      return json
+    }
+
+    // Maskyoo wraps results in an object — find the array inside
+    if (json && typeof json === 'object') {
+      const keys = Object.keys(json)
+      console.log(`[maskyoo] Parsed: object with keys [${keys.join(', ')}]`)
+
+      // Try common wrapper keys
+      for (const key of ['data', 'results', 'rows', 'records', 'cdr', 'calls']) {
+        if (Array.isArray(json[key])) {
+          console.log(`[maskyoo] Extracted ${json[key].length} rows from .${key}`)
+          return json[key]
+        }
+      }
+
+      // Fallback: find the first array value
+      for (const key of keys) {
+        if (Array.isArray(json[key])) {
+          console.log(`[maskyoo] Extracted ${json[key].length} rows from .${key}`)
+          return json[key]
+        }
+      }
+
+      // If it's an object with numeric-ish keys, it might be an indexed collection
+      if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
+        const arr = keys.map(k => json[k])
+        console.log(`[maskyoo] Converted indexed object to ${arr.length} rows`)
+        return arr
+      }
+
+      // Log sample for debugging
+      console.log(`[maskyoo] Sample: ${JSON.stringify(json).slice(0, 300)}`)
+    }
+
     return json
   } catch {
     throw new Error(`Maskyoo: reponse invalide — ${text.slice(0, 200)}`)
