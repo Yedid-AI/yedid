@@ -281,10 +281,16 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
 
   const { content: response, metadata: agentMetadata } = result
 
-  // Send response to Chatwoot
-  await sendMessage(accountId, conversationId, response, botToken)
+  // Split on --- for multi-message support (human-like chat bubbles)
+  const messageParts = response.split(/\n?---\n?/).map(p => p.trim()).filter(Boolean)
 
-  // Log user message + agent response
+  // Send each part as a separate message with a small delay
+  for (let i = 0; i < messageParts.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 800 + Math.random() * 700))
+    await sendMessage(accountId, conversationId, messageParts[i], botToken)
+  }
+
+  // Log user message + agent response (full content in single log entry)
   await logMessage(supabase, {
     session_id: session.id,
     user_id: userId,
