@@ -14,7 +14,7 @@ import { getSetting } from '../settings.js'
 import { createCompletion } from './llm.js'
 import { closeSession } from './session-logger.js'
 
-const DEFAULT_BILLING_PROMPT = `You are Cardynal Billing Analyzer. Your task is to determine whether a support conversation is billable or non-billable.
+const DEFAULT_BILLING_PROMPT = `You are Yedid AI Billing Analyzer. Your task is to determine whether a support conversation is billable or non-billable.
 
 BILLABLE RULES
 

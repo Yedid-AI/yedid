@@ -119,7 +119,7 @@ export async function registerWebhook(url) {
     request_url: url,
     events: ['message_received'],
     source: 'messaging',
-    name: 'Cardynal App',
+    name: 'Yedid AI',
     headers: [
       { key: 'Content-Type', value: 'application/json' },
     ],

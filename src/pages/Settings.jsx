@@ -47,7 +47,7 @@ export default function Settings() {
                 <pre className="mt-2 p-3 bg-muted rounded-md text-xs font-mono overflow-x-auto">
 {`<script>
   (function(d,t) {
-    var BASE_URL="https://chat.cardynal.io";
+    var BASE_URL="https://chat.yedid.io";
     var g=d.createElement(t),s=d.getElementsByTagName(t)[0];
     g.src=BASE_URL+"/packs/js/sdk.js";
     g.defer = true;

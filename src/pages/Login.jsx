@@ -33,7 +33,7 @@ export default function Login() {
     <div className="flex items-center justify-center min-h-screen bg-background">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">cardynal</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Yedid AI</h1>
           <p className="text-sm text-muted-foreground mt-1">{t('login.subtitle')}</p>
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">

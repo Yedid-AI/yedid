@@ -94,7 +94,7 @@ export async function provisionAccount(user, supabase) {
 export async function createInbox(accountId, options = {}, accessToken = null) {
   const channel = options.channel || {
     type: 'web_widget',
-    website_url: options.websiteUrl || 'https://cardynal.io',
+    website_url: options.websiteUrl || 'https://yedid.ai',
     welcome_title: options.welcomeTitle || 'Bienvenue',
     welcome_tagline: options.welcomeTagline || 'Comment puis-je vous aider ?',
     ...(options.widgetColor ? { widget_color: options.widgetColor } : {}),
@@ -170,8 +170,8 @@ export async function provisionChatwoot(user, supabase) {
   // 5. Create inbox
   const inbox = await createInbox(accountId, {
     name: user.enterprise || user.email,
-    websiteUrl: `https://${user.website || 'cardynal.io'}`,
-    welcomeTitle: `Hello, welcome to ${user.enterprise || 'Cardynal'}`,
+    websiteUrl: `https://${user.website || 'yedid.ai'}`,
+    welcomeTitle: `Hello, welcome to ${user.enterprise || 'Yedid AI'}`,
     welcomeTagline: 'How can I help?',
   })
   const inboxId = inbox.id

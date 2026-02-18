@@ -99,7 +99,7 @@ router.post('/inboxes', checkRole('admin'), async (req, res) => {
     // Build channel options
     const channelOpts = {
       name,
-      websiteUrl: website_url || 'https://cardynal.io',
+      websiteUrl: website_url || 'https://yedid.ai',
       welcomeTitle: welcome_title || `Bienvenue chez ${name}`,
       welcomeTagline: welcome_tagline || 'Comment puis-je vous aider ?',
     }
@@ -593,7 +593,7 @@ router.post('/inboxes/:id/whatsapp-reconnect', checkRole('admin'), async (req, r
 
     let url = result.url
     if (url && url.includes('account.unipile.com')) {
-      url = url.replace('account.unipile.com', 'auth.cardynal.io')
+      url = url.replace('account.unipile.com', 'auth.yedid.ai')
     }
 
     res.json({ url })

@@ -170,7 +170,7 @@ async function seedAdmin() {
 }
 
 app.listen(PORT, async () => {
-  console.log(`Cardynal App server running on port ${PORT}`)
+  console.log(`Yedid AI server running on port ${PORT}`)
   if (!supabase) {
     console.log('Warning: Supabase not configured.')
   }

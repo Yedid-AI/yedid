@@ -159,19 +159,19 @@ export default function InboxDetail() {
   };
   (function(d, t) {
     var g = d.createElement(t);
-    g.src = "https://chat.cardynal.io/packs/js/sdk.js";
+    g.src = "https://chat.yedid.io/packs/js/sdk.js";
     g.async = true;
     d.body.appendChild(g);
     g.onload = function() {
       window.chatwootSDK.run({
         websiteToken: "${inbox.website_token}",
-        baseUrl: "https://chat.cardynal.io"
+        baseUrl: "https://chat.yedid.io"
       });
     };
   })(document, "script");
   window.addEventListener("chatwoot:ready", function() {
     window.$chatwoot.toggle("open");
-    window.$chatwoot.setCustomAttributes({ cardynal_preview: "true" });
+    window.$chatwoot.setCustomAttributes({ yedid_preview: "true" });
   });
 </script>
 </body>
@@ -801,7 +801,7 @@ export default function InboxDetail() {
     darkMode: "auto"
   };
   (function(d,t) {
-    var BASE_URL="https://chat.cardynal.io";
+    var BASE_URL="https://chat.yedid.io";
     var g=d.createElement(t),s=d.getElementsByTagName(t)[0];
     g.src=BASE_URL+"/packs/js/sdk.js";
     g.defer = true;

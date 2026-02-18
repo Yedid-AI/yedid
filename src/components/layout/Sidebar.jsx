@@ -27,7 +27,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import logoSrc from '@/assets/logo-cardynal.png'
+import logoSrc from '@/assets/logo-yedid.png'
 
 const navItems = [
   { path: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'agent'] },
@@ -74,10 +74,10 @@ export function AppSidebar() {
             <SidebarMenuButton size="lg" asChild>
               <NavLink to="/">
                 <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <img src={logoSrc} alt="Cardynal" className="size-5" />
+                  <img src={logoSrc} alt="Yedid AI" className="size-5" />
                 </div>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">cardynal</span>
+                  <span className="truncate font-semibold">Yedid AI</span>
                   <span className="truncate text-xs text-sidebar-foreground">{user?.enterprise || 'Dashboard'}</span>
                 </div>
               </NavLink>

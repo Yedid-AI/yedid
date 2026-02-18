@@ -21,7 +21,7 @@ const CLOSING_KEYS = [
   'CLOSING_BILLING_PROMPT',
 ]
 
-const DEFAULT_BILLING_PROMPT = `You are Cardynal Billing Analyzer. Your task is to determine whether a support conversation is billable or non-billable.
+const DEFAULT_BILLING_PROMPT = `You are Yedid AI Billing Analyzer. Your task is to determine whether a support conversation is billable or non-billable.
 
 BILLABLE RULES
 

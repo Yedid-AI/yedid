@@ -1,5 +1,5 @@
 {
-  "name": "claude - Agent Cardynal",
+  "name": "claude - Agent Yedid AI",
   "nodes": [
     {
       "parameters": {
@@ -72,7 +72,7 @@
     {
       "parameters": {
         "method": "GET",
-        "url": "=https://app.cardynal.io/api/agent/config?inbox_id={{ $('Webhook').item.json.body.conversation.messages[0].inbox_id }}",
+        "url": "=https://app.yedid.io/api/agent/config?inbox_id={{ $('Webhook').item.json.body.conversation.messages[0].inbox_id }}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -401,7 +401,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://chat.cardynal.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}/messages",
+        "url": "=https://chat.yedid.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}/messages",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -522,7 +522,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://chat.cardynal.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}/messages",
+        "url": "=https://chat.yedid.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}/messages",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -560,7 +560,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://chat.cardynal.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.id }}/assignments",
+        "url": "=https://chat.yedid.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.id }}/assignments",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -587,7 +587,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "=https://chat.cardynal.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}/messages",
+        "url": "=https://chat.yedid.io/api/v1/accounts/{{ $('Webhook').item.json.body.account.id }}/conversations/{{ $('Webhook').item.json.body.conversation.messages[0].conversation_id }}/messages",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -628,7 +628,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Create or find session, then log user input + agent output\nconst webhook = $('Webhook').first().json.body;\nconst config = $('Get Agent Config').first().json;\nconst playbook = $('Load Active Playbook').first().json;\nconst agentOutput = $('Playbook Agent').first().json.output;\nconst apiKey = $env.AGENT_API_KEY;\nconst baseUrl = 'https://app.cardynal.io';\n\n// 1. Create or find session\nconst sessionRes = await fetch(`${baseUrl}/api/agent/sessions`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    user_id: config.user_id,\n    inbox_id: null,\n    chatwoot_account_id: webhook.account?.id,\n    chatwoot_inbox_id: webhook.conversation?.messages?.[0]?.inbox_id,\n    chatwoot_conversation_id: webhook.conversation?.messages?.[0]?.conversation_id,\n  })\n});\nconst sessionData = await sessionRes.json();\nconst sessionId = sessionData.session?.id;\n\nif (!sessionId) {\n  return [{ json: { error: 'Failed to create session', details: sessionData } }];\n}\n\n// 2. Log user message\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'user',\n    content: webhook.conversation?.messages?.[0]?.content || '',\n    playbook_id: playbook.activeId ? parseInt(playbook.activeId) : null,\n  })\n});\n\n// 3. Log agent response\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'assistant',\n    content: agentOutput,\n    playbook_id: playbook.activeId ? parseInt(playbook.activeId) : null,\n  })\n});\n\nreturn [{ json: { session_id: sessionId, logged: true } }];"
+        "jsCode": "// Create or find session, then log user input + agent output\nconst webhook = $('Webhook').first().json.body;\nconst config = $('Get Agent Config').first().json;\nconst playbook = $('Load Active Playbook').first().json;\nconst agentOutput = $('Playbook Agent').first().json.output;\nconst apiKey = $env.AGENT_API_KEY;\nconst baseUrl = 'https://app.yedid.io';\n\n// 1. Create or find session\nconst sessionRes = await fetch(`${baseUrl}/api/agent/sessions`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    user_id: config.user_id,\n    inbox_id: null,\n    chatwoot_account_id: webhook.account?.id,\n    chatwoot_inbox_id: webhook.conversation?.messages?.[0]?.inbox_id,\n    chatwoot_conversation_id: webhook.conversation?.messages?.[0]?.conversation_id,\n  })\n});\nconst sessionData = await sessionRes.json();\nconst sessionId = sessionData.session?.id;\n\nif (!sessionId) {\n  return [{ json: { error: 'Failed to create session', details: sessionData } }];\n}\n\n// 2. Log user message\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'user',\n    content: webhook.conversation?.messages?.[0]?.content || '',\n    playbook_id: playbook.activeId ? parseInt(playbook.activeId) : null,\n  })\n});\n\n// 3. Log agent response\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'assistant',\n    content: agentOutput,\n    playbook_id: playbook.activeId ? parseInt(playbook.activeId) : null,\n  })\n});\n\nreturn [{ json: { session_id: sessionId, logged: true } }];"
       },
       "id": "28d69c42-4dff-4169-89f4-96265b339685",
       "name": "Log Playbook Session",
@@ -641,7 +641,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Create session + log messages for escalation\nconst webhook = $('Webhook').first().json.body;\nconst config = $('Get Agent Config').first().json;\nconst escalation = $('Load Escalation Rule').first().json;\nconst agentOutput = $('Escalation Agent').first().json.output;\nconst apiKey = $env.AGENT_API_KEY;\nconst baseUrl = 'https://app.cardynal.io';\n\n// 1. Create or find session\nconst sessionRes = await fetch(`${baseUrl}/api/agent/sessions`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    user_id: config.user_id,\n    inbox_id: null,\n    chatwoot_account_id: webhook.account?.id,\n    chatwoot_inbox_id: webhook.conversation?.messages?.[0]?.inbox_id,\n    chatwoot_conversation_id: webhook.conversation?.messages?.[0]?.conversation_id,\n  })\n});\nconst sessionData = await sessionRes.json();\nconst sessionId = sessionData.session?.id;\n\nif (!sessionId) {\n  return [{ json: { error: 'Failed to create session', details: sessionData } }];\n}\n\n// 2. Log user message\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'user',\n    content: webhook.conversation?.messages?.[0]?.content || '',\n    escalation_id: escalation.activeId ? parseInt(escalation.activeId) : null,\n  })\n});\n\n// 3. Log escalation response\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'assistant',\n    content: agentOutput.reponse || '',\n    escalation_id: escalation.activeId ? parseInt(escalation.activeId) : null,\n    metadata: { resume: agentOutput.resume || '' },\n  })\n});\n\n// 4. Mark session as closed + escalated\nawait fetch(`${baseUrl}/api/agent/sessions/${sessionId}`, {\n  method: 'PUT',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    status: 'closed',\n    ai_reason: 'ESCALATION: ' + (agentOutput.resume || ''),\n    billable: false,\n    closed_at: new Date().toISOString(),\n  })\n});\n\nreturn [{ json: { session_id: sessionId, escalated: true } }];"
+        "jsCode": "// Create session + log messages for escalation\nconst webhook = $('Webhook').first().json.body;\nconst config = $('Get Agent Config').first().json;\nconst escalation = $('Load Escalation Rule').first().json;\nconst agentOutput = $('Escalation Agent').first().json.output;\nconst apiKey = $env.AGENT_API_KEY;\nconst baseUrl = 'https://app.yedid.io';\n\n// 1. Create or find session\nconst sessionRes = await fetch(`${baseUrl}/api/agent/sessions`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    user_id: config.user_id,\n    inbox_id: null,\n    chatwoot_account_id: webhook.account?.id,\n    chatwoot_inbox_id: webhook.conversation?.messages?.[0]?.inbox_id,\n    chatwoot_conversation_id: webhook.conversation?.messages?.[0]?.conversation_id,\n  })\n});\nconst sessionData = await sessionRes.json();\nconst sessionId = sessionData.session?.id;\n\nif (!sessionId) {\n  return [{ json: { error: 'Failed to create session', details: sessionData } }];\n}\n\n// 2. Log user message\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'user',\n    content: webhook.conversation?.messages?.[0]?.content || '',\n    escalation_id: escalation.activeId ? parseInt(escalation.activeId) : null,\n  })\n});\n\n// 3. Log escalation response\nawait fetch(`${baseUrl}/api/agent/messages`, {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    session_id: sessionId,\n    user_id: config.user_id,\n    role: 'assistant',\n    content: agentOutput.reponse || '',\n    escalation_id: escalation.activeId ? parseInt(escalation.activeId) : null,\n    metadata: { resume: agentOutput.resume || '' },\n  })\n});\n\n// 4. Mark session as closed + escalated\nawait fetch(`${baseUrl}/api/agent/sessions/${sessionId}`, {\n  method: 'PUT',\n  headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },\n  body: JSON.stringify({\n    status: 'closed',\n    ai_reason: 'ESCALATION: ' + (agentOutput.resume || ''),\n    billable: false,\n    closed_at: new Date().toISOString(),\n  })\n});\n\nreturn [{ json: { session_id: sessionId, escalated: true } }];"
       },
       "id": "5185c6ea-5139-42cd-ad54-a969b7919269",
       "name": "Log Escalation Session",

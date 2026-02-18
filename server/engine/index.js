@@ -83,7 +83,7 @@ export async function handleWebhook(webhookBody, supabase) {
     })
 
     // Detect preview conversations (from InboxDetail widget preview)
-    const isPreview = webhookBody.conversation?.custom_attributes?.cardynal_preview === 'true'
+    const isPreview = webhookBody.conversation?.custom_attributes?.yedid_preview === 'true'
     if (isPreview && created) {
       await supabase.from('sessions').update({
         billable: false,

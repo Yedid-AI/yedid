@@ -36,7 +36,7 @@ const GROUPS = [
     title: 'Chatwoot',
     descriptionKey: 'environment.chatwootDesc',
     keys: [
-      { key: 'CHATWOOT_PLATFORM_URL', label: 'Platform URL', placeholder: 'https://chat.cardynal.io' },
+      { key: 'CHATWOOT_PLATFORM_URL', label: 'Platform URL', placeholder: 'https://chat.yedid.io' },
       { key: 'CHATWOOT_PLATFORM_TOKEN', label: 'Platform Token', placeholder: 'Token platform API...' },
       { key: 'CHATWOOT_ADMIN_TOKEN', label: 'Admin User Token', placeholder: 'Token admin pour Account API (inboxes, bots)...' },
     ],
@@ -55,7 +55,7 @@ const GROUPS = [
     titleKey: 'environment.appTitle',
     descriptionKey: 'environment.appDesc',
     keys: [
-      { key: 'APP_BASE_URL', labelKey: 'environment.appBaseLabel', placeholder: 'https://app.cardynal.io' },
+      { key: 'APP_BASE_URL', labelKey: 'environment.appBaseLabel', placeholder: 'https://app.yedid.io' },
     ],
   },
   {
