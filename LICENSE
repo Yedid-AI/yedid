@@ -1,23 +1,48 @@
-MIT License
+PROPRIETARY SOFTWARE LICENSE
 
-Copyright (c) 2025-2026 Cardynal LTD
+Copyright (c) 2025-2026 Cardynal LTD. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+This software and associated documentation files (the "Software") are the
+exclusive intellectual property of Cardynal LTD ("Owner").
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. OWNERSHIP
+   The Software, including all source code, architecture, designs, algorithms,
+   databases schemas, and associated documentation, is and remains the sole
+   intellectual property of Cardynal LTD. No transfer of ownership is implied
+   or granted by making this Software available to any party.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+2. LICENSE GRANT
+   Cardynal LTD grants Yedid AI ("Licensee") a non-exclusive, non-transferable,
+   revocable license to use, deploy, and operate the Software solely for the
+   purposes defined in the collaboration agreement between Cardynal LTD and
+   Yedid AI.
 
-Developed by Cardynal LTD (https://cardynal.io)
+3. RESTRICTIONS
+   The Licensee shall NOT, without prior written consent from Cardynal LTD:
+   a) Copy, reproduce, or distribute the Software to any third party;
+   b) Modify, adapt, or create derivative works of the Software;
+   c) Sublicense, sell, lease, or otherwise transfer the Software;
+   d) Reverse engineer, decompile, or disassemble the Software;
+   e) Remove or alter any proprietary notices or labels on the Software;
+   f) Use the Software for any purpose outside the scope of the collaboration.
+
+4. CONFIDENTIALITY
+   The Licensee acknowledges that the Software contains trade secrets and
+   confidential information of Cardynal LTD. The Licensee agrees to maintain
+   the confidentiality of the Software and not disclose it to any third party.
+
+5. TERMINATION
+   This license may be terminated by Cardynal LTD at any time upon written
+   notice. Upon termination, the Licensee must cease all use of the Software
+   and destroy all copies in its possession.
+
+6. WARRANTY DISCLAIMER
+   THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+   IMPLIED. CARDYNAL LTD SHALL NOT BE LIABLE FOR ANY DAMAGES ARISING FROM THE
+   USE OF THE SOFTWARE.
+
+7. GOVERNING LAW
+   This license shall be governed by and construed in accordance with the laws
+   of the State of Israel.
+
+Developed and maintained by Cardynal LTD (https://cardynal.io)
