@@ -18,13 +18,7 @@ router.post('/whatsapp/connect', checkAuth, checkRole('admin'), async (req, res)
       name: String(req.user.user_id),
     })
 
-    // Replace default Unipile domain with custom domain if configured
-    let url = result.url
-    if (url && url.includes('account.unipile.com')) {
-      url = url.replace('account.unipile.com', 'auth.yedid.ai')
-    }
-
-    res.json({ url })
+    res.json({ url: result.url })
   } catch (err) {
     console.error('[whatsapp/connect]', err.message)
     res.status(500).json({ error: err.message })

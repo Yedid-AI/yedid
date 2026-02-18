@@ -591,12 +591,7 @@ router.post('/inboxes/:id/whatsapp-reconnect', checkRole('admin'), async (req, r
       reconnectAccountId: inbox.unipile_account_id,
     })
 
-    let url = result.url
-    if (url && url.includes('account.unipile.com')) {
-      url = url.replace('account.unipile.com', 'auth.yedid.ai')
-    }
-
-    res.json({ url })
+    res.json({ url: result.url })
   } catch (err) {
     console.error('[inboxes/whatsapp-reconnect]', err.message)
     res.status(500).json({ error: err.message })

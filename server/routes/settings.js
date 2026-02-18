@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { checkRole } from '../middleware.js'
-import { CONFIGURABLE_KEYS, getSetting, upsertSettings } from '../settings.js'
+import { CONFIGURABLE_KEYS, getSetting, upsertSettings, loadSettings } from '../settings.js'
 
 const router = Router()
 
@@ -46,6 +46,18 @@ router.put('/settings', checkRole('super_admin'), async (req, res) => {
     res.json({ success: true })
   } catch (err) {
     console.error('[settings]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// POST /api/settings/reload — force refresh settings cache from DB
+router.post('/settings/reload', checkRole('super_admin'), async (req, res) => {
+  try {
+    const supabase = req.supabaseAdmin || req.supabase
+    await loadSettings(supabase)
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[settings/reload]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
   }
 })
