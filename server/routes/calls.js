@@ -61,13 +61,13 @@ router.post('/calls/sync', checkRole('admin'), async (req, res) => {
     const userId = req.user.user_id
     const { days = 30 } = req.body
 
-    // Build date range: last N days
+    // Build date range: last N days (Maskyoo timestamps are Israel local time)
     const now = new Date()
     const from = new Date(now)
     from.setDate(from.getDate() - Math.min(Number(days) || 30, 365))
 
-    const dateFrom = from.toISOString().slice(0, 19).replace('T', ' ')
-    const dateTo = now.toISOString().slice(0, 19).replace('T', ' ')
+    const dateFrom = toIsraelString(from)
+    const dateTo = toIsraelString(now)
 
     console.log(`[calls/sync] Syncing ${days} days for user ${userId}: ${dateFrom} → ${dateTo}`)
 
@@ -214,5 +214,10 @@ router.get('/calls/:uuid/metadata', checkRole('admin'), async (req, res) => {
     res.status(502).json({ error: err.message })
   }
 })
+
+// Maskyoo timestamps are in Asia/Jerusalem — format dates accordingly
+function toIsraelString(date) {
+  return date.toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' })
+}
 
 export default router

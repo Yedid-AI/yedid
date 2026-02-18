@@ -50,13 +50,13 @@ async function runCallsSync(supabase) {
   const token = getSetting('MASKYOO_API_TOKEN')
   if (!apiUrl || !token) return
 
-  // Fetch last 24h of data
+  // Fetch last 24h of data (Maskyoo timestamps are Israel local time)
   const now = new Date()
   const from = new Date(now)
   from.setHours(from.getHours() - 24)
 
-  const dateFrom = from.toISOString().slice(0, 19).replace('T', ' ')
-  const dateTo = now.toISOString().slice(0, 19).replace('T', ' ')
+  const dateFrom = toIsraelString(from)
+  const dateTo = toIsraelString(now)
 
   const sql = `SELECT * FROM webserviceview WHERE start_call >= '${dateFrom}' AND start_call <= '${dateTo}' ORDER BY start_call DESC LIMIT 5000`
 
@@ -126,4 +126,9 @@ async function runCallsSync(supabase) {
   if (synced > 0) {
     console.log(`[Calls Cron] Synced ${synced} calls`)
   }
+}
+
+// Maskyoo timestamps are in Asia/Jerusalem — format dates accordingly
+function toIsraelString(date) {
+  return date.toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' })
 }
