@@ -18,7 +18,7 @@ import { he as heLocale } from 'date-fns/locale/he'
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 const calendarLocales = { fr: frLocale, en: enUS, he: heLocale }
-import { Database, Bot, Inbox, Users, MessageSquare, CheckCircle, CircleDot, Brain, User, X, BookOpen, Wrench, Search, AlertTriangle, ArrowUpRight, Clock, TrendingUp, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Sparkles, Radio, Users, MessageSquare, CheckCircle, CircleDot, Brain, User, X, Route, Plug, Search, AlertTriangle, ArrowUpRight, Clock, TrendingUp, CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react'
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -135,7 +135,7 @@ export default function Dashboard() {
 
   const superAdminCards = [
     { labelKey: 'dashboard.users', value: stats.users, icon: Users },
-    { labelKey: 'dashboard.chatwootAccounts', value: stats.comptes_chatwoot, icon: Inbox },
+    { labelKey: 'dashboard.chatwootAccounts', value: stats.comptes_chatwoot, icon: Radio },
   ]
 
   const sessionStatCards = [
@@ -202,7 +202,7 @@ export default function Dashboard() {
                 </Card>
                 <Card>
                   <CardContent className="pt-3 pb-3">
-                    <div className="text-xs text-muted-foreground">{t('sessions.billableCol')}</div>
+                    <div className="text-xs text-muted-foreground">{t('sessions.resolvedCol')}</div>
                     <div className="text-sm font-semibold mt-1">{selectedSession.billable ? t('common.yes') : t('common.no')}</div>
                   </CardContent>
                 </Card>
@@ -248,11 +248,11 @@ export default function Dashboard() {
                     {panelMessages.map((m) => (
                       <div key={m.id} className="flex gap-2.5">
                         <div className={`shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${m.role === 'user' ? 'bg-muted' : 'bg-primary/10'}`}>
-                          {m.role === 'user' ? <User size={12} /> : <Bot size={12} />}
+                          {m.role === 'user' ? <User size={12} /> : <Sparkles size={12} />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-0.5">
-                            <span className="text-xs font-medium">{m.role === 'user' ? 'Client' : 'Agent'}</span>
+                            <span className="text-xs font-medium">{m.role === 'user' ? 'Client' : 'Assistant'}</span>
                             <span className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleString(dateLocale)}</span>
                           </div>
                           <p className="text-sm whitespace-pre-wrap">{m.content}</p>
@@ -262,7 +262,7 @@ export default function Dashboard() {
                             <div className="flex flex-wrap gap-1.5 mt-1.5">
                               {m.playbook_title && (
                                 <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                                  <BookOpen size={10} /> {m.playbook_title}
+                                  <Route size={10} /> {m.playbook_title}
                                 </span>
                               )}
                               {m.escalation_title && (
@@ -277,7 +277,7 @@ export default function Dashboard() {
                               ))}
                               {m.metadata?.tool_calls?.map((tc, i) => (
                                 <span key={`tc-${i}`} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400">
-                                  <Wrench size={10} /> {tc.name}
+                                  <Plug size={10} /> {tc.name}
                                 </span>
                               ))}
                               {m.metadata?.resume && (

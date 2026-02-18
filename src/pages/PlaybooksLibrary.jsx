@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { EmojiPicker } from '@/components/ui/emoji-picker'
-import { LayoutGrid, List, Wrench, CheckCircle2 } from 'lucide-react'
+import { LayoutGrid, List, Plug, CheckCircle2 } from 'lucide-react'
 
 export default function PlaybooksLibrary() {
   const { t } = useI18n()
@@ -119,7 +119,7 @@ export default function PlaybooksLibrary() {
                     <div className="flex items-center gap-2 mt-2.5">
                       {pb.tools?.name && (
                         <Badge variant="secondary" className="text-[10px] font-normal gap-1 px-1.5 py-0.5">
-                          <Wrench size={10} />
+                          <Plug size={10} />
                           {pb.tools.name}
                         </Badge>
                       )}

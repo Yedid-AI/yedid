@@ -18,7 +18,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { api } from '../lib/api'
 import { Switch } from '@/components/ui/switch'
 import ScheduleGrid from '@/components/inbox/ScheduleGrid'
-import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon, RefreshCw, Globe, Copy, Check, ExternalLink, Bot, Wifi, WifiOff, Loader2, Phone } from 'lucide-react'
+import { ArrowLeft, Info, MessageSquare, Trash2, Upload, Palette, Users, ImageIcon, RefreshCw, Globe, Copy, Check, ExternalLink, Sparkles, Wifi, WifiOff, Loader2, Phone } from 'lucide-react'
 
 const COMMON_TIMEZONES = [
   'UTC',
@@ -673,7 +673,7 @@ export default function InboxDetail() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Bot size={16} />
+                    <Sparkles size={16} />
                     {t('inboxes.assignedAgent')}
                   </CardTitle>
                   <CardDescription>{t('inboxes.chooseAgent')}</CardDescription>
@@ -704,7 +704,7 @@ export default function InboxDetail() {
                   }`}
                 >
                   <div className="w-9 h-9 rounded-full bg-muted flex items-center justify-center shrink-0">
-                    <Bot size={16} className="text-muted-foreground" />
+                    <Sparkles size={16} className="text-muted-foreground" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-sm font-medium">{t('inboxes.noAgent')}</p>
@@ -856,7 +856,7 @@ export default function InboxDetail() {
                 <TableRow>
                   <TableHead>ID</TableHead>
                   <TableHead>{t('common.status')}</TableHead>
-                  <TableHead>{t('inboxes.billable')}</TableHead>
+                  <TableHead>{t('inboxes.resolved')}</TableHead>
                   <TableHead>{t('common.createdAt')}</TableHead>
                 </TableRow>
               </TableHeader>

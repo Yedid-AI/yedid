@@ -4,7 +4,14 @@ import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { Card, CardContent } from '@/components/ui/card'
+import {
+  Field,
+  FieldGroup,
+  FieldLabel,
+} from '@/components/ui/field'
+import logoSrc from '@/assets/logo.png'
+import imageSrc from '@/assets/image.png'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -30,43 +37,65 @@ export default function Login() {
   }
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-background">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">Yedid AI</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('login.subtitle')}</p>
-        </div>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {error && (
-            <div className="px-3 py-2 text-sm rounded-md bg-destructive/10 text-destructive">
-              {error}
+    <div className="flex min-h-svh flex-col items-center justify-center bg-background p-6 md:p-10">
+      <div className="w-full max-w-sm md:max-w-3xl">
+        <Card className="overflow-hidden p-0">
+          <CardContent className="grid p-0 md:grid-cols-2">
+            <form onSubmit={handleSubmit} className="p-6 md:p-8">
+              <FieldGroup>
+                <div className="flex flex-col items-center gap-2 text-center">
+                  <div className="flex items-center gap-2">
+                    <img src={logoSrc} alt="Yedid AI" className="h-30 w-auto" />
+                    <h1 className="text-2xl font-bold">Yedid AI</h1>
+                  </div>
+                  <p className="text-muted-foreground text-balance text-sm">
+                    {t('login.subtitle')}
+                  </p>
+                </div>
+
+                {error && (
+                  <div className="px-3 py-2 text-sm rounded-md bg-destructive/10 text-destructive">
+                    {error}
+                  </div>
+                )}
+
+                <Field>
+                  <FieldLabel htmlFor="email">{t('common.email')}</FieldLabel>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder={t('login.emailPlaceholder')}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor="password">{t('common.password')}</FieldLabel>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field>
+                  <Button type="submit" disabled={loading} className="w-full">
+                    {loading ? t('login.submitting') : t('login.submit')}
+                  </Button>
+                </Field>
+              </FieldGroup>
+            </form>
+            <div className="relative hidden md:block">
+              <img
+                src={imageSrc}
+                alt="Yedid AI"
+                className="absolute inset-0 h-full w-full object-cover"
+              />
             </div>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="email">{t('common.email')}</Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder={t('login.emailPlaceholder')}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">{t('common.password')}</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-          </div>
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? t('login.submitting') : t('login.submit')}
-          </Button>
-        </form>
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

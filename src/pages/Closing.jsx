@@ -21,67 +21,41 @@ const CLOSING_KEYS = [
   'CLOSING_BILLING_PROMPT',
 ]
 
-const DEFAULT_BILLING_PROMPT = `You are Yedid AI Billing Analyzer. Your task is to determine whether a support conversation is billable or non-billable.
+const DEFAULT_CLOSING_PROMPT = `You are Yedid AI Closing Analyzer. Your task is to determine whether a support conversation was resolved by the AI assistant.
 
-BILLABLE RULES
+RESOLVED RULES
 
-A conversation is billable if ANY of the following occur:
+A conversation is resolved if ANY of the following occur:
 
-The user expresses a real business or technical need, such as:
-- optimization
-- improvement
-- integration
-- troubleshooting
-- product questions
-- workflow questions
-- performance issues
+The user expressed a real business or technical need and the agent addressed it:
+- optimization, improvement, integration, troubleshooting
+- product questions, workflow questions, performance issues
 
-The agent asks a clarification question as part of a diagnostic or business-oriented analysis.
+The agent provided meaningful value:
+- diagnostic steps, analysis, recommendations
+- business explanations, solution-oriented guidance
+- initial guidance, strategic orientation, actionable next steps
 
-The agent begins any expert reasoning, including:
-- diagnostic steps
-- analysis
-- recommendations
-- business explanations
-- solution-oriented questioning
+The user stopped responding after the agent started a value-adding process.
+(If the agent began creating value and the user stopped responding, the session is classified as resolved.)
 
-The agent provides any business value, even partially:
-- initial guidance
-- strategic orientation
-- tailored explanation
-- actionable next steps
+NOT RESOLVED RULES
 
-The user leaves the conversation after the agent has started a diagnostic or value-adding process.
-→ This is always billable.
-(If the agent begins value creation and the user stops responding, the session is classified as billable.)
-
-NON-BILLABLE RULES
-
-A conversation is non-billable only if ALL of the following are true:
+A conversation is not resolved only if ALL of the following are true:
 
 The exchange contains only greetings or social chit-chat.
-
 The user message is a test, empty, irrelevant, or unusable.
-
-The agent provides zero value:
-- no analysis
-- no diagnostic
-- no recommendations
-- no business explanation
-
-If the agent did not create value and the user did not express any business/technical need, then it is non-billable.
+The agent provides zero value (no analysis, no diagnostic, no recommendations).
 
 CENTRAL PRINCIPLE
 
-If the conversation touches a business or technical topic, and the agent engages with even the beginning of a diagnostic or analysis, the session is billable.
-
-If the customer stops mid-conversation after the agent begins a diagnostic → billable.
+If the conversation touches a business or technical topic and the agent engages with even the beginning of a diagnostic or analysis, the session is resolved.
 
 OUTPUT FORMAT (Mandatory)
 
 Return only valid JSON:
 
-{"billable": true or false, "confidence": 0.0, "reason": "short explanation"}
+{"resolved": true or false, "confidence": 0.0, "reason": "short explanation"}
 
 No introduction. Analyze strictly based on the provided messages. Respond only in JSON.`
 
@@ -113,7 +87,7 @@ export default function Closing() {
   const getVal = (key) => {
     if (values[key]) return values[key]
     if (settings[key]?.value) return settings[key].value
-    if (key === 'CLOSING_BILLING_PROMPT') return DEFAULT_BILLING_PROMPT
+    if (key === 'CLOSING_BILLING_PROMPT') return DEFAULT_CLOSING_PROMPT
     return ''
   }
 
@@ -239,7 +213,7 @@ export default function Closing() {
           </CardContent>
         </Card>
 
-        {/* Card 3 — Billing Prompt */}
+        {/* Card 3 — Closing Analysis Prompt */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base">{t('closing.promptTitle')}</CardTitle>

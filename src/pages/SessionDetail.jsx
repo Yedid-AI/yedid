@@ -44,7 +44,7 @@ export default function SessionDetail() {
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <div className="text-sm text-muted-foreground">{t('sessions.billableCol')}</div>
+            <div className="text-sm text-muted-foreground">{t('sessions.resolvedCol')}</div>
             <div className="text-lg font-semibold mt-1">{session.billable ? t('common.yes') : t('common.no')}</div>
           </CardContent>
         </Card>

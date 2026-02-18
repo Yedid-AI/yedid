@@ -5,7 +5,7 @@ import { usePageTitle } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, Settings, BookOpen, Zap } from 'lucide-react'
+import { ArrowLeft, Settings, Route, ArrowRightLeft } from 'lucide-react'
 import ConfigTab from '../components/agent/ConfigTab'
 import PlaybooksSelectionTab from '../components/agent/PlaybooksSelectionTab'
 import EscalationSelectionTab from '../components/agent/EscalationSelectionTab'
@@ -46,9 +46,9 @@ export default function AgentDetail() {
 
       <Tabs defaultValue="config">
         <TabsList>
-          <TabsTrigger value="config"><Settings className="me-1.5 h-4 w-4" />Config</TabsTrigger>
-          <TabsTrigger value="playbooks"><BookOpen className="me-1.5 h-4 w-4" />Playbooks</TabsTrigger>
-          <TabsTrigger value="escalation"><Zap className="me-1.5 h-4 w-4" />Escalation</TabsTrigger>
+          <TabsTrigger value="config"><Settings className="me-1.5 h-4 w-4" />{t('config.title')}</TabsTrigger>
+          <TabsTrigger value="playbooks"><Route className="me-1.5 h-4 w-4" />{t('nav.playbooks')}</TabsTrigger>
+          <TabsTrigger value="escalation"><ArrowRightLeft className="me-1.5 h-4 w-4" />{t('nav.escalation')}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="config" className="mt-6">

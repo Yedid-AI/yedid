@@ -566,6 +566,169 @@ export function useProvisionChat() {
   })
 }
 
+// ─── Leads ──────────────────────────────────────────────
+export function useLeads(filters) {
+  return useQuery({
+    queryKey: queryKeys.leads(filters),
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (filters?.company) params.set('company', filters.company)
+      if (filters?.type) params.set('type', filters.type)
+      if (filters?.status) params.set('status', filters.status)
+      if (filters?.branch) params.set('branch', filters.branch)
+      if (filters?.source) params.set('source', filters.source)
+      if (filters?.search) params.set('search', filters.search)
+      if (filters?.date_from) params.set('date_from', filters.date_from)
+      if (filters?.date_to) params.set('date_to', filters.date_to)
+      if (filters?.page != null) params.set('page', filters.page)
+      if (filters?.page_size) params.set('page_size', filters.page_size)
+      const qs = params.toString()
+      return api.get(`/leads${qs ? '?' + qs : ''}`)
+    },
+    refetchInterval: 30_000,
+  })
+}
+
+export function useLead(id) {
+  return useQuery({
+    queryKey: queryKeys.lead(id),
+    queryFn: () => api.get(`/leads/${id}`),
+    select: (data) => data.lead,
+    enabled: !!id,
+  })
+}
+
+export function useCreateLead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/leads', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leads'] }),
+  })
+}
+
+export function useUpdateLead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }) => api.put(`/leads/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leads'] }),
+  })
+}
+
+export function useDeleteLead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/leads/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leads'] }),
+  })
+}
+
+export function useImportLeads() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (formData) => api.upload('/leads/import', formData),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leads'] }),
+  })
+}
+
+export function useDispatchLead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.post(`/leads/${id}/dispatch`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['leads'] }),
+  })
+}
+
+// ─── Lead Field Definitions ─────────────────────────────
+export function useLeadFields() {
+  return useQuery({
+    queryKey: queryKeys.leadFields,
+    queryFn: () => api.get('/lead-fields'),
+    select: (data) => data.fields,
+  })
+}
+
+export function useCreateLeadField() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/lead-fields', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.leadFields }),
+  })
+}
+
+export function useUpdateLeadField() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }) => api.put(`/lead-fields/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.leadFields }),
+  })
+}
+
+export function useDeleteLeadField() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/lead-fields/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.leadFields }),
+  })
+}
+
+// ─── Branches ───────────────────────────────────────────
+export function useBranches() {
+  return useQuery({
+    queryKey: queryKeys.branches,
+    queryFn: () => api.get('/branches'),
+    select: (data) => data.branches,
+  })
+}
+
+export function useCreateBranch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/branches', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.branches }),
+  })
+}
+
+export function useUpdateBranch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, body }) => api.put(`/branches/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.branches }),
+  })
+}
+
+export function useDeleteBranch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/branches/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.branches }),
+  })
+}
+
+// ─── City-Branch Index ──────────────────────────────────
+export function useCityIndex() {
+  return useQuery({
+    queryKey: queryKeys.cityIndex,
+    queryFn: () => api.get('/city-index'),
+    select: (data) => data.cities,
+  })
+}
+
+export function useCreateCityEntry() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/city-index', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.cityIndex }),
+  })
+}
+
+export function useDeleteCityEntry() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/city-index/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.cityIndex }),
+  })
+}
+
 // ─── Settings ────────────────────────────────────────────
 export function useSettings() {
   return useQuery({

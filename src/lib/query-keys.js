@@ -33,4 +33,11 @@ export const queryKeys = {
   user: (id) => ['users', id],
 
   settings: ['settings'],
+
+  // Leads module
+  leads: (filters) => ['leads', filters || {}],
+  lead: (id) => ['leads', 'detail', id],
+  leadFields: ['lead-fields'],
+  branches: ['branches'],
+  cityIndex: ['city-index'],
 }

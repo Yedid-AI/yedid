@@ -1,9 +1,9 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { useI18n } from '../../lib/i18n'
 import {
-  LayoutDashboard, Database, Bot, Inbox, BookOpen, Wrench, Zap,
-  Users, Settings, LogOut, KeyRound,
+  LayoutDashboard, Brain, Sparkles, Radio, Route, Plug, ArrowRightLeft,
+  Users, Settings, LogOut, KeyRound, UserPlus, Building2,
   Moon, Sun, Globe, CalendarClock, ChevronsUpDown,
 } from 'lucide-react'
 import { useTheme } from '../../lib/theme'
@@ -17,7 +17,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarRail,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   useSidebar,
 } from '@/components/ui/sidebar'
 import {
@@ -27,20 +29,48 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import logoSrc from '@/assets/logo-yedid.png'
+import logoSrc from '@/assets/logo.png'
 
-const navItems = [
-  { path: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'agent'] },
-  { path: '/inboxes', labelKey: 'nav.inboxes', icon: Inbox, roles: ['admin'] },
-  { path: '/agents', labelKey: 'nav.agents', icon: Bot, roles: ['admin'] },
-  { path: '/sources', labelKey: 'nav.knowledge', icon: Database, roles: ['admin'] },
-  { path: '/playbooks', labelKey: 'nav.playbooks', icon: BookOpen, roles: ['admin'] },
-  { path: '/escalation', labelKey: 'nav.escalation', icon: Zap, roles: ['admin'] },
-  { path: '/tools', labelKey: 'nav.tools', icon: Wrench, roles: ['admin'] },
-  { path: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['admin'] },
-  { path: '/users', labelKey: 'nav.users', icon: Users, roles: ['super_admin'] },
-  { path: '/environment', labelKey: 'nav.environment', icon: KeyRound, roles: ['super_admin'] },
-  { path: '/closing', labelKey: 'nav.closing', icon: CalendarClock, roles: ['super_admin'] },
+/* Grouped navigation structure */
+const navGroups = [
+  {
+    labelKey: null,
+    items: [
+      { path: '/', labelKey: 'nav.dashboard', icon: LayoutDashboard, roles: ['super_admin', 'admin', 'agent'] },
+    ],
+  },
+  {
+    labelKey: 'nav.workspace',
+    items: [
+      { path: '/inboxes', labelKey: 'nav.inboxes', icon: Radio, roles: ['admin'] },
+      { path: '/agents', labelKey: 'nav.agents', icon: Sparkles, roles: ['admin'] },
+      { path: '/sources', labelKey: 'nav.knowledge', icon: Brain, roles: ['admin'] },
+    ],
+  },
+  {
+    labelKey: 'nav.leads',
+    items: [
+      { path: '/leads', labelKey: 'nav.leadsPage', icon: UserPlus, roles: ['admin'] },
+      { path: '/branches', labelKey: 'nav.branches', icon: Building2, roles: ['admin'] },
+    ],
+  },
+  {
+    labelKey: 'nav.configure',
+    items: [
+      { path: '/playbooks', labelKey: 'nav.playbooks', icon: Route, roles: ['admin'] },
+      { path: '/escalation', labelKey: 'nav.escalation', icon: ArrowRightLeft, roles: ['admin'] },
+      { path: '/tools', labelKey: 'nav.tools', icon: Plug, roles: ['admin'] },
+      { path: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['admin'] },
+    ],
+  },
+  {
+    labelKey: 'nav.platform',
+    items: [
+      { path: '/users', labelKey: 'nav.users', icon: Users, roles: ['super_admin'] },
+      { path: '/environment', labelKey: 'nav.environment', icon: KeyRound, roles: ['super_admin'] },
+      { path: '/closing', labelKey: 'nav.closing', icon: CalendarClock, roles: ['super_admin'] },
+    ],
+  },
 ]
 
 const langOrder = ['fr', 'en', 'he']
@@ -50,6 +80,7 @@ export function AppSidebar() {
   const { dark, toggle } = useTheme()
   const { t, locale, setLocale, dir } = useI18n()
   const navigate = useNavigate()
+  const location = useLocation()
   const { state } = useSidebar()
   const isCollapsed = state === 'collapsed'
 
@@ -63,24 +94,21 @@ export function AppSidebar() {
     setLocale(langOrder[(idx + 1) % langOrder.length])
   }
 
-  const visibleItems = navItems.filter((item) =>
+  const hasAccess = (item) =>
     item.roles.includes(user?.role) || (user?.role === 'super_admin' && item.roles.includes('admin'))
-  )
 
   return (
-    <SidebarRoot variant="inset" collapsible="icon" side={dir === 'rtl' ? 'right' : 'left'}>
+    <SidebarRoot variant="floating" collapsible="icon" side={dir === 'rtl' ? 'right' : 'left'}>
       {/* Header — Logo */}
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <NavLink to="/">
-                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
-                  <img src={logoSrc} alt="Yedid AI" className="size-5" />
-                </div>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-semibold">Yedid AI</span>
-                  <span className="truncate text-xs text-sidebar-foreground">{user?.enterprise || 'Dashboard'}</span>
+                <img src={logoSrc} alt="Yedid AI" className="h-8 w-auto" />
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-semibold">Yedid AI</span>
+                  <span className="text-xs">{user?.enterprise || t('nav.dashboard')}</span>
                 </div>
               </NavLink>
             </SidebarMenuButton>
@@ -88,36 +116,37 @@ export function AppSidebar() {
         </SidebarMenu>
       </SidebarHeader>
 
-      {/* Navigation */}
+      {/* Navigation — grouped */}
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>{t('nav.menu') || 'Menu'}</SidebarGroupLabel>
-          <SidebarMenu>
-            {visibleItems.map((item) => {
-              const Icon = item.icon
-              return (
-                <SidebarMenuItem key={item.path}>
-                  <SidebarMenuButton asChild tooltip={t(item.labelKey)}>
-                    <NavLink
-                      to={item.path}
-                      end={item.path === '/'}
-                      className={({ isActive }) => isActive ? 'font-medium' : ''}
-                      data-active={undefined}
-                    >
-                      {({ isActive }) => (
-                        <>
+        {navGroups.map((group, gi) => {
+          const visibleItems = group.items.filter(hasAccess)
+          if (visibleItems.length === 0) return null
+          return (
+            <SidebarGroup key={gi}>
+              {group.labelKey && (
+                <SidebarGroupLabel>{t(group.labelKey)}</SidebarGroupLabel>
+              )}
+              <SidebarMenu className="gap-1">
+                {visibleItems.map((item) => {
+                  const Icon = item.icon
+                  const isActive = item.path === '/'
+                    ? location.pathname === '/'
+                    : location.pathname.startsWith(item.path)
+                  return (
+                    <SidebarMenuItem key={item.path}>
+                      <SidebarMenuButton asChild isActive={isActive} tooltip={t(item.labelKey)}>
+                        <NavLink to={item.path} end={item.path === '/'}>
                           <Icon size={16} strokeWidth={1.8} />
                           <span>{t(item.labelKey)}</span>
-                          {isActive && <span className="sr-only">(active)</span>}
-                        </>
-                      )}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              )
-            })}
-          </SidebarMenu>
-        </SidebarGroup>
+                        </NavLink>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            </SidebarGroup>
+          )
+        })}
       </SidebarContent>
 
       {/* Footer — User menu */}
@@ -130,12 +159,12 @@ export function AppSidebar() {
                   size="lg"
                   className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
                 >
-                  <div className="bg-sidebar-accent text-sidebar-accent-foreground flex aspect-square size-8 items-center justify-center rounded-lg text-xs font-medium uppercase">
+                  <div className="bg-sidebar-primary/20 text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg text-xs font-medium uppercase">
                     {(user?.first_name?.[0] || user?.email?.[0] || '?')}
                   </div>
                   <div className="grid flex-1 text-left text-sm leading-tight">
                     <span className="truncate font-medium">{user?.first_name || user?.email}</span>
-                    <span className="truncate text-xs">{user?.email}</span>
+                    <span className="truncate text-xs opacity-70">{user?.email}</span>
                   </div>
                   <ChevronsUpDown className="ml-auto size-4" />
                 </SidebarMenuButton>
@@ -164,8 +193,6 @@ export function AppSidebar() {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
-
-      <SidebarRail />
     </SidebarRoot>
   )
 }

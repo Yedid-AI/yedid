@@ -13,7 +13,7 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
-import { LayoutGrid, List, Globe, MessageCircle, Instagram, Facebook, Settings, ExternalLink, Bot, CircleDot, CheckCircle, Loader2 } from 'lucide-react'
+import { LayoutGrid, List, Globe, MessageCircle, Instagram, Facebook, Settings, ExternalLink, Sparkles, CircleDot, CheckCircle, Loader2 } from 'lucide-react'
 
 const CHANNEL_ICONS = {
   web: Globe,
@@ -222,7 +222,7 @@ export default function Inboxes() {
 
                     <div className="flex items-center gap-3 text-[11px] text-muted-foreground mb-2.5">
                       <span className="flex items-center gap-1">
-                        <Bot size={11} />
+                        <Sparkles size={11} />
                         <span className={inbox.agent_bots?.name ? 'text-foreground' : ''}>{inbox.agent_bots?.name || t('inboxes.noAgent')}</span>
                       </span>
                       <span className="flex items-center gap-1">

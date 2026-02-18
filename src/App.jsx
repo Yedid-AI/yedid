@@ -26,6 +26,8 @@ import SessionDetail from './pages/SessionDetail'
 import PlaybooksLibrary from './pages/PlaybooksLibrary'
 import ToolsLibrary from './pages/ToolsLibrary'
 import EscalationLibrary from './pages/EscalationLibrary'
+import Leads from './pages/Leads'
+import Branches from './pages/Branches'
 
 function AppHeader() {
   const { title, setActionsContainer } = usePageHeader()
@@ -154,6 +156,16 @@ export default function App() {
           <Route path="/closing" element={
             <ProtectedRoute roles={['super_admin']}>
               <AppLayout><Closing /></AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/leads" element={
+            <ProtectedRoute roles={['admin']}>
+              <AppLayout><Leads /></AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/branches" element={
+            <ProtectedRoute roles={['admin']}>
+              <AppLayout><Branches /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
