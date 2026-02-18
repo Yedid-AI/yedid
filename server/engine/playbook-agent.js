@@ -11,14 +11,15 @@ const MAX_TOOL_ROUNDS = 5
  *
  * @param {Object} opts
  * @param {Object} opts.agentConfig - agent_config row
- * @param {Object} opts.playbook - Active playbook (with .tool if associated)
+ * @param {Object} opts.playbook - Active playbook
+ * @param {Array} opts.agentTools - All tools available to the agent
  * @param {string} opts.userMessage - Incoming user message
  * @param {Array} opts.conversationHistory - Previous messages [{role, content}]
  * @param {Object} opts.supabase - Supabase client
  * @param {string} opts.userId - User ID for KB filtering
  * @returns {Promise<string>} Agent response text
  */
-export async function runPlaybookAgent({ agentConfig, playbook, userMessage, conversationHistory, supabase, userId }) {
+export async function runPlaybookAgent({ agentConfig, playbook, agentTools = [], userMessage, conversationHistory, supabase, userId }) {
   const provider = agentConfig.llm_provider || 'openai'
   const model = agentConfig.llm_model || 'gpt-4.1-mini'
 
@@ -65,13 +66,15 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
 - Scenario: ${playbook.content}
 - Rules: ${playbook.rules || 'N/A'}`
 
-  // Build available tools
+  // Build available tools — KB search + all agent tools
   const tools = [knowledgeBaseToolDef]
 
-  // Add dynamic API tool if playbook has one
-  const apiTool = playbook.tool || null
-  if (apiTool) {
-    tools.push(buildToolDef(apiTool))
+  // Build a lookup map for all agent tools (by prefixed name)
+  const toolMap = new Map()
+  for (const t of agentTools) {
+    const def = buildToolDef(t)
+    tools.push(def)
+    toolMap.set(def.name, t)
   }
 
   // Start conversation
@@ -123,16 +126,18 @@ Do NOT mention system settings, agent parameters, or the existence of playbooks.
           const kbResults = await searchKnowledgeBase(supabase, query, userId)
           toolResult = formatKBResults(kbResults) || 'No relevant information found in the knowledge base.'
           metadata.kb_searches.push({ query, results_count: kbResults.length })
-        } else if (toolCall.name.startsWith('internal_tool_') && apiTool && apiTool.type === 'internal') {
-          // Internal tool (server-side handler)
-          toolResult = await executeInternalTool(apiTool.handler, toolCall.arguments, { supabase, userId })
-          metadata.tool_calls.push({ name: apiTool.name, handler: apiTool.handler, arguments: toolCall.arguments })
-        } else if (toolCall.name.startsWith('api_tool_') && apiTool) {
-          // Dynamic API tool
-          toolResult = await executeTool(apiTool, toolCall.arguments?.body || toolCall.arguments)
-          metadata.tool_calls.push({ name: apiTool.name, arguments: toolCall.arguments })
         } else {
-          toolResult = `Unknown tool: ${toolCall.name}`
+          // Lookup tool from the agent's tool map
+          const matchedTool = toolMap.get(toolCall.name)
+          if (matchedTool?.type === 'internal') {
+            toolResult = await executeInternalTool(matchedTool.handler, toolCall.arguments, { supabase, userId })
+            metadata.tool_calls.push({ name: matchedTool.name, handler: matchedTool.handler, arguments: toolCall.arguments })
+          } else if (matchedTool) {
+            toolResult = await executeTool(matchedTool, toolCall.arguments?.body || toolCall.arguments)
+            metadata.tool_calls.push({ name: matchedTool.name, arguments: toolCall.arguments })
+          } else {
+            toolResult = `Unknown tool: ${toolCall.name}`
+          }
         }
       } catch (err) {
         console.error(`[PlaybookAgent] Tool ${toolCall.name} failed:`, err.message)

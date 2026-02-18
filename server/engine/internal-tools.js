@@ -5,7 +5,7 @@
  */
 
 /**
- * save_lead — Insert a lead into the leads table.
+ * save_lead — UPSERT a lead by phone number (enrich if exists, create if new).
  */
 async function saveLead(params, { supabase, userId }) {
   const body = params?.body || params || {}
@@ -27,6 +27,42 @@ async function saveLead(params, { supabase, userId }) {
     if (idx?.length) branch = idx[0].branch_name
   }
 
+  // Check if lead already exists by phone + user_id
+  const { data: existing } = await supabase
+    .from('leads')
+    .select('id, name, phone, city, branch, status, service_requested, service_type, details')
+    .eq('user_id', userId)
+    .eq('phone', phone)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  if (existing?.length) {
+    // Enrich existing lead — only update fields that are newly provided and currently empty
+    const lead = existing[0]
+    const updates = { updated_at: new Date().toISOString() }
+    if (name && !lead.name) updates.name = name
+    if (body.email) updates.email = body.email
+    if (body.city && !lead.city) updates.city = body.city
+    if (branch && !lead.branch) updates.branch = branch
+    if (body.service_requested && !lead.service_requested) updates.service_requested = body.service_requested
+    if (body.service_type && !lead.service_type) updates.service_type = body.service_type
+    if (body.details) updates.details = lead.details ? `${lead.details}\n---\n${body.details}` : body.details
+
+    const { data, error } = await supabase
+      .from('leads')
+      .update(updates)
+      .eq('id', lead.id)
+      .select('id, name, phone, city, branch, status')
+      .single()
+
+    if (error) {
+      console.error('[internal-tools/save_lead]', error.message)
+      return JSON.stringify({ success: false, error: error.message })
+    }
+    return JSON.stringify({ success: true, lead_id: data.id, updated: true, message: `Lead enriched: ${data.name} (${data.phone})` })
+  }
+
+  // Create new lead
   const insert = {
     user_id: userId,
     company: body.company || 'babait',
@@ -63,10 +99,41 @@ async function saveLead(params, { supabase, userId }) {
   return JSON.stringify({ success: true, lead_id: data.id, message: `Lead saved: ${data.name} (${data.phone})` })
 }
 
+/**
+ * list_branches — List all active branches for the user.
+ */
+async function listBranches(params, { supabase, userId }) {
+  const { data, error } = await supabase
+    .from('branches')
+    .select('id, name, address, phone, mobile, contact_name, is_active')
+    .eq('user_id', userId)
+    .eq('is_active', true)
+    .order('name')
+
+  if (error) {
+    console.error('[internal-tools/list_branches]', error.message)
+    return JSON.stringify({ success: false, error: error.message })
+  }
+
+  if (!data || data.length === 0) {
+    return JSON.stringify({ success: true, branches: [], message: 'No branches found' })
+  }
+
+  const branches = data.map(b => ({
+    name: b.name,
+    address: b.address || null,
+    phone: b.phone || b.mobile || null,
+    contact: b.contact_name || null,
+  }))
+
+  return JSON.stringify({ success: true, branches, count: branches.length })
+}
+
 // --- Handler registry ---
 
 const HANDLERS = {
   save_lead: saveLead,
+  list_branches: listBranches,
 }
 
 /**

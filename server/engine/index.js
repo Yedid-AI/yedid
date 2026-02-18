@@ -195,12 +195,12 @@ async function loadAgentConfig(supabase, inboxId) {
   const { id: inboxDbId, user_id: userId, agent_bot_id: agentBotId } = inboxes[0]
   if (!agentBotId) return null
 
-  // Parallel fetch: bot token, config, playbooks, escalation rules, chatwoot user
-  const [botsRes, configsRes, playbookRes, escalationRes, cwRes] = await Promise.all([
+  // Parallel fetch: bot token, config, playbooks, escalation rules, chatwoot user, all tools
+  const [botsRes, configsRes, playbookRes, escalationRes, cwRes, toolsRes] = await Promise.all([
     supabase.from('agent_bots').select('bot_token').eq('id', agentBotId).limit(1),
     supabase.from('agent_config').select('*').eq('agent_bot_id', agentBotId).limit(1),
     supabase.from('agent_bot_playbooks')
-      .select('playbook_id, playbooks(id, title, content, audience, rules, is_active, tools(id, name, description, method, url, query_parameters, headers, body_schema, type, handler))')
+      .select('playbook_id, playbooks(id, title, content, audience, rules, is_active)')
       .eq('agent_bot_id', agentBotId),
     supabase.from('agent_bot_escalation_rules')
       .select('escalation_rule_id, escalation_rules(*)')
@@ -209,6 +209,9 @@ async function loadAgentConfig(supabase, inboxId) {
       .select('chatwoot_user_id')
       .eq('user_id', userId)
       .limit(1),
+    supabase.from('tools')
+      .select('id, name, description, method, url, query_parameters, headers, body_schema, type, handler, emoji')
+      .eq('agent_bot_id', agentBotId),
   ])
 
   // Decrypt bot token (supports legacy plaintext)
@@ -217,10 +220,11 @@ async function loadAgentConfig(supabase, inboxId) {
 
   const agentConfig = configsRes.data?.[0] || null
 
+  const allTools = toolsRes.data || []
+
   const formattedPlaybooks = (playbookRes.data || [])
     .map(j => j.playbooks)
     .filter(pb => pb && pb.is_active)
-    .map(pb => ({ ...pb, tool: pb.tools || null }))
 
   const escalationRules = (escalationRes.data || [])
     .map(j => j.escalation_rules)
@@ -237,6 +241,7 @@ async function loadAgentConfig(supabase, inboxId) {
     botToken,
     agentConfig,
     playbooks: formattedPlaybooks,
+    allTools,
     escalationRules: escalationRules || [],
     chatwootUserId,
   }
@@ -249,7 +254,7 @@ async function loadAgentConfig(supabase, inboxId) {
 // --- Scenario path ---
 
 async function handleScenario({ config, playbooks, route, userMessage, conversationHistory, supabase, accountId, conversationId, session }) {
-  const { userId, botToken, agentConfig } = config
+  const { userId, botToken, agentConfig, allTools } = config
 
   // Find active playbook
   const playbook = playbooks.find(pb => String(pb.id) === route.id)
@@ -258,10 +263,11 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     return
   }
 
-  // Run playbook agent
+  // Run playbook agent with all agent tools
   const result = await runPlaybookAgent({
     agentConfig,
     playbook,
+    agentTools: allTools || [],
     userMessage,
     conversationHistory,
     supabase,
