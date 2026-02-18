@@ -48,46 +48,27 @@ async function maskyooApi(service, params = {}) {
   try {
     const json = JSON.parse(text)
 
-    // If response is already an array, return it
-    if (Array.isArray(json)) {
-      console.log(`[maskyoo] Parsed: ${json.length} rows (array)`)
-      return json
+    // Maskyoo wraps responses: { service, status, result: [...] }
+    if (json && typeof json === 'object' && !Array.isArray(json)) {
+      if (json.status?.code && json.status.code !== 200) {
+        throw new Error(`Maskyoo API error ${json.status.code}: ${json.status.description || ''}`)
+      }
+      if (Array.isArray(json.result)) {
+        console.log(`[maskyoo] OK: ${json.result.length} rows`)
+        return json.result
+      }
+      // For non-array results (single record, metadata, etc.)
+      if (json.result !== undefined) {
+        console.log(`[maskyoo] OK: single result`)
+        return json.result
+      }
     }
 
-    // Maskyoo wraps results in an object — find the array inside
-    if (json && typeof json === 'object') {
-      const keys = Object.keys(json)
-      console.log(`[maskyoo] Parsed: object with keys [${keys.join(', ')}]`)
-
-      // Try common wrapper keys
-      for (const key of ['data', 'results', 'rows', 'records', 'cdr', 'calls']) {
-        if (Array.isArray(json[key])) {
-          console.log(`[maskyoo] Extracted ${json[key].length} rows from .${key}`)
-          return json[key]
-        }
-      }
-
-      // Fallback: find the first array value
-      for (const key of keys) {
-        if (Array.isArray(json[key])) {
-          console.log(`[maskyoo] Extracted ${json[key].length} rows from .${key}`)
-          return json[key]
-        }
-      }
-
-      // If it's an object with numeric-ish keys, it might be an indexed collection
-      if (keys.length > 0 && keys.every(k => /^\d+$/.test(k))) {
-        const arr = keys.map(k => json[k])
-        console.log(`[maskyoo] Converted indexed object to ${arr.length} rows`)
-        return arr
-      }
-
-      // Log sample for debugging
-      console.log(`[maskyoo] Sample: ${JSON.stringify(json).slice(0, 300)}`)
-    }
-
+    // Fallback: return as-is
+    console.log(`[maskyoo] OK: ${Array.isArray(json) ? json.length + ' rows' : typeof json}`)
     return json
-  } catch {
+  } catch (err) {
+    if (err.message.startsWith('Maskyoo')) throw err
     throw new Error(`Maskyoo: reponse invalide — ${text.slice(0, 200)}`)
   }
 }

@@ -44,6 +44,8 @@ router.get('/calls', checkRole('admin'), async (req, res) => {
       user_name: row.user_name,
       call_status: row.call_status,
       onetouch: row.onetouch,
+      gclid: row.gclid,
+      cdr_meta_data: row.cdr_meta_data,
     }))
 
     res.json({
@@ -89,7 +91,12 @@ router.post('/calls/sync', checkRole('admin'), async (req, res) => {
     const errors = []
 
     for (let i = 0; i < data.length; i += 500) {
-      const batch = data.slice(i, i + 500).map(row => ({
+      const batch = data.slice(i, i + 500).map(row => {
+        let metaData = row.cdr_meta_data || null
+        if (typeof metaData === 'string') {
+          try { metaData = JSON.parse(metaData) } catch { /* keep as-is */ }
+        }
+        return {
         user_id: userId,
         cdr_uniqueid: row.cdr_uniqueid || row.id || `unknown_${i}_${Math.random()}`,
         start_call: row.start_call || null,
@@ -101,9 +108,11 @@ router.post('/calls/sync', checkRole('admin'), async (req, res) => {
         user_name: row.user_name || null,
         call_status: row.call_status || null,
         onetouch: row.onetouch || null,
+        gclid: row.gclid || null,
+        cdr_meta_data: metaData,
         raw_data: row,
         synced_at: new Date().toISOString(),
-      }))
+      }}))
 
       const { error: upsertError } = await req.supabaseAdmin
         .from('calls')

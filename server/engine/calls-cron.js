@@ -87,21 +87,30 @@ async function runCallsSync(supabase) {
   let totalSynced = 0
 
   for (const user of users) {
-    const batch = data.map(row => ({
-      user_id: user.id,
-      cdr_uniqueid: row.cdr_uniqueid || row.id || `unknown_${Date.now()}_${Math.random()}`,
-      start_call: row.start_call || null,
-      end_call: row.end_call || null,
-      call_duration: Number(row.call_duration) || 0,
-      cdr_ani: row.cdr_ani || null,
-      cdr_ddi: row.cdr_ddi || null,
-      user_phone: row.user_phone || null,
-      user_name: row.user_name || null,
-      call_status: row.call_status || null,
-      onetouch: row.onetouch || null,
-      raw_data: row,
-      synced_at: new Date().toISOString(),
-    }))
+    const batch = data.map(row => {
+      // Parse cdr_meta_data if it's a JSON string
+      let metaData = row.cdr_meta_data || null
+      if (typeof metaData === 'string') {
+        try { metaData = JSON.parse(metaData) } catch { /* keep as-is */ }
+      }
+      return {
+        user_id: user.id,
+        cdr_uniqueid: row.cdr_uniqueid || row.id || `unknown_${Date.now()}_${Math.random()}`,
+        start_call: row.start_call || null,
+        end_call: row.end_call || null,
+        call_duration: Number(row.call_duration) || 0,
+        cdr_ani: row.cdr_ani || null,
+        cdr_ddi: row.cdr_ddi || null,
+        user_phone: row.user_phone || null,
+        user_name: row.user_name || null,
+        call_status: row.call_status || null,
+        onetouch: row.onetouch || null,
+        gclid: row.gclid || null,
+        cdr_meta_data: metaData,
+        raw_data: row,
+        synced_at: new Date().toISOString(),
+      }
+    })
 
     // Upsert in chunks of 500
     for (let i = 0; i < batch.length; i += 500) {
