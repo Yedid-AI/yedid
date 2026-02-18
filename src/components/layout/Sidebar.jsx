@@ -3,7 +3,7 @@ import { useAuth } from '../../lib/auth'
 import { useI18n } from '../../lib/i18n'
 import {
   LayoutDashboard, Brain, Sparkles, Radio, Route, Plug, ArrowRightLeft,
-  Users, Settings, LogOut, KeyRound, UserPlus, Building2,
+  Users, Settings, LogOut, KeyRound, UserPlus, Building2, Phone,
   Moon, Sun, Globe, CalendarClock, ChevronsUpDown,
 } from 'lucide-react'
 import { useTheme } from '../../lib/theme'
@@ -52,6 +52,7 @@ const navGroups = [
     items: [
       { path: '/leads', labelKey: 'nav.leadsPage', icon: UserPlus, roles: ['admin'] },
       { path: '/branches', labelKey: 'nav.branches', icon: Building2, roles: ['admin'] },
+      { path: '/calls', labelKey: 'nav.calls', icon: Phone, roles: ['admin'] },
     ],
   },
   {

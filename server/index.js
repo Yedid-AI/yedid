@@ -23,6 +23,8 @@ import inboxesRoutes from './routes/inboxes.js'
 import sessionsRoutes from './routes/sessions.js'
 import leadsRoutes from './routes/leads.js'
 import branchesRoutes from './routes/branches.js'
+import dispatchConfigRoutes from './routes/dispatch-config.js'
+import callsRoutes from './routes/calls.js'
 import { loadSettings } from './settings.js'
 import { startClosingCron } from './engine/closing-cron.js'
 
@@ -109,6 +111,8 @@ app.use('/api', checkAuth, inboxesRoutes)
 app.use('/api', checkAuth, sessionsRoutes)
 app.use('/api', checkAuth, leadsRoutes)
 app.use('/api', checkAuth, branchesRoutes)
+app.use('/api', checkAuth, dispatchConfigRoutes)
+app.use('/api', checkAuth, callsRoutes)
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {

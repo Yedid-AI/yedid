@@ -49,7 +49,7 @@ router.post('/branches', checkRole('admin'), async (req, res) => {
 router.put('/branches/:id', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const allowed = ['name', 'contact_name', 'email', 'phone', 'mobile', 'fax', 'address', 'chatwoot_conversation_id', 'whatsapp_phone', 'is_active']
+    const allowed = ['name', 'contact_name', 'email', 'phone', 'mobile', 'fax', 'address', 'chatwoot_conversation_id', 'whatsapp_phone', 'is_active', 'dispatch_enabled']
     const updates = { updated_at: new Date().toISOString() }
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key]

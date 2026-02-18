@@ -40,4 +40,10 @@ export const queryKeys = {
   leadFields: ['lead-fields'],
   branches: ['branches'],
   cityIndex: ['city-index'],
+  dispatchConfig: ['dispatch-config'],
+
+  // Calls module (Maskyoo)
+  calls: (filters) => ['calls', filters || {}],
+  callRecording: (uuid) => ['calls', 'recording', uuid],
+  callMetadata: (uuid) => ['calls', 'metadata', uuid],
 }

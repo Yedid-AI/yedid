@@ -51,6 +51,15 @@ const GROUPS = [
     ],
   },
   {
+    title: 'Maskyoo',
+    titleKey: 'environment.maskyooTitle',
+    descriptionKey: 'environment.maskyooDesc',
+    keys: [
+      { key: 'MASKYOO_API_URL', label: 'API URL', placeholder: 'https://www.maskyoo.com/babait' },
+      { key: 'MASKYOO_API_TOKEN', label: 'Bearer Token', placeholder: 'Token...' },
+    ],
+  },
+  {
     title: 'Application',
     titleKey: 'environment.appTitle',
     descriptionKey: 'environment.appDesc',

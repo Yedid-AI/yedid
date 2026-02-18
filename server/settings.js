@@ -14,6 +14,9 @@ const CONFIGURABLE_KEYS = [
   // Unipile (WhatsApp)
   'UNIPILE_API_KEY',
   'UNIPILE_DSN_URL',
+  // Maskyoo (Call Tracking)
+  'MASKYOO_API_URL',
+  'MASKYOO_API_TOKEN',
   // Closing & Billing
   'CLOSING_ENABLED',
   'CLOSING_INTERVAL_MINUTES',

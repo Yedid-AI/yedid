@@ -1,18 +1,21 @@
-import { useState } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useBranches, useCreateBranch, useUpdateBranch, useDeleteBranch, useCityIndex, useCreateCityEntry, useDeleteCityEntry } from '../hooks/queries'
+import { useBranches, useCreateBranch, useUpdateBranch, useDeleteBranch, useCityIndex, useCreateCityEntry, useDeleteCityEntry, useDispatchConfig, useUpdateDispatchConfig, useConnectDispatchWhatsApp } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Card } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
+import { Switch } from '@/components/ui/switch'
+import { Checkbox } from '@/components/ui/checkbox'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Building2, Home, MapPin, Trash2 } from 'lucide-react'
+import { Building2, Home, MapPin, Trash2, Send, MessageCircle, Loader2, CheckCircle } from 'lucide-react'
 
 const AVATAR_COLORS = [
   'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
@@ -24,6 +27,33 @@ function nameColor(name) {
   let h = 0
   for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
   return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
+}
+
+const DISPATCH_FIELDS = [
+  { key: 'company', label: 'leads.company' },
+  { key: 'name', label: 'leads.name' },
+  { key: 'phone', label: 'leads.phone' },
+  { key: 'email', label: 'common.email' },
+  { key: 'city', label: 'leads.city' },
+  { key: 'branch', label: 'leads.branch' },
+  { key: 'coordinator', label: 'leads.coordinator' },
+  { key: 'source', label: 'leads.source' },
+  { key: 'lead_channel', label: 'leads.leadChannel' },
+  { key: 'service_requested', label: 'leads.serviceRequested' },
+  { key: 'service_type', label: 'leads.serviceType' },
+  { key: 'details', label: 'leads.details' },
+  { key: 'position_type', label: 'leads.positionType' },
+  { key: 'experience', label: 'leads.experience' },
+  { key: 'campaign', label: 'leads.campaign' },
+]
+
+const DAY_KEYS = ['branches.sun', 'branches.mon', 'branches.tue', 'branches.wed', 'branches.thu', 'branches.fri', 'branches.sat']
+
+const FIELD_EMOJI = {
+  company: '📋', name: '👤', phone: '📱', email: '📧', city: '📍',
+  branch: '🏢', coordinator: '👷', source: '🔗', lead_channel: '📡',
+  service_requested: '🏥', service_type: '📋', details: '💬',
+  position_type: '💼', experience: '⭐', campaign: '📣',
 }
 
 const emptyBranchForm = { name: '', contact_name: '', email: '', phone: '', mobile: '', address: '', whatsapp_phone: '' }
@@ -80,6 +110,12 @@ export default function Branches() {
 
   const handleDelete = async (id) => {
     try { await deleteBranch.mutateAsync(id) } catch (err) { setError(err.message) }
+  }
+
+  const toggleDispatch = async (branch) => {
+    try {
+      await updateBranch.mutateAsync({ id: branch.id, body: { dispatch_enabled: !branch.dispatch_enabled } })
+    } catch (err) { setError(err.message) }
   }
 
   const handleAddCity = async (e) => {
@@ -165,6 +201,10 @@ export default function Branches() {
             <MapPin size={14} />
             {t('branches.cityIndex')} ({cities.length})
           </TabsTrigger>
+          <TabsTrigger value="dispatch" className="gap-1.5">
+            <Send size={14} />
+            {t('branches.dispatchConfig')}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="branches" className="mt-4">
@@ -177,13 +217,14 @@ export default function Branches() {
                   <TableHead>{t('branches.phone')}</TableHead>
                   <TableHead>{t('branches.address')}</TableHead>
                   <TableHead>{t('branches.whatsappPhone')}</TableHead>
+                  <TableHead>{t('branches.dispatch')}</TableHead>
                   <TableHead>{t('common.actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {branches.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-6">{t('branches.empty')}</TableCell>
+                    <TableCell colSpan={7} className="text-center text-muted-foreground py-6">{t('branches.empty')}</TableCell>
                   </TableRow>
                 ) : branches.map((b) => (
                   <TableRow key={b.id}>
@@ -209,6 +250,9 @@ export default function Branches() {
                       {b.whatsapp_phone ? (
                         <Badge variant="secondary" className="text-xs">{b.whatsapp_phone}</Badge>
                       ) : '-'}
+                    </TableCell>
+                    <TableCell>
+                      <Switch size="sm" checked={!!b.dispatch_enabled} onCheckedChange={() => toggleDispatch(b)} />
                     </TableCell>
                     <TableCell className="flex gap-2">
                       <Button size="sm" variant="ghost" onClick={() => handleEdit(b)}>{t('common.edit')}</Button>
@@ -279,12 +323,249 @@ export default function Branches() {
             </Table>
           </Card>
         </TabsContent>
+
+        <TabsContent value="dispatch" className="mt-4">
+          <DispatchConfigTab t={t} />
+        </TabsContent>
       </Tabs>
 
       {actionsContainer && createPortal(
         <Button onClick={() => setDialogOpen(true)}>{t('common.new')}</Button>,
         actionsContainer
       )}
+    </div>
+  )
+}
+
+// ─── Dispatch Configuration Tab ──────────────────────────
+function DispatchConfigTab({ t }) {
+  const { data: config, isLoading } = useDispatchConfig()
+  const updateConfig = useUpdateDispatchConfig()
+  const connectWhatsApp = useConnectDispatchWhatsApp()
+  const [saving, setSaving] = useState(false)
+
+  const [fields, setFields] = useState([])
+  const [header, setHeader] = useState('')
+  const [footer, setFooter] = useState('')
+  const [days, setDays] = useState([0, 1, 2, 3, 4, 5, 6])
+  const [hourStart, setHourStart] = useState(8)
+  const [hourEnd, setHourEnd] = useState(20)
+  const [autoDispatch, setAutoDispatch] = useState(false)
+
+  useEffect(() => {
+    if (config) {
+      setFields(config.message_fields || [])
+      setHeader(config.message_header || '')
+      setFooter(config.message_footer || '')
+      setDays(config.schedule_days || [0, 1, 2, 3, 4, 5, 6])
+      setHourStart(config.schedule_hour_start ?? 8)
+      setHourEnd(config.schedule_hour_end ?? 20)
+      setAutoDispatch(config.auto_dispatch || false)
+    }
+  }, [config])
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      await updateConfig.mutateAsync({
+        message_fields: fields,
+        message_header: header,
+        message_footer: footer,
+        schedule_days: days,
+        schedule_hour_start: hourStart,
+        schedule_hour_end: hourEnd,
+        auto_dispatch: autoDispatch,
+      })
+    } catch (err) {
+      console.error(err)
+    }
+    setSaving(false)
+  }
+
+  const toggleField = (key) => {
+    setFields(prev => prev.includes(key) ? prev.filter(f => f !== key) : [...prev, key])
+  }
+
+  const toggleDay = (day) => {
+    setDays(prev => prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort())
+  }
+
+  const handleConnectWhatsApp = async () => {
+    try {
+      const data = await connectWhatsApp.mutateAsync()
+      if (data.url) {
+        const w = 480, h = 720
+        const left = window.screenX + Math.round((window.outerWidth - w) / 2)
+        const top = window.screenY + Math.round((window.outerHeight - h) / 2)
+        window.open(data.url, 'dispatch-whatsapp-auth', `width=${w},height=${h},left=${left},top=${top}`)
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  // Live message preview
+  const preview = useMemo(() => {
+    const lines = []
+    if (header) lines.push(header, '')
+    const sampleLead = { company: 'BABAIT', name: 'Israel Cohen', phone: '+972501234567', email: 'israel@example.com', city: 'Tel Aviv', branch: 'Center', coordinator: 'David', source: 'Website', lead_channel: 'Web', service_requested: 'Home care', service_type: 'Daily', details: 'Needs morning assistance', position_type: 'Full time', experience: true, campaign: 'Google Ads' }
+    for (const key of fields) {
+      const val = sampleLead[key]
+      if (!val) continue
+      const emoji = FIELD_EMOJI[key] || '•'
+      if (key === 'name') lines.push(`${emoji} *${val}*`)
+      else if (key === 'company') lines.push(`${emoji} *${val}*`)
+      else lines.push(`${emoji} ${val}`)
+    }
+    lines.push('\n🆔 Lead #1234')
+    if (footer) lines.push('', footer)
+    return lines.join('\n')
+  }, [fields, header, footer])
+
+  if (isLoading) return <div className="text-muted-foreground py-6 text-center">{t('common.loading')}</div>
+
+  const dispatchInbox = config?.inboxes
+
+  return (
+    <div className="space-y-6">
+      {/* Section 1: WhatsApp Connection */}
+      <Card>
+        <CardContent className="pt-4 pb-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-500/10 text-emerald-500 shrink-0">
+                <MessageCircle size={18} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold">{t('branches.dispatchWhatsApp')}</h3>
+                {dispatchInbox ? (
+                  <p className="text-xs text-muted-foreground">
+                    {dispatchInbox.name} {dispatchInbox.phone_number && `(${dispatchInbox.phone_number})`}
+                  </p>
+                ) : (
+                  <p className="text-xs text-muted-foreground">{t('branches.noDispatchWhatsApp')}</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {dispatchInbox && (
+                <Badge variant="outline" className="gap-1 text-emerald-600 border-emerald-200 bg-emerald-50">
+                  <CheckCircle size={12} />
+                  {t('branches.dispatchConnected')}
+                </Badge>
+              )}
+              <Button size="sm" variant={dispatchInbox ? 'outline' : 'default'} onClick={handleConnectWhatsApp} disabled={connectWhatsApp.isPending}>
+                {connectWhatsApp.isPending ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
+                <span className="ms-1.5">{dispatchInbox ? t('branches.reconnect') : t('branches.connectDispatchWhatsApp')}</span>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section 2: Message Template */}
+      <Card>
+        <CardContent className="pt-4 pb-4 space-y-4">
+          <h3 className="text-sm font-semibold">{t('branches.messageTemplate')}</h3>
+
+          <div className="space-y-2">
+            <Label className="text-xs">{t('branches.messageHeader')}</Label>
+            <Input value={header} onChange={(e) => setHeader(e.target.value)} placeholder={t('branches.messageHeaderPlaceholder')} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">{t('branches.messageFields')}</Label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {DISPATCH_FIELDS.map((f) => (
+                <label key={f.key} className="flex items-center gap-2 cursor-pointer text-sm">
+                  <Checkbox checked={fields.includes(f.key)} onCheckedChange={() => toggleField(f.key)} />
+                  <span>{FIELD_EMOJI[f.key] || '•'} {t(f.label)}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">{t('branches.messageFooter')}</Label>
+            <Input value={footer} onChange={(e) => setFooter(e.target.value)} placeholder={t('branches.messageFooterPlaceholder')} />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs">{t('branches.messagePreview')}</Label>
+            <div className="bg-muted/50 rounded-lg p-3 text-sm whitespace-pre-wrap font-mono text-xs leading-relaxed border">
+              {preview}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Section 3: Schedule */}
+      <Card>
+        <CardContent className="pt-4 pb-4 space-y-4">
+          <h3 className="text-sm font-semibold">{t('branches.schedule')}</h3>
+
+          <div className="space-y-2">
+            <Label className="text-xs">{t('branches.scheduleDays')}</Label>
+            <div className="flex gap-2 flex-wrap">
+              {DAY_KEYS.map((key, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => toggleDay(idx)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${
+                    days.includes(idx)
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-background text-muted-foreground border-border hover:bg-muted'
+                  }`}
+                >
+                  {t(key)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-4 items-end">
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('branches.scheduleHourStart')}</Label>
+              <Select value={String(hourStart)} onValueChange={(v) => setHourStart(parseInt(v))}>
+                <SelectTrigger className="w-[90px] h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <SelectItem key={i} value={String(i)}>{String(i).padStart(2, '0')}:00</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('branches.scheduleHourEnd')}</Label>
+              <Select value={String(hourEnd)} onValueChange={(v) => setHourEnd(parseInt(v))}>
+                <SelectTrigger className="w-[90px] h-8 text-sm"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 24 }, (_, i) => (
+                    <SelectItem key={i} value={String(i)}>{String(i).padStart(2, '0')}:00</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 pt-2 border-t">
+            <Switch checked={autoDispatch} onCheckedChange={setAutoDispatch} id="auto-dispatch" />
+            <div>
+              <Label htmlFor="auto-dispatch" className="text-sm font-medium cursor-pointer">{t('branches.autoDispatch')}</Label>
+              <p className="text-xs text-muted-foreground">{t('branches.autoDispatchDesc')}</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Save button */}
+      <div className="flex justify-end">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 size={14} className="animate-spin me-1.5" /> : null}
+          {t('common.save')}
+        </Button>
+      </div>
     </div>
   )
 }

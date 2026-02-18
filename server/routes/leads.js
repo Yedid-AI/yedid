@@ -146,6 +146,30 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
       .single()
 
     if (error) throw error
+
+    // Auto-dispatch if configured
+    if (data.branch) {
+      try {
+        const { data: config } = await req.supabase
+          .from('dispatch_config')
+          .select('auto_dispatch')
+          .eq('user_id', req.user.user_id)
+          .limit(1)
+          .maybeSingle()
+
+        if (config?.auto_dispatch) {
+          const result = await dispatchLead(req.supabase, data)
+          if (result.success || result.queued) {
+            // Re-fetch updated lead
+            const { data: refreshed } = await req.supabase.from('leads').select('*').eq('id', data.id).single()
+            if (refreshed) return res.status(201).json({ lead: refreshed })
+          }
+        }
+      } catch (dispatchErr) {
+        console.log('[leads/auto-dispatch]', dispatchErr.message)
+      }
+    }
+
     res.status(201).json({ lead: data })
   } catch (err) {
     console.error('[leads]', err.message)
@@ -202,80 +226,104 @@ router.delete('/leads/:id', checkRole('admin'), async (req, res) => {
 
 // ─── WhatsApp Dispatch ──────────────────────────────────
 
+const FIELD_EMOJI = {
+  company: '📋', name: '👤', phone: '📱', email: '📧', city: '📍',
+  branch: '🏢', coordinator: '👷', source: '🔗', lead_channel: '📡',
+  service_requested: '🏥', service_type: '📋', details: '💬',
+  position_type: '💼', experience: '⭐', campaign: '📣',
+}
+
+function buildDispatchMessage(lead, config) {
+  const fields = config?.message_fields || ['company', 'name', 'phone', 'email', 'city', 'service_requested', 'service_type', 'details', 'source']
+  const lines = []
+  if (config?.message_header) lines.push(config.message_header, '')
+  for (const field of fields) {
+    const value = lead[field]
+    if (!value && value !== false) continue
+    const emoji = FIELD_EMOJI[field] || '•'
+    if (field === 'name') lines.push(`${emoji} *${value}*`)
+    else if (field === 'company') lines.push(`${emoji} *${String(value).toUpperCase()}*`)
+    else lines.push(`${emoji} ${value}`)
+  }
+  lines.push(`\n🆔 Lead #${lead.id}`)
+  if (config?.message_footer) lines.push('', config.message_footer)
+  return lines.join('\n')
+}
+
+function isWithinSchedule(config) {
+  if (!config) return true
+  const now = new Date()
+  const day = now.getDay()
+  const hour = now.getHours()
+  const days = config.schedule_days || [0, 1, 2, 3, 4, 5, 6]
+  if (!days.includes(day)) return false
+  const start = config.schedule_hour_start ?? 0
+  const end = config.schedule_hour_end ?? 24
+  return hour >= start && hour < end
+}
+
+async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) {
+  if (!lead.branch) return { error: 'Aucune branche assignee a ce lead' }
+
+  const { data: branch } = await supabase
+    .from('branches').select('*')
+    .eq('user_id', lead.user_id).eq('name', lead.branch)
+    .limit(1).maybeSingle()
+
+  if (!branch) return { error: `Branche "${lead.branch}" introuvable` }
+  if (!branch.dispatch_enabled) return { error: `Dispatch desactive pour "${lead.branch}"` }
+  if (!branch.whatsapp_phone) return { error: `Pas de numero WhatsApp pour "${lead.branch}"` }
+
+  const { data: config } = await supabase
+    .from('dispatch_config').select('*')
+    .eq('user_id', lead.user_id).limit(1).maybeSingle()
+
+  if (!skipScheduleCheck && !isWithinSchedule(config)) {
+    await supabase.from('leads').update({ status: 'queued_for_dispatch', updated_at: new Date().toISOString() }).eq('id', lead.id)
+    return { queued: true }
+  }
+
+  // Prefer dispatch-dedicated inbox, fallback to main WhatsApp inbox
+  let accountId = null
+  if (config?.dispatch_inbox_id) {
+    const { data: di } = await supabase.from('inboxes').select('unipile_account_id')
+      .eq('id', config.dispatch_inbox_id).not('unipile_account_id', 'is', null).limit(1).maybeSingle()
+    if (di) accountId = di.unipile_account_id
+  }
+  if (!accountId) {
+    const { data: inboxes } = await supabase.from('inboxes').select('unipile_account_id')
+      .eq('user_id', lead.user_id).eq('channel_type', 'whatsapp')
+      .not('unipile_account_id', 'is', null).limit(1)
+    if (inboxes?.length) accountId = inboxes[0].unipile_account_id
+  }
+  if (!accountId) return { error: 'Aucune connexion WhatsApp configuree' }
+
+  const message = buildDispatchMessage(lead, config)
+  const result = await sendMessage(accountId, branch.whatsapp_phone, message)
+
+  await supabase.from('leads').update({
+    status: 'sent_to_branch',
+    dispatched_at: new Date().toISOString(),
+    dispatch_message_id: result?.chat_id || result?.id || null,
+    updated_at: new Date().toISOString(),
+  }).eq('id', lead.id)
+
+  return { success: true }
+}
+
 // POST /api/leads/:id/dispatch — send lead to branch via WhatsApp
 router.post('/leads/:id/dispatch', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
-
-    // 1. Fetch the lead
     let leadQuery = req.supabase.from('leads').select('*').eq('id', id)
-    if (req.user.role !== 'super_admin') {
-      leadQuery = leadQuery.eq('user_id', req.user.user_id)
-    }
+    if (req.user.role !== 'super_admin') leadQuery = leadQuery.eq('user_id', req.user.user_id)
     const { data: lead, error: leadErr } = await leadQuery.single()
     if (leadErr || !lead) return res.status(404).json({ error: 'Lead introuvable' })
 
-    if (!lead.branch) return res.status(400).json({ error: 'Aucune branche assignee a ce lead' })
+    const result = await dispatchLead(req.supabase, lead, { skipScheduleCheck: true })
+    if (result.error) return res.status(400).json({ error: result.error })
 
-    // 2. Lookup the branch to get whatsapp_phone
-    const { data: branch } = await req.supabase
-      .from('branches')
-      .select('*')
-      .eq('user_id', lead.user_id)
-      .eq('name', lead.branch)
-      .limit(1)
-      .single()
-
-    if (!branch) return res.status(400).json({ error: `Branche "${lead.branch}" introuvable` })
-    if (!branch.whatsapp_phone) return res.status(400).json({ error: `La branche "${lead.branch}" n'a pas de numero WhatsApp` })
-
-    // 3. Find user's WhatsApp inbox to get unipile_account_id
-    const { data: inboxes } = await req.supabase
-      .from('inboxes')
-      .select('unipile_account_id')
-      .eq('user_id', lead.user_id)
-      .eq('channel_type', 'whatsapp')
-      .not('unipile_account_id', 'is', null)
-      .limit(1)
-
-    if (!inboxes || inboxes.length === 0) return res.status(400).json({ error: 'Aucune connexion WhatsApp configuree' })
-    const accountId = inboxes[0].unipile_account_id
-
-    // 4. Format message
-    const lines = [
-      `📋 *Nouveau lead — ${lead.company?.toUpperCase() || ''}*`,
-      '',
-      `👤 *${lead.name}*`,
-      `📱 ${lead.phone}`,
-    ]
-    if (lead.email) lines.push(`📧 ${lead.email}`)
-    if (lead.city) lines.push(`📍 ${lead.city}`)
-    if (lead.service_requested) lines.push(`🏥 ${lead.service_requested}`)
-    if (lead.service_type) lines.push(`📋 ${lead.service_type}`)
-    if (lead.details) lines.push(`\n💬 ${lead.details}`)
-    if (lead.source) lines.push(`\n🔗 Source: ${lead.source}`)
-    lines.push(`\n🆔 Lead #${lead.id}`)
-
-    const message = lines.join('\n')
-
-    // 5. Send via WhatsApp
-    const result = await sendMessage(accountId, branch.whatsapp_phone, message)
-
-    // 6. Update lead status
-    const { data: updated, error: updateErr } = await req.supabase
-      .from('leads')
-      .update({
-        status: 'sent_to_branch',
-        dispatched_at: new Date().toISOString(),
-        dispatch_message_id: result?.chat_id || result?.id || null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (updateErr) throw updateErr
-
+    const { data: updated } = await req.supabase.from('leads').select('*').eq('id', id).single()
     res.json({ success: true, lead: updated })
   } catch (err) {
     console.error('[leads/dispatch]', err.message)

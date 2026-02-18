@@ -704,6 +704,42 @@ export function useDeleteBranch() {
   })
 }
 
+// ─── Calls (Maskyoo) ─────────────────────────────────────
+export function useCalls(filters) {
+  return useQuery({
+    queryKey: queryKeys.calls(filters),
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (filters?.date_from) params.set('date_from', filters.date_from)
+      if (filters?.date_to) params.set('date_to', filters.date_to)
+      if (filters?.search) params.set('search', filters.search)
+      if (filters?.page != null) params.set('page', filters.page)
+      if (filters?.page_size) params.set('page_size', filters.page_size)
+      const qs = params.toString()
+      return api.get(`/calls${qs ? '?' + qs : ''}`)
+    },
+    refetchInterval: 30_000,
+  })
+}
+
+export function useCallRecording(uuid) {
+  return useQuery({
+    queryKey: queryKeys.callRecording(uuid),
+    queryFn: () => api.get(`/calls/${uuid}/recording`),
+    enabled: !!uuid,
+    staleTime: 5 * 60_000,
+  })
+}
+
+export function useCallMetadata(uuid) {
+  return useQuery({
+    queryKey: queryKeys.callMetadata(uuid),
+    queryFn: () => api.get(`/calls/${uuid}/metadata`),
+    enabled: !!uuid,
+    staleTime: 5 * 60_000,
+  })
+}
+
 // ─── City-Branch Index ──────────────────────────────────
 export function useCityIndex() {
   return useQuery({
@@ -726,6 +762,30 @@ export function useDeleteCityEntry() {
   return useMutation({
     mutationFn: (id) => api.delete(`/city-index/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.cityIndex }),
+  })
+}
+
+// ─── Dispatch Config ─────────────────────────────────────
+export function useDispatchConfig() {
+  return useQuery({
+    queryKey: queryKeys.dispatchConfig,
+    queryFn: () => api.get('/dispatch-config').then(r => r.config),
+  })
+}
+
+export function useUpdateDispatchConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.put('/dispatch-config', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.dispatchConfig }),
+  })
+}
+
+export function useConnectDispatchWhatsApp() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post('/dispatch-config/connect-whatsapp'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.dispatchConfig }),
   })
 }
 

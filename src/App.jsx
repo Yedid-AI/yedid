@@ -28,6 +28,7 @@ import ToolsLibrary from './pages/ToolsLibrary'
 import EscalationLibrary from './pages/EscalationLibrary'
 import Leads from './pages/Leads'
 import Branches from './pages/Branches'
+import Calls from './pages/Calls'
 
 function AppHeader() {
   const { title, setActionsContainer } = usePageHeader()
@@ -166,6 +167,11 @@ export default function App() {
           <Route path="/branches" element={
             <ProtectedRoute roles={['admin']}>
               <AppLayout><Branches /></AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/calls" element={
+            <ProtectedRoute roles={['admin']}>
+              <AppLayout><Calls /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="*" element={<Navigate to="/" replace />} />
