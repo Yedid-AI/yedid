@@ -63,7 +63,9 @@ export function AppSidebar() {
     setLocale(langOrder[(idx + 1) % langOrder.length])
   }
 
-  const visibleItems = navItems.filter((item) => item.roles.includes(user?.role))
+  const visibleItems = navItems.filter((item) =>
+    item.roles.includes(user?.role) || (user?.role === 'super_admin' && item.roles.includes('admin'))
+  )
 
   return (
     <SidebarRoot variant="inset" collapsible="icon" side={dir === 'rtl' ? 'right' : 'left'}>

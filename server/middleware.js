@@ -39,9 +39,11 @@ export async function checkAuth(req, res, next) {
 
 export function checkRole(...roles) {
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Acces interdit' })
-    }
+    if (!req.user) return res.status(403).json({ error: 'Acces interdit' })
+    // super_admin inherits all admin permissions
+    const hasAccess = roles.includes(req.user.role) ||
+      (req.user.role === 'super_admin' && roles.includes('admin'))
+    if (!hasAccess) return res.status(403).json({ error: 'Acces interdit' })
     next()
   }
 }

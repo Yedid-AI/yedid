@@ -17,7 +17,11 @@ export function ProtectedRoute({ children, roles }) {
     return <Navigate to="/login" replace />
   }
 
-  if (roles && user && !roles.includes(user.role)) {
+  // super_admin inherits admin access
+  const hasAccess = roles
+    ? roles.includes(user?.role) || (user?.role === 'super_admin' && roles.includes('admin'))
+    : true
+  if (!hasAccess) {
     return <Navigate to="/" replace />
   }
 
