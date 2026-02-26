@@ -176,6 +176,7 @@ export default {
   'inboxes.channelWhatsapp': 'WhatsApp',
   'inboxes.channelInstagram': 'Instagram',
   'inboxes.channelMeta': 'Messenger',
+  'inboxes.channelApi': 'API',
   'inboxes.sessionCount': 'Conversations',
   'inboxes.resolvedCount': 'AI Resolved',
   'inboxes.openInbox': 'Open channel',

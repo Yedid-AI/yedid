@@ -13,13 +13,14 @@ import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 
-import { LayoutGrid, List, Globe, MessageCircle, Instagram, Facebook, Settings, ExternalLink, Sparkles, CircleDot, CheckCircle, Loader2 } from 'lucide-react'
+import { LayoutGrid, List, Globe, MessageCircle, Instagram, Facebook, Settings, ExternalLink, Sparkles, CircleDot, CheckCircle, Loader2, Send, Phone } from 'lucide-react'
 
 const CHANNEL_ICONS = {
   web: Globe,
   whatsapp: MessageCircle,
   instagram: Instagram,
   meta: Facebook,
+  api: Globe,
 }
 
 const CHANNEL_LABELS = {
@@ -27,6 +28,14 @@ const CHANNEL_LABELS = {
   whatsapp: 'inboxes.channelWhatsapp',
   instagram: 'inboxes.channelInstagram',
   meta: 'inboxes.channelMeta',
+  api: 'inboxes.channelApi',
+}
+
+function getInboxBadge(name) {
+  const n = (name || '').toLowerCase()
+  if (n.startsWith('dispatch')) return { label: 'Dispatch', className: 'bg-orange-500/10 text-orange-600 border-orange-200', icon: Send }
+  if (n.startsWith('relance')) return { label: 'Relance', className: 'bg-violet-500/10 text-violet-600 border-violet-200', icon: Phone }
+  return null
 }
 
 export default function Inboxes() {
@@ -207,6 +216,7 @@ export default function Inboxes() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {inboxes.map((inbox) => {
               const ChannelIcon = CHANNEL_ICONS[inbox.channel_type] || Globe
+              const badge = getInboxBadge(inbox.name)
               return (
                 <Card key={inbox.id} className="hover:shadow-soft-md transition-all py-0 gap-0">
                   <div className="p-[15px]">
@@ -215,7 +225,15 @@ export default function Inboxes() {
                         <ChannelIcon size={16} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-sm truncate leading-tight">{inbox.name || '-'}</h3>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-semibold text-sm truncate leading-tight">{inbox.name || '-'}</h3>
+                          {badge && (
+                            <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 gap-0.5 shrink-0 ${badge.className}`}>
+                              <badge.icon size={9} />
+                              {badge.label}
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-[11px] text-muted-foreground">{t(CHANNEL_LABELS[inbox.channel_type] || 'inboxes.channelWeb')}</span>
                       </div>
                     </div>
@@ -270,7 +288,9 @@ export default function Inboxes() {
               {inboxes.length === 0 ? (
                 <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-6">{t('inboxes.empty')}</TableCell></TableRow>
               ) : (
-                inboxes.map((inbox) => (
+                inboxes.map((inbox) => {
+                  const badge = getInboxBadge(inbox.name)
+                  return (
                   <TableRow key={inbox.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -278,6 +298,12 @@ export default function Inboxes() {
                           {channelIcon(inbox.channel_type)}
                         </div>
                         <span className="font-medium">{inbox.name || '-'}</span>
+                        {badge && (
+                          <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 gap-0.5 ${badge.className}`}>
+                            <badge.icon size={9} />
+                            {badge.label}
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -299,7 +325,8 @@ export default function Inboxes() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ))
+                  )
+                })
               )}
             </TableBody>
           </Table>

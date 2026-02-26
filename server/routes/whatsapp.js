@@ -42,20 +42,95 @@ router.post('/webhook/unipile/account', async (req, res) => {
 
     if (String(name).startsWith('followup-')) {
       const uid = parseInt(name.replace('followup-', ''))
-      if (uid) {
-        console.log(`[unipile/account] Followup WhatsApp connected: account=${account_id}, user=${uid}`)
-        const { error: upsertErr } = await supabase
+      if (!uid) return
+
+      console.log(`[unipile/account] Followup WhatsApp connected: account=${account_id}, user=${uid}`)
+
+      // Get Unipile account details (phone number)
+      const accountDetails = await getAccount(account_id)
+      const phoneNumber = accountDetails?.connection_params?.im?.phone_number
+        || accountDetails?.phone_number || ''
+
+      // Create Chatwoot inbox on account 1
+      const chatwootAccountId = 1
+      const userToken = getSetting('CHATWOOT_ADMIN_TOKEN')
+      const appBaseUrl = getSetting('APP_BASE_URL')
+
+      const inboxName = `Relance ${phoneNumber || account_id}`
+      const inbox = await createInbox(chatwootAccountId, {
+        name: inboxName,
+        channel: { type: 'api', webhook_url: `${appBaseUrl}/api/webhook/chatwoot-channel` },
+      }, userToken)
+
+      await new Promise((r) => setTimeout(r, 2000))
+
+      // Attach agent bot if configured in followup_config
+      let agentBotDbId = null
+      try {
+        const { data: fcfg } = await supabase
           .from('followup_config')
-          .upsert({
-            user_id: uid,
-            whatsapp_account_id: account_id,
-            whatsapp_connected: true,
-            updated_at: new Date().toISOString(),
-          }, { onConflict: 'user_id' })
-        if (upsertErr) {
-          console.error('[unipile/account] Followup config upsert error:', upsertErr.message)
+          .select('agent_bot_id')
+          .eq('user_id', uid)
+          .limit(1)
+          .maybeSingle()
+
+        if (fcfg?.agent_bot_id) {
+          const { data: botData } = await supabase
+            .from('agent_bots')
+            .select('id, bot_id')
+            .eq('id', fcfg.agent_bot_id)
+            .limit(1)
+            .maybeSingle()
+
+          if (botData?.bot_id) {
+            agentBotDbId = botData.id
+            await attachBotToInbox(chatwootAccountId, inbox.id, botData.bot_id, userToken)
+            console.log(`[unipile/account] Followup agent bot ${botData.bot_id} attached to inbox ${inbox.id}`)
+          }
         }
+      } catch (e) {
+        console.log('[unipile/account] Followup bot attachment skipped:', e.message)
       }
+
+      // Insert inbox in DB
+      const { data: newInbox, error: insertErr } = await supabase
+        .from('inboxes')
+        .insert({
+          user_id: uid,
+          chatwoot_account_id: chatwootAccountId,
+          inbox_id: inbox.id,
+          name: inboxName,
+          channel_type: 'whatsapp',
+          unipile_account_id: account_id,
+          phone_number: phoneNumber,
+          agent_bot_id: agentBotDbId,
+        })
+        .select('id')
+        .single()
+
+      if (insertErr) {
+        console.error('[unipile/account] Followup inbox insert error:', insertErr.message)
+        return
+      }
+
+      // Update followup_config
+      const { error: upsertErr } = await supabase
+        .from('followup_config')
+        .upsert({
+          user_id: uid,
+          whatsapp_account_id: account_id,
+          whatsapp_connected: true,
+          followup_inbox_id: newInbox.id,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id' })
+      if (upsertErr) {
+        console.error('[unipile/account] Followup config upsert error:', upsertErr.message)
+      }
+
+      // Register webhook for incoming messages
+      try { await registerWebhook(`${appBaseUrl}/api/webhook/unipile/message`) } catch {}
+
+      console.log(`[unipile/account] Followup inbox fully provisioned for user ${uid}`)
       return
     }
 
@@ -65,25 +140,13 @@ router.post('/webhook/unipile/account', async (req, res) => {
 
       console.log(`[unipile/account] Dispatch WhatsApp connected: account=${account_id}, user=${uid}`)
 
-      // Create full inbox for dispatch (same as regular flow)
+      // Create full inbox for dispatch on Chatwoot account 1
       const accountDetails = await getAccount(account_id)
       const phoneNumber = accountDetails?.connection_params?.im?.phone_number
         || accountDetails?.phone_number || ''
 
-      const { data: accounts } = await supabase
-        .from('chatwoot_accounts')
-        .select('account_id, chatwoot_user_id, access_token')
-        .eq('user_id', uid)
-        .limit(1)
-
-      if (!accounts?.length) {
-        console.error('[unipile/account] No Chatwoot account for dispatch user:', uid)
-        return
-      }
-
-      const chatwootAccountId = accounts[0].account_id
-      const chatUserId = accounts[0].chatwoot_user_id
-      const userToken = accounts[0].access_token
+      const chatwootAccountId = 1
+      const userToken = getSetting('CHATWOOT_ADMIN_TOKEN')
       const appBaseUrl = getSetting('APP_BASE_URL')
 
       const inboxName = `Dispatch ${phoneNumber || account_id}`
@@ -93,9 +156,6 @@ router.post('/webhook/unipile/account', async (req, res) => {
       }, userToken)
 
       await new Promise((r) => setTimeout(r, 2000))
-      if (chatUserId) {
-        try { await addInboxMember(chatwootAccountId, inbox.id, chatUserId, userToken) } catch {}
-      }
 
       // Insert inbox in DB
       const { data: newInbox, error: insertErr } = await supabase

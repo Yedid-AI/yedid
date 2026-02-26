@@ -10,26 +10,110 @@ import { getAccount, createHostedAuthLink } from '../unipile.js'
 
 const router = Router()
 
-// GET /api/inboxes
+// GET /api/inboxes — with Chatwoot ↔ Yedid sync
 router.get('/inboxes', checkRole('admin'), async (req, res) => {
   try {
-    const { data, error } = await req.supabase
+    const userId = req.user.user_id
+    const supabase = req.supabaseAdmin || req.supabase
+    const adminToken = getSetting('CHATWOOT_ADMIN_TOKEN')
+
+    // ── Step A: Fetch Chatwoot inboxes from all relevant accounts ──
+    const chatwootInboxMap = new Map() // chatwootAccountId-inboxId → inbox data
+
+    // A1: Account 1 (shared — dispatch/relance inboxes live here)
+    try {
+      const result = await accountApi('/api/v1/accounts/1/inboxes', 'GET', null, adminToken)
+      const cwInboxes = result?.payload || result || []
+      for (const cwInbox of cwInboxes) {
+        chatwootInboxMap.set(`1-${cwInbox.id}`, { ...cwInbox, chatwoot_account_id: 1 })
+      }
+    } catch (e) {
+      console.log('[inboxes/sync] Account 1 fetch skipped:', e.message)
+    }
+
+    // A2: User's own Chatwoot account (regular inboxes)
+    const { data: chatwootAccounts } = await supabase
+      .from('chatwoot_accounts')
+      .select('account_id, access_token')
+      .eq('user_id', userId)
+      .limit(1)
+
+    if (chatwootAccounts?.length) {
+      const userAccountId = chatwootAccounts[0].account_id
+      const userToken = chatwootAccounts[0].access_token
+      if (userAccountId !== 1) { // avoid fetching account 1 twice
+        try {
+          const result = await accountApi(`/api/v1/accounts/${userAccountId}/inboxes`, 'GET', null, userToken || adminToken)
+          const cwInboxes = result?.payload || result || []
+          for (const cwInbox of cwInboxes) {
+            chatwootInboxMap.set(`${userAccountId}-${cwInbox.id}`, { ...cwInbox, chatwoot_account_id: userAccountId })
+          }
+        } catch (e) {
+          console.log('[inboxes/sync] User account fetch skipped:', e.message)
+        }
+      }
+    }
+
+    // ── Step B: Load DB inboxes ──
+    const { data: dbInboxes, error } = await supabase
       .from('inboxes')
       .select('*, agent_bots(id, name)')
-      .eq('user_id', req.user.user_id)
+      .eq('user_id', userId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
 
-    // Fetch session counts per inbox (grouped by chatwoot_inbox_id)
-    const inboxIds = data.map((i) => i.inbox_id).filter(Boolean)
+    // ── Step C: Delete orphaned DB inboxes (not in Chatwoot anymore) ──
+    const toDelete = []
+    for (const dbInbox of dbInboxes) {
+      const key = `${dbInbox.chatwoot_account_id}-${dbInbox.inbox_id}`
+      if (!chatwootInboxMap.has(key)) {
+        toDelete.push(dbInbox.id)
+      }
+    }
+    if (toDelete.length > 0) {
+      await supabase.from('inboxes').delete().in('id', toDelete)
+      console.log(`[inboxes/sync] Deleted ${toDelete.length} orphaned inbox(es)`)
+    }
+
+    // ── Step D: Import missing Chatwoot inboxes into DB ──
+    const existingKeys = new Set(dbInboxes.map(i => `${i.chatwoot_account_id}-${i.inbox_id}`))
+    const toImport = []
+    for (const [key, cwInbox] of chatwootInboxMap) {
+      if (existingKeys.has(key)) continue
+      const channelType = mapChatwootChannelType(cwInbox)
+      toImport.push({
+        user_id: userId,
+        chatwoot_account_id: cwInbox.chatwoot_account_id,
+        inbox_id: cwInbox.id,
+        name: cwInbox.name || 'Inbox',
+        channel_type: channelType,
+        website_token: cwInbox.website_token || null,
+      })
+    }
+    if (toImport.length > 0) {
+      await supabase.from('inboxes').insert(toImport)
+      console.log(`[inboxes/sync] Imported ${toImport.length} inbox(es) from Chatwoot`)
+    }
+
+    // ── Step E: Re-fetch and return final list ──
+    const { data: finalInboxes, error: finalErr } = await supabase
+      .from('inboxes')
+      .select('*, agent_bots(id, name)')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+
+    if (finalErr) throw finalErr
+
+    // Session counts
+    const inboxIds = finalInboxes.map((i) => i.inbox_id).filter(Boolean)
     const sessionCountMap = {}
     const resolvedCountMap = {}
     if (inboxIds.length > 0) {
       const { data: sessions } = await req.supabase
         .from('sessions')
         .select('chatwoot_inbox_id, billable')
-        .eq('user_id', req.user.user_id)
+        .eq('user_id', userId)
         .in('chatwoot_inbox_id', inboxIds)
       for (const s of sessions || []) {
         sessionCountMap[s.chatwoot_inbox_id] = (sessionCountMap[s.chatwoot_inbox_id] || 0) + 1
@@ -39,7 +123,7 @@ router.get('/inboxes', checkRole('admin'), async (req, res) => {
       }
     }
 
-    const inboxes = data.map((i) => ({
+    const inboxes = finalInboxes.map((i) => ({
       ...i,
       session_count: sessionCountMap[i.inbox_id] || 0,
       resolved_count: resolvedCountMap[i.inbox_id] || 0,
@@ -52,6 +136,16 @@ router.get('/inboxes', checkRole('admin'), async (req, res) => {
     res.status(500).json({ error: 'Erreur interne' })
   }
 })
+
+/** Map Chatwoot channel type string to Yedid channel_type */
+function mapChatwootChannelType(cwInbox) {
+  const type = cwInbox.channel_type || ''
+  if (type.includes('whatsapp') || type === 'Channel::Whatsapp') return 'whatsapp'
+  if (type.includes('instagram') || type === 'Channel::Instagram') return 'instagram'
+  if (type.includes('facebook') || type === 'Channel::FacebookPage') return 'meta'
+  if (type === 'Channel::Api' || type === 'api') return 'api'
+  return 'web'
+}
 
 // GET /api/inboxes/:id
 router.get('/inboxes/:id', checkRole('admin'), async (req, res) => {

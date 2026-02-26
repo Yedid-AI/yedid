@@ -5,11 +5,13 @@
  *   1. Enqueue: check recent calls against active followup configs
  *   2. Process: for pending items past their scheduled_at, check if phone is in leads
  *      - If in leads → mark skipped
- *      - If NOT in leads → send WhatsApp message → mark sent/failed
+ *      - If NOT in leads → send WhatsApp message + create Chatwoot conversation → mark sent/failed
  */
 
 import cron from 'node-cron'
 import { sendMessage } from '../unipile.js'
+import { accountApi } from '../chatwoot.js'
+import { getSetting } from '../settings.js'
 import { normalizePhone } from '../normalize-service.js'
 
 let cronTask = null
@@ -149,10 +151,10 @@ async function processQueue(supabase) {
   }
 
   for (const [userId, items] of Object.entries(byUser)) {
-    // Load the user's followup config
+    // Load the user's followup config with inbox join
     const { data: config } = await supabase
       .from('followup_config')
-      .select('*')
+      .select('*, inboxes:followup_inbox_id(id, chatwoot_account_id, inbox_id, unipile_account_id)')
       .eq('user_id', parseInt(userId))
       .eq('is_active', true)
       .limit(1)
@@ -176,6 +178,12 @@ async function processQueue(supabase) {
 
     const leadPhones = new Set((leads || []).map(l => l.phone))
 
+    // Resolve Chatwoot details for conversation tracking
+    const chatwootInbox = config.inboxes
+    const chatwootAccountId = chatwootInbox?.chatwoot_account_id
+    const chatwootInboxId = chatwootInbox?.inbox_id
+    const accessToken = getSetting('CHATWOOT_ADMIN_TOKEN')
+
     for (const item of items) {
       if (leadPhones.has(item.phone)) {
         // Phone found in leads — skip
@@ -186,10 +194,19 @@ async function processQueue(supabase) {
         continue
       }
 
-      // Not in leads — send WhatsApp message
+      // Not in leads — send WhatsApp message + create Chatwoot conversation
       try {
         const message = config.message_template || 'שלום, ראינו שהתקשרת אלינו. איך נוכל לעזור?'
         await sendMessage(config.whatsapp_account_id, item.phone, message)
+
+        // Track in Chatwoot if inbox is configured
+        if (chatwootAccountId && chatwootInboxId && accessToken) {
+          try {
+            await createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, item.phone, message)
+          } catch (chatErr) {
+            console.error(`[Followup Cron] Chatwoot tracking failed for ${item.phone}:`, chatErr.message)
+          }
+        }
 
         await supabase
           .from('followup_queue')
@@ -205,5 +222,95 @@ async function processQueue(supabase) {
           .eq('id', item.id)
       }
     }
+  }
+}
+
+/**
+ * Create or find a Chatwoot contact + conversation and post the initial outgoing message.
+ * This ensures the conversation appears in Chatwoot for agent tracking.
+ */
+async function createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, phone, message) {
+  const searchQuery = phone.replace('+', '')
+  let contactId = null
+  let conversationId = null
+
+  // Search existing contact
+  try {
+    const searchResult = await accountApi(
+      `/api/v1/accounts/${chatwootAccountId}/contacts/search?q=${encodeURIComponent(searchQuery)}&include_contacts=true`,
+      'GET', null, accessToken
+    )
+    const contacts = searchResult?.payload || []
+    if (contacts.length > 0) {
+      contactId = contacts[0].id
+    }
+  } catch (e) {
+    console.log('[Followup Cron] Contact search failed:', e.message)
+  }
+
+  // Find existing open conversation on this inbox
+  if (contactId) {
+    try {
+      const convResult = await accountApi(
+        `/api/v1/accounts/${chatwootAccountId}/contacts/${contactId}/conversations`,
+        'GET', null, accessToken
+      )
+      const conversations = convResult?.payload || []
+      const existing = conversations.find(
+        (c) => c.inbox_id === chatwootInboxId && (c.status === 'open' || c.status === 'pending')
+      )
+      if (existing) {
+        conversationId = existing.id
+      }
+    } catch (e) {
+      console.log('[Followup Cron] Conversation lookup failed:', e.message)
+    }
+  }
+
+  // Create contact if not found
+  if (!contactId) {
+    const newContact = await accountApi(
+      `/api/v1/accounts/${chatwootAccountId}/contacts`,
+      'POST',
+      {
+        inbox_id: chatwootInboxId,
+        name: phone,
+        phone_number: phone.startsWith('+') ? phone : `+${phone}`,
+      },
+      accessToken
+    )
+    contactId = newContact?.payload?.contact?.id || newContact?.id
+    const sourceId = newContact?.payload?.contact?.contact_inboxes?.[0]?.source_id
+    if (contactId && sourceId) {
+      const conv = await accountApi(
+        `/api/v1/accounts/${chatwootAccountId}/conversations`,
+        'POST',
+        { source_id: sourceId, inbox_id: chatwootInboxId, contact_id: contactId },
+        accessToken
+      )
+      conversationId = conv?.id
+    }
+  }
+
+  // Create conversation if still missing
+  if (!conversationId && contactId) {
+    const conv = await accountApi(
+      `/api/v1/accounts/${chatwootAccountId}/conversations`,
+      'POST',
+      { inbox_id: chatwootInboxId, contact_id: contactId },
+      accessToken
+    )
+    conversationId = conv?.id
+  }
+
+  // Post the outgoing message to Chatwoot
+  if (conversationId) {
+    await accountApi(
+      `/api/v1/accounts/${chatwootAccountId}/conversations/${conversationId}/messages`,
+      'POST',
+      { content: message, message_type: 'outgoing' },
+      accessToken
+    )
+    console.log(`[Followup Cron] Chatwoot conversation ${conversationId} created for ${phone}`)
   }
 }
