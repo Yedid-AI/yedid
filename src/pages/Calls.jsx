@@ -16,7 +16,7 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Download, Clock, Timer, RefreshCw, Loader2 } from 'lucide-react'
+import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Download, Clock, Timer, RefreshCw, Loader2, UserCheck } from 'lucide-react'
 
 const calendarLocales = { fr: frLocale, en: enUS, he: heLocale }
 
@@ -245,6 +245,7 @@ export default function Calls() {
           <TableHeader>
             <TableRow>
               <TableHead>{t('calls.caller')}</TableHead>
+              <TableHead>Lead</TableHead>
               <TableHead>{t('calls.maskyooNumber')}</TableHead>
               <TableHead>{t('calls.destination')}</TableHead>
               <TableHead>{t('calls.userName')}</TableHead>
@@ -255,9 +256,9 @@ export default function Calls() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
             ) : calls.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-6">{t('calls.empty')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">{t('calls.empty')}</TableCell></TableRow>
             ) : calls.map((call, idx) => {
               const sc = getCallStatusConfig(call.call_status)
               const Icon = sc.icon
@@ -268,6 +269,14 @@ export default function Calls() {
                   onClick={() => openCallPanel(call)}
                 >
                   <TableCell className="font-medium">{call.cdr_ani || '-'}</TableCell>
+                  <TableCell>
+                    {call.lead_name ? (
+                      <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                        <UserCheck size={12} />
+                        {call.lead_name}
+                      </span>
+                    ) : <span className="text-muted-foreground text-xs">-</span>}
+                  </TableCell>
                   <TableCell>{call.cdr_ddi || '-'}</TableCell>
                   <TableCell>{call.user_phone || '-'}</TableCell>
                   <TableCell>{call.user_name || '-'}</TableCell>

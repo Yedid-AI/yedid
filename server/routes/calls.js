@@ -44,6 +44,28 @@ router.get('/calls', checkRole('admin'), async (req, res) => {
       cdr_meta_data: row.cdr_meta_data,
     }))
 
+    // Enrich with lead info (match cdr_ani → leads.phone)
+    const phones = [...new Set(calls.map(c => c.cdr_ani).filter(Boolean))]
+    if (phones.length > 0) {
+      const { data: leadRows } = await req.supabaseAdmin
+        .from('leads')
+        .select('id, name, phone')
+        .in('phone', phones)
+      if (leadRows?.length) {
+        const phoneToLead = {}
+        for (const l of leadRows) {
+          if (!phoneToLead[l.phone]) phoneToLead[l.phone] = l
+        }
+        for (const call of calls) {
+          const lead = phoneToLead[call.cdr_ani]
+          if (lead) {
+            call.lead_id = lead.id
+            call.lead_name = lead.name
+          }
+        }
+      }
+    }
+
     res.json({
       calls,
       total: count || 0,
