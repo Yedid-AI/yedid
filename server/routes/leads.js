@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { checkRole } from '../middleware.js'
 import { sendMessage } from '../unipile.js'
+import { normalizeService } from '../normalize-service.js'
 import multer from 'multer'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
@@ -127,7 +128,7 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
       coordinator: req.body.coordinator || null,
       source: req.body.source || null,
       lead_channel: req.body.lead_channel || null,
-      service_requested: req.body.service_requested || null,
+      service_requested: normalizeService(req.body.service_requested),
       service_type: req.body.service_type || null,
       details: req.body.details || null,
       status: req.body.status || 'new',
@@ -472,6 +473,9 @@ router.post('/leads/import', checkRole('admin'), upload.single('file'), async (r
       }
 
       if (!lead.name || !lead.phone) { skipped++; continue }
+
+      // Normalize service_requested
+      if (lead.service_requested) lead.service_requested = normalizeService(lead.service_requested)
 
       // Auto-resolve city → branch
       if (!lead.branch && lead.city && cityMap[lead.city]) {

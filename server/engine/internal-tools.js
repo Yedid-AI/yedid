@@ -1,3 +1,5 @@
+import { normalizeService } from '../normalize-service.js'
+
 /**
  * Internal tool handlers.
  * Each handler receives (params, context) and returns a result string.
@@ -44,7 +46,7 @@ async function saveLead(params, { supabase, userId }) {
     if (body.email) updates.email = body.email
     if (body.city && !lead.city) updates.city = body.city
     if (branch && !lead.branch) updates.branch = branch
-    if (body.service_requested && !lead.service_requested) updates.service_requested = body.service_requested
+    if (body.service_requested && !lead.service_requested) updates.service_requested = normalizeService(body.service_requested)
     if (body.service_type && !lead.service_type) updates.service_type = body.service_type
     if (body.details) updates.details = lead.details ? `${lead.details}\n---\n${body.details}` : body.details
 
@@ -75,7 +77,7 @@ async function saveLead(params, { supabase, userId }) {
     coordinator: body.coordinator || null,
     source: body.source || 'chatbot',
     lead_channel: body.lead_channel || 'whatsapp',
-    service_requested: body.service_requested || null,
+    service_requested: normalizeService(body.service_requested),
     service_type: body.service_type || null,
     details: body.details || null,
     status: 'new',
