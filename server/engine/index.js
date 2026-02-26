@@ -3,7 +3,7 @@ import { runPlaybookAgent } from './playbook-agent.js'
 import { runEscalationAgent } from './escalation-agent.js'
 import { getConversationHistory } from './memory.js'
 import { sendMessage, sendMessageWithAudio, assignConversation, sendPrivateNote } from './chatwoot-messaging.js'
-import { extractAudioAttachment, transcribeAudio, generateTTS } from './voice.js'
+import { generateTTS } from './voice.js'
 import { createOrFindSession, logMessage, closeSession } from './session-logger.js'
 import { decrypt } from '../crypto.js'
 
@@ -49,27 +49,14 @@ export async function handleWebhook(webhookBody, supabase) {
   const conversationId = message?.conversation_id
   const accountId = webhookBody.account?.id
 
-  // --- Voice detection ---
-  const audioAttachment = extractAudioAttachment(message)
-  let userMessage = message?.processed_message_content || message?.content
+  // --- Voice detection (🎤 marker set by Unipile webhook after Whisper transcription) ---
+  let userMessage = message?.processed_message_content || message?.content || ''
   let isVoiceMessage = false
-  let voiceMetadata = null
 
-  if (audioAttachment && !userMessage) {
-    try {
-      console.log(`[Engine] Voice message detected, transcribing...`)
-      const { transcription } = await transcribeAudio(audioAttachment.dataUrl)
-      userMessage = transcription
-      isVoiceMessage = true
-      voiceMetadata = {
-        original_audio_url: audioAttachment.dataUrl,
-        transcription_source: 'whisper-1',
-      }
-      console.log(`[Engine] Transcription: "${transcription.slice(0, 100)}"`)
-    } catch (err) {
-      console.error(`[Engine] Voice transcription failed:`, err.message)
-      return
-    }
+  if (userMessage.startsWith('🎤 ')) {
+    isVoiceMessage = true
+    userMessage = userMessage.slice(3) // Strip 🎤 marker
+    console.log(`[Engine] Voice message detected: "${userMessage.slice(0, 100)}"`)
   }
 
   if (!userMessage || !inboxId) {
@@ -139,7 +126,7 @@ export async function handleWebhook(webhookBody, supabase) {
       await handleScenario({
         config, playbooks, route, userMessage, conversationHistory,
         supabase, accountId, conversationId, session,
-        isVoiceMessage, voiceMetadata,
+        isVoiceMessage,
       })
     } else {
       await handleEscalation({
@@ -199,11 +186,8 @@ function isAiAvailable(config) {
 function shouldProcess(body) {
   if (body.message_type !== 'incoming') return false
   const message = body.conversation?.messages?.[0]
-  const hasText = message?.content || message?.processed_message_content
-  const hasAudio = message?.attachments?.some(a => a.file_type === 'audio')
-  if (!hasText && !hasAudio) return false
-  // Allow audio messages through even when conversation is open
-  if (body.conversation?.status === 'open' && !hasAudio) return false
+  if (!message?.content && !message?.processed_message_content) return false
+  if (body.conversation?.status === 'open') return false
   return true
 }
 
@@ -284,7 +268,7 @@ async function loadAgentConfig(supabase, inboxId) {
 
 // --- Scenario path ---
 
-async function handleScenario({ config, playbooks, route, userMessage, conversationHistory, supabase, accountId, conversationId, session, isVoiceMessage, voiceMetadata }) {
+async function handleScenario({ config, playbooks, route, userMessage, conversationHistory, supabase, accountId, conversationId, session, isVoiceMessage }) {
   const { userId, botToken, agentConfig, allTools } = config
 
   // Find active playbook
@@ -340,7 +324,7 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     role: 'user',
     content: userMessage,
     playbook_id: playbook.id,
-    metadata: isVoiceMessage ? voiceMetadata : undefined,
+    metadata: isVoiceMessage ? { transcription_source: 'whisper-1', voice: true } : undefined,
   })
 
   await logMessage(supabase, {

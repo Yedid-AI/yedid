@@ -495,6 +495,27 @@ router.post('/webhook/unipile/message', async (req, res) => {
 
     // 9. Post message to Chatwoot (handle attachments if present)
     if (attachments && attachments.length > 0) {
+      // Check for audio/voice attachments — transcribe before relaying
+      const audioAtt = attachments.find(a => {
+        const ct = (a.content_type || a.type || '').toLowerCase()
+        const fn = (a.file_name || a.name || '').toLowerCase()
+        return ct.startsWith('audio/') || fn.endsWith('.ogg') || fn.endsWith('.opus') || fn.endsWith('.mp3') || fn.endsWith('.m4a')
+      })
+
+      if (audioAtt && !content) {
+        // Voice message: transcribe with Whisper
+        try {
+          const attUrl = audioAtt.url || audioAtt.data_url
+          const { transcribeAudio } = await import('../engine/voice.js')
+          const { transcription } = await transcribeAudio(attUrl)
+          content = `🎤 ${transcription}`
+          console.log(`[unipile/message] Voice transcribed: "${transcription.slice(0, 100)}"`)
+        } catch (whisperErr) {
+          console.error('[unipile/message] Whisper transcription failed:', whisperErr.message)
+          content = '🎤 [message vocal]'
+        }
+      }
+
       // For messages with attachments, use multipart upload
       for (const att of attachments) {
         try {
