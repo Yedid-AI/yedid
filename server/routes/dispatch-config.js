@@ -21,7 +21,8 @@ router.get('/dispatch-config', checkRole('admin'), async (req, res) => {
   try {
     const userId = req.user.user_id
 
-    const { data, error } = await req.supabase
+    const supabase = req.supabaseAdmin || req.supabase
+    const { data, error } = await supabase
       .from('dispatch_config')
       .select('*, inboxes:dispatch_inbox_id(id, name, phone_number, unipile_account_id)')
       .eq('user_id', userId)
@@ -53,7 +54,8 @@ router.put('/dispatch-config', checkRole('admin'), async (req, res) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key]
     }
 
-    const { data, error } = await req.supabase
+    const supabase = req.supabaseAdmin || req.supabase
+    const { data, error } = await supabase
       .from('dispatch_config')
       .upsert(updates, { onConflict: 'user_id' })
       .select('*, inboxes:dispatch_inbox_id(id, name, phone_number, unipile_account_id)')
