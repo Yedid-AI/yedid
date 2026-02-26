@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { getSetting } from '../settings.js'
-import { normalizeService, resolveCompany } from '../normalize-service.js'
+import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
 
 const router = Router()
 
@@ -14,7 +14,8 @@ router.post('/public/leads', async (req, res) => {
       return res.status(401).json({ error: 'API key invalide' })
     }
 
-    const { name, phone } = req.body
+    const name = req.body.name
+    const phone = normalizePhone(req.body.phone)
     if (!name || !phone) return res.status(400).json({ error: 'name et phone requis' })
 
     // Resolve user_id: from body, setting, or first admin
@@ -39,8 +40,8 @@ router.post('/public/leads', async (req, res) => {
     const serviceNormalized = normalizeService(req.body.service_requested)
     const company = req.body.company || resolveCompany(serviceNormalized)
 
-    // Auto-resolve city → branch (Babait only)
-    let branch = req.body.branch || null
+    // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index
+    let branch = req.body.branch || resolveFixedBranch(serviceNormalized) || null
     if (!branch && req.body.city && company === 'babait') {
       const { data: idx } = await req.supabaseAdmin
         .from('city_branch_index')
@@ -50,6 +51,52 @@ router.post('/public/leads', async (req, res) => {
       if (idx?.length) branch = idx[0].branch_name
     }
 
+    // Check for existing lead by normalized phone + user_id
+    const { data: existing } = await req.supabaseAdmin
+      .from('leads')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('phone', phone)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (existing?.length) {
+      // Merge into existing lead — enrich empty fields + append history
+      const lead = existing[0]
+      const updates = { updated_at: new Date().toISOString() }
+      if (name && !lead.name) updates.name = name
+      if (req.body.email && !lead.email) updates.email = req.body.email
+      if (req.body.city && !lead.city) updates.city = req.body.city
+      if (branch && !lead.branch) updates.branch = branch
+      if (serviceNormalized && !lead.service_requested) updates.service_requested = serviceNormalized
+      if (req.body.service_type && !lead.service_type) updates.service_type = req.body.service_type
+      if (company && !lead.company) updates.company = company
+
+      // Append to history
+      const history = lead.metadata?.history || []
+      history.push({
+        date: new Date().toISOString(),
+        name,
+        source: req.body.source || null,
+        lead_channel: req.body.lead_channel || null,
+        service_requested: serviceNormalized,
+        details: req.body.details || null,
+        campaign: req.body.campaign || null,
+      })
+      updates.metadata = { ...(lead.metadata || {}), history }
+
+      const { data, error } = await req.supabaseAdmin
+        .from('leads')
+        .update(updates)
+        .eq('id', lead.id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return res.status(200).json({ success: true, lead_id: data.id, merged: true })
+    }
+
+    // Create new lead
     const insert = {
       user_id: userId,
       company,

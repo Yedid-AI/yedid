@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { checkRole } from '../middleware.js'
 import { sendMessage } from '../unipile.js'
-import { normalizeService, resolveCompany } from '../normalize-service.js'
+import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
 import multer from 'multer'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
@@ -75,6 +75,27 @@ router.get('/leads', checkRole('admin'), async (req, res) => {
     const totalFiltered = filtered.length
     const paginatedLeads = filtered.slice(page * pageSize, (page + 1) * pageSize)
 
+    // Enrich with latest Maskyoo user_name per phone
+    const phones = [...new Set(paginatedLeads.map(l => l.phone).filter(Boolean))]
+    if (phones.length > 0) {
+      const { data: callRows } = await req.supabaseAdmin
+        .from('calls')
+        .select('cdr_ani, user_name, start_call')
+        .in('cdr_ani', phones)
+        .order('start_call', { ascending: false })
+      if (callRows?.length) {
+        const phoneToUser = {}
+        for (const c of callRows) {
+          if (!phoneToUser[c.cdr_ani]) phoneToUser[c.cdr_ani] = c.user_name
+        }
+        for (const lead of paginatedLeads) {
+          if (lead.phone && phoneToUser[lead.phone]) {
+            lead.maskyoo_user = phoneToUser[lead.phone]
+          }
+        }
+      }
+    }
+
     res.json({ leads: paginatedLeads, stats, total: totalFiltered, page, page_size: pageSize })
   } catch (err) {
     console.error('[leads]', err.message)
@@ -99,17 +120,43 @@ router.get('/leads/:id', checkRole('admin'), async (req, res) => {
   }
 })
 
-// POST /api/leads
+// GET /api/leads/:id/calls — Maskyoo calls for a lead (matched by phone)
+router.get('/leads/:id/calls', checkRole('admin'), async (req, res) => {
+  try {
+    let query = req.supabase.from('leads').select('phone').eq('id', req.params.id)
+    if (req.user.role !== 'super_admin') {
+      query = query.eq('user_id', req.user.user_id)
+    }
+    const { data: lead, error } = await query.single()
+    if (error || !lead) return res.status(404).json({ error: 'Lead introuvable' })
+
+    const { data: calls, error: callsErr } = await req.supabaseAdmin
+      .from('calls')
+      .select('cdr_uniqueid, start_call, end_call, call_duration, cdr_ani, cdr_ddi, user_phone, user_name, call_status, onetouch, gclid, cdr_meta_data')
+      .eq('cdr_ani', lead.phone)
+      .order('start_call', { ascending: false })
+      .limit(50)
+
+    if (callsErr) throw callsErr
+    res.json({ calls: calls || [] })
+  } catch (err) {
+    console.error('[leads/calls]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// POST /api/leads — UPSERT: merge by normalized phone + user_id
 router.post('/leads', checkRole('admin'), async (req, res) => {
   try {
-    const { name, phone } = req.body
+    const { name } = req.body
+    const phone = normalizePhone(req.body.phone)
     if (!name || !phone) return res.status(400).json({ error: 'name et phone requis' })
 
     const serviceNormalized = normalizeService(req.body.service_requested)
     const company = req.body.company || resolveCompany(serviceNormalized)
 
-    // Auto-resolve city → branch (Babait only)
-    let branch = req.body.branch || null
+    // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index
+    let branch = req.body.branch || resolveFixedBranch(serviceNormalized) || null
     if (!branch && req.body.city && company === 'babait') {
       const { data: idx } = await req.supabase
         .from('city_branch_index')
@@ -119,6 +166,52 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
       if (idx && idx.length > 0) branch = idx[0].branch_name
     }
 
+    // Check for existing lead by normalized phone + user_id
+    const { data: existing } = await req.supabase
+      .from('leads')
+      .select('*')
+      .eq('user_id', req.user.user_id)
+      .eq('phone', phone)
+      .order('created_at', { ascending: false })
+      .limit(1)
+
+    if (existing?.length) {
+      // Merge into existing lead — enrich empty fields + append history
+      const lead = existing[0]
+      const updates = { updated_at: new Date().toISOString() }
+      if (name && !lead.name) updates.name = name
+      if (req.body.email && !lead.email) updates.email = req.body.email
+      if (req.body.city && !lead.city) updates.city = req.body.city
+      if (branch && !lead.branch) updates.branch = branch
+      if (serviceNormalized && !lead.service_requested) updates.service_requested = serviceNormalized
+      if (req.body.service_type && !lead.service_type) updates.service_type = req.body.service_type
+      if (company && !lead.company) updates.company = company
+
+      // Append to history
+      const history = lead.metadata?.history || []
+      history.push({
+        date: new Date().toISOString(),
+        name,
+        source: req.body.source || null,
+        lead_channel: req.body.lead_channel || null,
+        service_requested: serviceNormalized,
+        details: req.body.details || null,
+        campaign: req.body.campaign || null,
+      })
+      updates.metadata = { ...(lead.metadata || {}), history }
+
+      const { data, error } = await req.supabase
+        .from('leads')
+        .update(updates)
+        .eq('id', lead.id)
+        .select()
+        .single()
+
+      if (error) throw error
+      return res.status(200).json({ lead: data, merged: true })
+    }
+
+    // Create new lead
     const insert = {
       user_id: req.user.user_id,
       company,
@@ -475,6 +568,9 @@ router.post('/leads/import', checkRole('admin'), upload.single('file'), async (r
 
       if (!lead.name || !lead.phone) { skipped++; continue }
 
+      // Normalize phone
+      lead.phone = normalizePhone(lead.phone)
+
       // Normalize service_requested + auto-resolve company
       if (lead.service_requested) {
         lead.service_requested = normalizeService(lead.service_requested)
@@ -483,7 +579,10 @@ router.post('/leads/import', checkRole('admin'), upload.single('file'), async (r
         }
       }
 
-      // Auto-resolve city → branch (Babait only)
+      // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index
+      if (!lead.branch) {
+        lead.branch = resolveFixedBranch(lead.service_requested) || null
+      }
       if (!lead.branch && lead.city && lead.company === 'babait' && cityMap[lead.city]) {
         lead.branch = cityMap[lead.city]
       }

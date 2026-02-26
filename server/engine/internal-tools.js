@@ -1,4 +1,4 @@
-import { normalizeService, resolveCompany } from '../normalize-service.js'
+import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
 
 /**
  * Internal tool handlers.
@@ -12,7 +12,8 @@ import { normalizeService, resolveCompany } from '../normalize-service.js'
 async function saveLead(params, { supabase, userId }) {
   const body = params?.body || params || {}
 
-  const { name, phone } = body
+  const name = body.name
+  const phone = normalizePhone(body.phone)
   if (!name || !phone) {
     return JSON.stringify({ success: false, error: 'name and phone are required' })
   }
@@ -20,8 +21,8 @@ async function saveLead(params, { supabase, userId }) {
   const serviceNorm = normalizeService(body.service_requested)
   const company = body.company || resolveCompany(serviceNorm)
 
-  // Auto-resolve city → branch (Babait only)
-  let branch = body.branch || null
+  // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index
+  let branch = body.branch || resolveFixedBranch(serviceNorm) || null
   if (!branch && body.city && company === 'babait') {
     const { data: idx } = await supabase
       .from('city_branch_index')
@@ -34,7 +35,7 @@ async function saveLead(params, { supabase, userId }) {
   // Check if lead already exists by phone + user_id
   const { data: existing } = await supabase
     .from('leads')
-    .select('id, name, phone, city, branch, status, service_requested, service_type, details')
+    .select('*')
     .eq('user_id', userId)
     .eq('phone', phone)
     .order('created_at', { ascending: false })
@@ -51,6 +52,19 @@ async function saveLead(params, { supabase, userId }) {
     if (body.service_requested && !lead.service_requested) updates.service_requested = normalizeService(body.service_requested)
     if (body.service_type && !lead.service_type) updates.service_type = body.service_type
     if (body.details) updates.details = lead.details ? `${lead.details}\n---\n${body.details}` : body.details
+
+    // Append to history
+    const history = lead.metadata?.history || []
+    history.push({
+      date: new Date().toISOString(),
+      name,
+      source: body.source || 'chatbot',
+      lead_channel: body.lead_channel || 'whatsapp',
+      service_requested: serviceNorm,
+      details: body.details || null,
+      campaign: body.campaign || null,
+    })
+    updates.metadata = { ...(lead.metadata || {}), history }
 
     const { data, error } = await supabase
       .from('leads')

@@ -598,6 +598,16 @@ export function useLead(id) {
   })
 }
 
+export function useLeadCalls(leadId) {
+  return useQuery({
+    queryKey: ['leads', 'calls', leadId],
+    queryFn: () => api.get(`/leads/${leadId}/calls`),
+    select: (data) => data.calls,
+    enabled: !!leadId,
+    staleTime: 60_000,
+  })
+}
+
 export function useCreateLead() {
   const qc = useQueryClient()
   return useMutation({

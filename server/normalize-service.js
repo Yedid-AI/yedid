@@ -8,7 +8,7 @@
  * Routing:
  *   Aviezer  → עובד זר
  *   Babait   → מטפל/ת, יעוץ, שירות אמבולנס, מחפש עבודה
- *   Udi      → השגחה בבית חולים, אחות פרטית, שירות פרטי
+ *   Babait/אודי (fixed branch) → השגחה בבית חולים, אחות פרטית, שירות פרטי
  */
 
 const SERVICE_MAP = {
@@ -41,7 +41,7 @@ const SERVICE_MAP = {
 }
 
 /**
- * Service → Company routing
+ * Service → Company routing (Udi is a branch of Babait, not a separate company)
  */
 const SERVICE_COMPANY = {
   'עובד זר':             'aviezer',
@@ -49,9 +49,19 @@ const SERVICE_COMPANY = {
   'יעוץ':                'babait',
   'שירות אמבולנס':       'babait',
   'מחפש עבודה':          'babait',
-  'השגחה בבית חולים':    'udi',
-  'אחות פרטית':          'udi',
-  'שירות פרטי':          'udi',
+  'השגחה בבית חולים':    'babait',
+  'אחות פרטית':          'babait',
+  'שירות פרטי':          'babait',
+}
+
+/**
+ * Services that route to a fixed branch (bypass city→branch index).
+ * Udi services always go to the אודי branch.
+ */
+const SERVICE_FIXED_BRANCH = {
+  'השגחה בבית חולים':    'אודי',
+  'אחות פרטית':          'אודי',
+  'שירות פרטי':          'אודי',
 }
 
 /**
@@ -66,9 +76,33 @@ export function normalizeService(raw) {
 
 /**
  * Resolve company from a normalized service_requested value.
- * Returns 'aviezer', 'babait', 'udi', or the provided default.
+ * Returns 'aviezer' or 'babait' (default).
  */
 export function resolveCompany(normalizedService, defaultCompany = 'babait') {
   if (!normalizedService) return defaultCompany
   return SERVICE_COMPANY[normalizedService] || defaultCompany
+}
+
+/**
+ * Resolve a fixed branch for services that bypass the city→branch index.
+ * Returns branch name (e.g. 'אודי') or null if city→branch index should be used.
+ */
+export function resolveFixedBranch(normalizedService) {
+  if (!normalizedService) return null
+  return SERVICE_FIXED_BRANCH[normalizedService] || null
+}
+
+/**
+ * Normalize an Israeli phone number to +972XXXXXXXXX format.
+ * Strips dashes, spaces, and other non-numeric chars.
+ * Returns the normalized number, or the original trimmed value if format is unrecognized.
+ */
+export function normalizePhone(phone) {
+  if (!phone) return null
+  const p = phone.replace(/[^0-9+]/g, '')
+  if (p.startsWith('+972')) return p
+  if (p.startsWith('972')) return '+' + p
+  if (p.startsWith('0')) return '+972' + p.slice(1)
+  if (/^[2-9]\d{8}$/.test(p)) return '+972' + p
+  return phone.trim()
 }

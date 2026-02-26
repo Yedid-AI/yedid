@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField } from '../hooks/queries'
+import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls } from '../hooks/queries'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
@@ -21,7 +21,7 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, Send, Settings, Plus, Trash2 } from 'lucide-react'
+import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, PhoneIncoming, PhoneMissed, Phone as PhoneIcon, Send, Settings, Plus, Trash2, History } from 'lucide-react'
 import babaitLogo from '@/assets/babaitlogo.png'
 import aviezerLogo from '@/assets/aviezer logo.png'
 
@@ -451,15 +451,16 @@ export default function Leads() {
               <TableHead>{t('leads.serviceRequested')}</TableHead>
               <TableHead>{t('common.status')}</TableHead>
               <TableHead>{t('leads.source')}</TableHead>
+              <TableHead>Maskyoo</TableHead>
               {user?.role === 'super_admin' && <TableHead>{t('leads.company')}</TableHead>}
               <TableHead>{t('common.date')}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
             ) : leads.length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
             ) : leads.map((lead) => {
               const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
               return (
@@ -474,6 +475,7 @@ export default function Leads() {
                     <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{lead.source || '-'}</TableCell>
+                  <TableCell className="text-muted-foreground text-xs">{lead.maskyoo_user || '-'}</TableCell>
                   {user?.role === 'super_admin' && <TableCell>
                     {COMPANY_LOGOS[lead.company] ? (
                       <div className="flex items-center gap-1.5">
@@ -863,8 +865,39 @@ function LeadFormFields({ form, setForm, t, branches, leadFields, showCompany })
 }
 
 // ─── Lead Detail (read-only) ────────────────────────────
+const MASKYOO_STATUS = {
+  ANSWERED: { color: 'bg-emerald-500/10 text-emerald-600', icon: PhoneIncoming },
+  NO_ANSWER: { color: 'bg-red-500/10 text-red-600', icon: PhoneMissed },
+  BUSY: { color: 'bg-orange-500/10 text-orange-600', icon: PhoneIcon },
+  FAILED: { color: 'bg-gray-500/10 text-gray-500', icon: PhoneMissed },
+}
+function getMaskyooStatus(status) {
+  if (!status) return MASKYOO_STATUS.ANSWERED
+  const u = String(status).toUpperCase()
+  if (u.includes('ANSWER') && !u.includes('NO')) return MASKYOO_STATUS.ANSWERED
+  if (u.includes('NO') || u.includes('MISS')) return MASKYOO_STATUS.NO_ANSWER
+  if (u.includes('BUSY')) return MASKYOO_STATUS.BUSY
+  return MASKYOO_STATUS.FAILED
+}
+function formatCallDuration(seconds) {
+  const s = Number(seconds) || 0
+  if (s === 0) return '-'
+  const m = Math.floor(s / 60)
+  const sec = s % 60
+  return m > 0 ? `${m}m ${sec}s` : `${sec}s`
+}
+function formatCallDate(dt) {
+  if (!dt) return '-'
+  try {
+    const d = new Date(dt)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+  } catch { return dt }
+}
+
 function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
   const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
+  const { data: maskyooCalls, isLoading: loadingCalls } = useLeadCalls(lead.id)
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
@@ -924,11 +957,88 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
         </Card>
       )}
 
+      {/* Maskyoo calls */}
+      {!loadingCalls && maskyooCalls?.length > 0 && (
+        <Card>
+          <CardContent className="pt-3 pb-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <PhoneIncoming className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">Maskyoo</span>
+              <Badge variant="outline" className="text-[10px] ml-auto">{maskyooCalls.length}</Badge>
+            </div>
+            <div className="space-y-2">
+              {maskyooCalls.map((call, i) => {
+                const cs = getMaskyooStatus(call.call_status)
+                const Icon = cs.icon
+                return (
+                  <div key={i} className="border rounded-md p-2.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <Badge className={`${cs.color} border-0 gap-1 text-[10px]`}>
+                        <Icon size={10} />
+                        {call.call_status || '-'}
+                      </Badge>
+                      <span className="text-xs text-muted-foreground">{formatCallDate(call.start_call)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
+                      <div className="flex justify-between"><span className="text-muted-foreground">משתמש</span><span className="font-medium">{call.user_name || '-'}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">משך</span><span className="font-medium">{formatCallDuration(call.call_duration)}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">מספר Maskyoo</span><span className="font-medium">{call.cdr_ddi || '-'}</span></div>
+                      <div className="flex justify-between"><span className="text-muted-foreground">יעד</span><span className="font-medium">{call.user_phone || '-'}</span></div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      {loadingCalls && (
+        <Card>
+          <CardContent className="pt-3 pb-3 text-center text-sm text-muted-foreground">
+            {t('common.loading')}
+          </CardContent>
+        </Card>
+      )}
+
       {lead.details && (
         <Card>
           <CardContent className="pt-3 pb-3">
             <div className="text-xs text-muted-foreground mb-1">{t('common.details')}</div>
             <p className="text-sm whitespace-pre-wrap">{lead.details}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* History — interactions from merged duplicate leads */}
+      {lead.metadata?.history?.length > 0 && (
+        <Card>
+          <CardContent className="pt-3 pb-3">
+            <div className="flex items-center gap-1.5 mb-2">
+              <History className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-xs text-muted-foreground uppercase tracking-wider">{t('leads.history') || 'History'}</span>
+              <Badge variant="outline" className="text-[10px] ml-auto">{lead.metadata.history.length}</Badge>
+            </div>
+            <div className="space-y-3">
+              {[...lead.metadata.history].reverse().map((entry, i) => (
+                <div key={i} className="border-l-2 border-muted pl-3 py-1">
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>{new Date(entry.date).toLocaleDateString()}</span>
+                    <span>{new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    {entry.source && <Badge variant="outline" className="text-[10px]">{entry.source}</Badge>}
+                    {entry.lead_channel && <Badge variant="outline" className="text-[10px]">{entry.lead_channel}</Badge>}
+                  </div>
+                  {entry.service_requested && (
+                    <div className="text-sm mt-0.5">{entry.service_requested}</div>
+                  )}
+                  {entry.details && (
+                    <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{entry.details}</p>
+                  )}
+                  {entry.campaign && (
+                    <div className="text-xs text-muted-foreground mt-0.5">📢 {entry.campaign}</div>
+                  )}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
