@@ -19,16 +19,23 @@ router.get('/inboxes', checkRole('admin'), async (req, res) => {
 
     // ── Step A: Fetch Chatwoot inboxes from all relevant accounts ──
     const chatwootInboxMap = new Map() // chatwootAccountId-inboxId → inbox data
+    let syncSuccess = false // only sync if at least one Chatwoot fetch succeeded
 
     // A1: Account 1 (shared — dispatch/relance inboxes live here)
-    try {
-      const result = await accountApi('/api/v1/accounts/1/inboxes', 'GET', null, adminToken)
-      const cwInboxes = result?.payload || result || []
-      for (const cwInbox of cwInboxes) {
-        chatwootInboxMap.set(`1-${cwInbox.id}`, { ...cwInbox, chatwoot_account_id: 1 })
+    if (adminToken) {
+      try {
+        const result = await accountApi('/api/v1/accounts/1/inboxes', 'GET', null, adminToken)
+        const cwInboxes = result?.payload || (Array.isArray(result) ? result : [])
+        console.log(`[inboxes/sync] Account 1: ${cwInboxes.length} inbox(es)`)
+        if (Array.isArray(cwInboxes) && cwInboxes.length > 0) {
+          for (const cwInbox of cwInboxes) {
+            chatwootInboxMap.set(`1-${cwInbox.id}`, { ...cwInbox, chatwoot_account_id: 1 })
+          }
+          syncSuccess = true
+        }
+      } catch (e) {
+        console.log('[inboxes/sync] Account 1 fetch skipped:', e.message)
       }
-    } catch (e) {
-      console.log('[inboxes/sync] Account 1 fetch skipped:', e.message)
     }
 
     // A2: User's own Chatwoot account (regular inboxes)
@@ -44,9 +51,13 @@ router.get('/inboxes', checkRole('admin'), async (req, res) => {
       if (userAccountId !== 1) { // avoid fetching account 1 twice
         try {
           const result = await accountApi(`/api/v1/accounts/${userAccountId}/inboxes`, 'GET', null, userToken || adminToken)
-          const cwInboxes = result?.payload || result || []
-          for (const cwInbox of cwInboxes) {
-            chatwootInboxMap.set(`${userAccountId}-${cwInbox.id}`, { ...cwInbox, chatwoot_account_id: userAccountId })
+          const cwInboxes = result?.payload || (Array.isArray(result) ? result : [])
+          console.log(`[inboxes/sync] Account ${userAccountId}: ${cwInboxes.length} inbox(es)`)
+          if (Array.isArray(cwInboxes) && cwInboxes.length > 0) {
+            for (const cwInbox of cwInboxes) {
+              chatwootInboxMap.set(`${userAccountId}-${cwInbox.id}`, { ...cwInbox, chatwoot_account_id: userAccountId })
+            }
+            syncSuccess = true
           }
         } catch (e) {
           console.log('[inboxes/sync] User account fetch skipped:', e.message)
@@ -63,37 +74,40 @@ router.get('/inboxes', checkRole('admin'), async (req, res) => {
 
     if (error) throw error
 
-    // ── Step C: Delete orphaned DB inboxes (not in Chatwoot anymore) ──
-    const toDelete = []
-    for (const dbInbox of dbInboxes) {
-      const key = `${dbInbox.chatwoot_account_id}-${dbInbox.inbox_id}`
-      if (!chatwootInboxMap.has(key)) {
-        toDelete.push(dbInbox.id)
+    // ── Only sync if Chatwoot fetch succeeded (avoid wiping DB on API failure) ──
+    if (syncSuccess) {
+      // Step C: Delete orphaned DB inboxes (not in Chatwoot anymore)
+      const toDelete = []
+      for (const dbInbox of dbInboxes) {
+        const key = `${dbInbox.chatwoot_account_id}-${dbInbox.inbox_id}`
+        if (!chatwootInboxMap.has(key)) {
+          toDelete.push(dbInbox.id)
+        }
       }
-    }
-    if (toDelete.length > 0) {
-      await supabase.from('inboxes').delete().in('id', toDelete)
-      console.log(`[inboxes/sync] Deleted ${toDelete.length} orphaned inbox(es)`)
-    }
+      if (toDelete.length > 0) {
+        await supabase.from('inboxes').delete().in('id', toDelete)
+        console.log(`[inboxes/sync] Deleted ${toDelete.length} orphaned inbox(es)`)
+      }
 
-    // ── Step D: Import missing Chatwoot inboxes into DB ──
-    const existingKeys = new Set(dbInboxes.map(i => `${i.chatwoot_account_id}-${i.inbox_id}`))
-    const toImport = []
-    for (const [key, cwInbox] of chatwootInboxMap) {
-      if (existingKeys.has(key)) continue
-      const channelType = mapChatwootChannelType(cwInbox)
-      toImport.push({
-        user_id: userId,
-        chatwoot_account_id: cwInbox.chatwoot_account_id,
-        inbox_id: cwInbox.id,
-        name: cwInbox.name || 'Inbox',
-        channel_type: channelType,
-        website_token: cwInbox.website_token || null,
-      })
-    }
-    if (toImport.length > 0) {
-      await supabase.from('inboxes').insert(toImport)
-      console.log(`[inboxes/sync] Imported ${toImport.length} inbox(es) from Chatwoot`)
+      // Step D: Import missing Chatwoot inboxes into DB
+      const existingKeys = new Set(dbInboxes.map(i => `${i.chatwoot_account_id}-${i.inbox_id}`))
+      const toImport = []
+      for (const [key, cwInbox] of chatwootInboxMap) {
+        if (existingKeys.has(key)) continue
+        const channelType = mapChatwootChannelType(cwInbox)
+        toImport.push({
+          user_id: userId,
+          chatwoot_account_id: cwInbox.chatwoot_account_id,
+          inbox_id: cwInbox.id,
+          name: cwInbox.name || 'Inbox',
+          channel_type: channelType,
+          website_token: cwInbox.website_token || null,
+        })
+      }
+      if (toImport.length > 0) {
+        await supabase.from('inboxes').insert(toImport)
+        console.log(`[inboxes/sync] Imported ${toImport.length} inbox(es) from Chatwoot`)
+      }
     }
 
     // ── Step E: Re-fetch and return final list ──
