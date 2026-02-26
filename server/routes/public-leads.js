@@ -42,7 +42,6 @@ router.post('/public/leads', async (req, res) => {
       const { data: idx } = await req.supabaseAdmin
         .from('city_branch_index')
         .select('branch_name')
-        .eq('user_id', userId)
         .eq('city', req.body.city)
         .limit(1)
       if (idx?.length) branch = idx[0].branch_name

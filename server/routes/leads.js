@@ -111,7 +111,6 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
       const { data: idx } = await req.supabase
         .from('city_branch_index')
         .select('branch_name')
-        .eq('user_id', req.user.user_id)
         .eq('city', req.body.city)
         .limit(1)
       if (idx && idx.length > 0) branch = idx[0].branch_name
@@ -446,7 +445,6 @@ router.post('/leads/import', checkRole('admin'), upload.single('file'), async (r
     const { data: cityIdx } = await req.supabase
       .from('city_branch_index')
       .select('city, branch_name')
-      .eq('user_id', req.user.user_id)
     const cityMap = {}
     for (const c of cityIdx || []) cityMap[c.city] = c.branch_name
 
