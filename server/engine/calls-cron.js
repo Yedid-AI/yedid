@@ -8,6 +8,7 @@
 import cron from 'node-cron'
 import { queryCdr } from '../maskyoo.js'
 import { getSetting } from '../settings.js'
+import { normalizePhone } from '../normalize-service.js'
 
 let cronTask = null
 
@@ -96,9 +97,9 @@ async function runCallsSync(supabase) {
       start_call: row.start_call || null,
       end_call: row.end_call || null,
       call_duration: Number(row.call_duration) || 0,
-      cdr_ani: row.cdr_ani || null,
+      cdr_ani: normalizePhone(row.cdr_ani) || row.cdr_ani || null,
       cdr_ddi: row.cdr_ddi || null,
-      user_phone: row.user_phone || null,
+      user_phone: normalizePhone(row.user_phone) || row.user_phone || null,
       user_name: row.user_name || null,
       call_status: row.call_status || null,
       onetouch: row.onetouch || null,
