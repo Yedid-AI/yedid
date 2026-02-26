@@ -585,7 +585,7 @@ export function useLeads(filters) {
       const qs = params.toString()
       return api.get(`/leads${qs ? '?' + qs : ''}`)
     },
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   })
 }
 

@@ -363,7 +363,7 @@ async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) 
 
   const { data: branch } = await supabase
     .from('branches').select('*')
-    .eq('user_id', lead.user_id).eq('name', lead.branch)
+    .eq('name', lead.branch)
     .limit(1).maybeSingle()
 
   if (!branch) return { error: `Branche "${lead.branch}" introuvable` }
@@ -372,7 +372,7 @@ async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) 
 
   const { data: config } = await supabase
     .from('dispatch_config').select('*')
-    .eq('user_id', lead.user_id).limit(1).maybeSingle()
+    .limit(1).maybeSingle()
 
   if (!skipScheduleCheck && !isWithinSchedule(config)) {
     await supabase.from('leads').update({ status: 'queued_for_dispatch', updated_at: new Date().toISOString() }).eq('id', lead.id)
@@ -388,7 +388,7 @@ async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) 
   }
   if (!accountId) {
     const { data: inboxes } = await supabase.from('inboxes').select('unipile_account_id')
-      .eq('user_id', lead.user_id).eq('channel_type', 'whatsapp')
+      .eq('channel_type', 'whatsapp')
       .not('unipile_account_id', 'is', null).limit(1)
     if (inboxes?.length) accountId = inboxes[0].unipile_account_id
   }

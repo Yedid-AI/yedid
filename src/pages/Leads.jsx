@@ -450,7 +450,6 @@ export default function Leads() {
               <TableHead>{t('leads.branch')}</TableHead>
               <TableHead>{t('leads.serviceRequested')}</TableHead>
               <TableHead>{t('common.status')}</TableHead>
-              <TableHead>{t('leads.source')}</TableHead>
               <TableHead>Maskyoo</TableHead>
               {user?.role === 'super_admin' && <TableHead>{t('leads.company')}</TableHead>}
               <TableHead>{t('common.date')}</TableHead>
@@ -458,9 +457,9 @@ export default function Leads() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
             ) : leads.length === 0 ? (
-              <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
             ) : leads.map((lead) => {
               const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
               return (
@@ -474,7 +473,6 @@ export default function Leads() {
                   <TableCell>
                     <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{lead.source || '-'}</TableCell>
                   <TableCell className="text-muted-foreground text-xs">{lead.maskyoo_user || '-'}</TableCell>
                   {user?.role === 'super_admin' && <TableCell>
                     {COMPANY_LOGOS[lead.company] ? (
