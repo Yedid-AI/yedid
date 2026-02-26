@@ -340,6 +340,14 @@ router.post('/webhook/unipile/message', async (req, res) => {
     const attachments = body.attachments
     const quoted = body.quoted
 
+    // Debug: log attachment details for voice message debugging
+    if (attachments?.length) {
+      console.log('[unipile/message] Attachments:', JSON.stringify(attachments))
+    }
+    if (!message && !attachments?.length) {
+      console.log('[unipile/message] No message and no attachments — full body:', JSON.stringify(body).slice(0, 2000))
+    }
+
     // Skip our own messages and non-message events
     if (is_sender) {
       console.log('[unipile/message] Skipping own message')
