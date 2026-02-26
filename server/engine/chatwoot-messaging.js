@@ -1,4 +1,5 @@
 import { accountApi } from '../chatwoot.js'
+import { getSetting } from '../settings.js'
 
 const MAX_RETRIES = 3
 const BASE_DELAY_MS = 1000
@@ -53,4 +54,31 @@ export async function sendPrivateNote(accountId, conversationId, content, botTok
 export async function setConversationStatus(accountId, conversationId, status, botToken) {
   const path = `/api/v1/accounts/${accountId}/conversations/${conversationId}/toggle_status`
   return withRetry(() => accountApi(path, 'POST', { status }, botToken), 'setConversationStatus')
+}
+
+/**
+ * Send a message with an audio attachment (text + audio file).
+ * Uses FormData because accountApi forces JSON content-type.
+ */
+export async function sendMessageWithAudio(accountId, conversationId, content, audioBuffer, fileName, contentType, botToken) {
+  const baseUrl = getSetting('CHATWOOT_PLATFORM_URL')
+  const path = `/api/v1/accounts/${accountId}/conversations/${conversationId}/messages`
+
+  const formData = new FormData()
+  formData.append('content', content)
+  formData.append('message_type', 'outgoing')
+  formData.append('attachments[]', new Blob([audioBuffer], { type: contentType }), fileName)
+
+  return withRetry(async () => {
+    const res = await fetch(`${baseUrl}${path}`, {
+      method: 'POST',
+      headers: { 'api_access_token': botToken },
+      body: formData,
+    })
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Chatwoot sendMessageWithAudio (${res.status}): ${text}`)
+    }
+    return res.json()
+  }, 'sendMessageWithAudio')
 }

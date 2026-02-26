@@ -2,7 +2,8 @@ import { routeMessage } from './router.js'
 import { runPlaybookAgent } from './playbook-agent.js'
 import { runEscalationAgent } from './escalation-agent.js'
 import { getConversationHistory } from './memory.js'
-import { sendMessage, assignConversation, sendPrivateNote } from './chatwoot-messaging.js'
+import { sendMessage, sendMessageWithAudio, assignConversation, sendPrivateNote } from './chatwoot-messaging.js'
+import { extractAudioAttachment, transcribeAudio, generateTTS } from './voice.js'
 import { createOrFindSession, logMessage, closeSession } from './session-logger.js'
 import { decrypt } from '../crypto.js'
 
@@ -40,10 +41,32 @@ export async function handleWebhook(webhookBody, supabase) {
   if (!shouldProcess(webhookBody)) return
 
   const message = webhookBody.conversation?.messages?.[0]
-  const userMessage = message?.processed_message_content || message?.content
   const inboxId = message?.inbox_id
   const conversationId = message?.conversation_id
   const accountId = webhookBody.account?.id
+
+  // --- Voice detection ---
+  const audioAttachment = extractAudioAttachment(message)
+  let userMessage = message?.processed_message_content || message?.content
+  let isVoiceMessage = false
+  let voiceMetadata = null
+
+  if (audioAttachment && !userMessage) {
+    try {
+      console.log(`[Engine] Voice message detected, transcribing...`)
+      const { transcription } = await transcribeAudio(audioAttachment.dataUrl)
+      userMessage = transcription
+      isVoiceMessage = true
+      voiceMetadata = {
+        original_audio_url: audioAttachment.dataUrl,
+        transcription_source: 'whisper-1',
+      }
+      console.log(`[Engine] Transcription: "${transcription.slice(0, 100)}"`)
+    } catch (err) {
+      console.error(`[Engine] Voice transcription failed:`, err.message)
+      return
+    }
+  }
 
   if (!userMessage || !inboxId) {
     console.log('[Engine] Skipping: no user message or inbox_id')
@@ -112,6 +135,7 @@ export async function handleWebhook(webhookBody, supabase) {
       await handleScenario({
         config, playbooks, route, userMessage, conversationHistory,
         supabase, accountId, conversationId, session,
+        isVoiceMessage, voiceMetadata,
       })
     } else {
       await handleEscalation({
@@ -171,7 +195,9 @@ function isAiAvailable(config) {
 function shouldProcess(body) {
   if (body.message_type !== 'incoming') return false
   const message = body.conversation?.messages?.[0]
-  if (!message?.content && !message?.processed_message_content) return false
+  const hasText = message?.content || message?.processed_message_content
+  const hasAudio = message?.attachments?.some(a => a.file_type === 'audio')
+  if (!hasText && !hasAudio) return false
   if (body.conversation?.status === 'open') return false
   return true
 }
@@ -253,7 +279,7 @@ async function loadAgentConfig(supabase, inboxId) {
 
 // --- Scenario path ---
 
-async function handleScenario({ config, playbooks, route, userMessage, conversationHistory, supabase, accountId, conversationId, session }) {
+async function handleScenario({ config, playbooks, route, userMessage, conversationHistory, supabase, accountId, conversationId, session, isVoiceMessage, voiceMetadata }) {
   const { userId, botToken, agentConfig, allTools } = config
 
   // Find active playbook
@@ -287,7 +313,19 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
   // Send each part as a separate message with a small delay
   for (let i = 0; i < messageParts.length; i++) {
     if (i > 0) await new Promise(r => setTimeout(r, 800 + Math.random() * 700))
-    await sendMessage(accountId, conversationId, messageParts[i], botToken)
+
+    if (isVoiceMessage) {
+      // Voice flow: send TTS audio + text
+      try {
+        const { audioBuffer, contentType, fileName } = await generateTTS(messageParts[i])
+        await sendMessageWithAudio(accountId, conversationId, messageParts[i], audioBuffer, fileName, contentType, botToken)
+      } catch (ttsErr) {
+        console.error(`[Engine] TTS failed, falling back to text:`, ttsErr.message)
+        await sendMessage(accountId, conversationId, messageParts[i], botToken)
+      }
+    } else {
+      await sendMessage(accountId, conversationId, messageParts[i], botToken)
+    }
   }
 
   // Log user message + agent response (full content in single log entry)
@@ -297,6 +335,7 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     role: 'user',
     content: userMessage,
     playbook_id: playbook.id,
+    metadata: isVoiceMessage ? voiceMetadata : undefined,
   })
 
   await logMessage(supabase, {
@@ -305,7 +344,10 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     role: 'assistant',
     content: response,
     playbook_id: playbook.id,
-    metadata: agentMetadata,
+    metadata: {
+      ...agentMetadata,
+      ...(isVoiceMessage ? { voice_response: true } : {}),
+    },
   })
 
   console.log(`[Engine] Playbook response sent for conversation ${conversationId}`)

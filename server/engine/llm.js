@@ -7,7 +7,7 @@ import { getSetting } from '../settings.js'
 let openaiInstance = null
 let anthropicInstance = null
 
-function getOpenAIClient() {
+export function getOpenAIClient() {
   const key = getSetting('OPENAI_API_KEY')
   if (!key) throw new Error('OPENAI_API_KEY non configure. Ajoutez-la dans Environnement.')
   if (!openaiInstance) openaiInstance = new OpenAI({ apiKey: key })
