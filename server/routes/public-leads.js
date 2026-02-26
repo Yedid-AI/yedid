@@ -36,9 +36,12 @@ router.post('/public/leads', async (req, res) => {
     }
     if (!userId) return res.status(400).json({ error: 'Impossible de determiner le user_id' })
 
-    // Auto-resolve city → branch
+    const serviceNormalized = normalizeService(req.body.service_requested)
+    const company = req.body.company || resolveCompany(serviceNormalized)
+
+    // Auto-resolve city → branch (Babait only)
     let branch = req.body.branch || null
-    if (!branch && req.body.city) {
+    if (!branch && req.body.city && company === 'babait') {
       const { data: idx } = await req.supabaseAdmin
         .from('city_branch_index')
         .select('branch_name')
@@ -47,11 +50,9 @@ router.post('/public/leads', async (req, res) => {
       if (idx?.length) branch = idx[0].branch_name
     }
 
-    const serviceNormalized = normalizeService(req.body.service_requested)
-
     const insert = {
       user_id: userId,
-      company: req.body.company || resolveCompany(serviceNormalized),
+      company,
       type: req.body.type || 'patient',
       name,
       phone,

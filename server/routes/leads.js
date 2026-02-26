@@ -105,9 +105,12 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
     const { name, phone } = req.body
     if (!name || !phone) return res.status(400).json({ error: 'name et phone requis' })
 
-    // Auto-resolve city → branch
+    const serviceNormalized = normalizeService(req.body.service_requested)
+    const company = req.body.company || resolveCompany(serviceNormalized)
+
+    // Auto-resolve city → branch (Babait only)
     let branch = req.body.branch || null
-    if (!branch && req.body.city) {
+    if (!branch && req.body.city && company === 'babait') {
       const { data: idx } = await req.supabase
         .from('city_branch_index')
         .select('branch_name')
@@ -116,11 +119,9 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
       if (idx && idx.length > 0) branch = idx[0].branch_name
     }
 
-    const serviceNormalized = normalizeService(req.body.service_requested)
-
     const insert = {
       user_id: req.user.user_id,
-      company: req.body.company || resolveCompany(serviceNormalized),
+      company,
       type: req.body.type || 'patient',
       name, phone,
       email: req.body.email || null,
@@ -482,8 +483,8 @@ router.post('/leads/import', checkRole('admin'), upload.single('file'), async (r
         }
       }
 
-      // Auto-resolve city → branch
-      if (!lead.branch && lead.city && cityMap[lead.city]) {
+      // Auto-resolve city → branch (Babait only)
+      if (!lead.branch && lead.city && lead.company === 'babait' && cityMap[lead.city]) {
         lead.branch = cityMap[lead.city]
       }
 

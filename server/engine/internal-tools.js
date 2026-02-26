@@ -17,9 +17,12 @@ async function saveLead(params, { supabase, userId }) {
     return JSON.stringify({ success: false, error: 'name and phone are required' })
   }
 
-  // Auto-resolve city → branch
+  const serviceNorm = normalizeService(body.service_requested)
+  const company = body.company || resolveCompany(serviceNorm)
+
+  // Auto-resolve city → branch (Babait only)
   let branch = body.branch || null
-  if (!branch && body.city) {
+  if (!branch && body.city && company === 'babait') {
     const { data: idx } = await supabase
       .from('city_branch_index')
       .select('branch_name')
@@ -64,10 +67,9 @@ async function saveLead(params, { supabase, userId }) {
   }
 
   // Create new lead
-  const serviceNormalized = normalizeService(body.service_requested)
   const insert = {
     user_id: userId,
-    company: body.company || resolveCompany(serviceNormalized),
+    company,
     type: body.type || 'patient',
     name,
     phone,
@@ -77,7 +79,7 @@ async function saveLead(params, { supabase, userId }) {
     coordinator: body.coordinator || null,
     source: body.source || 'chatbot',
     lead_channel: body.lead_channel || 'whatsapp',
-    service_requested: serviceNormalized,
+    service_requested: serviceNorm,
     service_type: body.service_type || null,
     details: body.details || null,
     status: 'new',
