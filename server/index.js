@@ -26,9 +26,11 @@ import branchesRoutes from './routes/branches.js'
 import dispatchConfigRoutes from './routes/dispatch-config.js'
 import callsRoutes from './routes/calls.js'
 import publicLeadsRoutes from './routes/public-leads.js'
+import followupConfigRoutes from './routes/followup-config.js'
 import { loadSettings } from './settings.js'
 import { startClosingCron } from './engine/closing-cron.js'
 import { startCallsCron } from './engine/calls-cron.js'
+import { startFollowupCron } from './engine/followup-cron.js'
 
 // --- Validate required env vars at startup ---
 const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY']
@@ -128,6 +130,7 @@ app.use('/api', checkAuth, leadsRoutes)
 app.use('/api', checkAuth, branchesRoutes)
 app.use('/api', checkAuth, dispatchConfigRoutes)
 app.use('/api', checkAuth, callsRoutes)
+app.use('/api', checkAuth, followupConfigRoutes)
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
@@ -201,4 +204,5 @@ app.listen(PORT, async () => {
   await seedAdmin()
   startClosingCron(supabaseAdmin)
   startCallsCron(supabaseAdmin)
+  startFollowupCron(supabaseAdmin)
 })

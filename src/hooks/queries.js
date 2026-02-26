@@ -832,3 +832,42 @@ export function useUpdateSettings() {
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.settings }),
   })
 }
+
+// ─── Follow-up Config (Relance) ──────────────────────────
+export function useFollowupConfig() {
+  return useQuery({
+    queryKey: queryKeys.followupConfig,
+    queryFn: () => api.get('/followup-config').then(r => r.config),
+  })
+}
+
+export function useUpdateFollowupConfig() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.put('/followup-config', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.followupConfig }),
+  })
+}
+
+export function useConnectFollowupWhatsApp() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post('/followup-config/connect-whatsapp'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.followupConfig }),
+  })
+}
+
+export function useFollowupSources() {
+  return useQuery({
+    queryKey: queryKeys.followupSources,
+    queryFn: () => api.get('/followup-config/sources').then(r => r.sources),
+  })
+}
+
+export function useFollowupQueue() {
+  return useQuery({
+    queryKey: queryKeys.followupQueue,
+    queryFn: () => api.get('/followup-config/queue').then(r => r.queue),
+    refetchInterval: 30_000,
+  })
+}

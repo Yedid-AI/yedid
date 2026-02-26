@@ -37,6 +37,34 @@ router.post('/webhook/unipile/account', async (req, res) => {
       return
     }
 
+    // Handle followup- and dispatch- prefixed names
+    const supabase = req.supabaseAdmin || req.supabase
+
+    if (String(name).startsWith('followup-')) {
+      const uid = parseInt(name.replace('followup-', ''))
+      if (uid) {
+        console.log(`[unipile/account] Followup WhatsApp connected: account=${account_id}, user=${uid}`)
+        await supabase
+          .from('followup_config')
+          .upsert({
+            user_id: uid,
+            whatsapp_account_id: account_id,
+            whatsapp_connected: true,
+            updated_at: new Date().toISOString(),
+          }, { onConflict: 'user_id' })
+      }
+      return
+    }
+
+    if (String(name).startsWith('dispatch-')) {
+      const uid = parseInt(name.replace('dispatch-', ''))
+      if (uid) {
+        console.log(`[unipile/account] Dispatch WhatsApp connected: account=${account_id}, user=${uid}`)
+        // Store account_id in the user's dispatch inbox
+      }
+      return
+    }
+
     const userId = parseInt(name)
     if (!userId) {
       console.error('[unipile/account] Invalid user_id in name:', name)
@@ -44,8 +72,6 @@ router.post('/webhook/unipile/account', async (req, res) => {
     }
 
     console.log(`[unipile/account] WhatsApp connected: account=${account_id}, user=${userId}`)
-
-    const supabase = req.supabaseAdmin || req.supabase
 
     // 1. Get Unipile account details (phone number)
     const accountDetails = await getAccount(account_id)

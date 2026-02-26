@@ -47,4 +47,9 @@ export const queryKeys = {
   callRecording: (uuid) => ['calls', 'recording', uuid],
   callMetadata: (uuid) => ['calls', 'metadata', uuid],
   callSyncStatus: ['calls', 'sync-status'],
+
+  // Follow-up module (Relance)
+  followupConfig: ['followup-config'],
+  followupSources: ['followup-sources'],
+  followupQueue: ['followup-queue'],
 }
