@@ -1,4 +1,4 @@
-import { normalizeService } from '../normalize-service.js'
+import { normalizeService, resolveCompany } from '../normalize-service.js'
 
 /**
  * Internal tool handlers.
@@ -65,9 +65,10 @@ async function saveLead(params, { supabase, userId }) {
   }
 
   // Create new lead
+  const serviceNormalized = normalizeService(body.service_requested)
   const insert = {
     user_id: userId,
-    company: body.company || 'babait',
+    company: body.company || resolveCompany(serviceNormalized),
     type: body.type || 'patient',
     name,
     phone,
@@ -77,7 +78,7 @@ async function saveLead(params, { supabase, userId }) {
     coordinator: body.coordinator || null,
     source: body.source || 'chatbot',
     lead_channel: body.lead_channel || 'whatsapp',
-    service_requested: normalizeService(body.service_requested),
+    service_requested: serviceNormalized,
     service_type: body.service_type || null,
     details: body.details || null,
     status: 'new',

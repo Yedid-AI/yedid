@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { getSetting } from '../settings.js'
-import { normalizeService } from '../normalize-service.js'
+import { normalizeService, resolveCompany } from '../normalize-service.js'
 
 const router = Router()
 
@@ -48,9 +48,11 @@ router.post('/public/leads', async (req, res) => {
       if (idx?.length) branch = idx[0].branch_name
     }
 
+    const serviceNormalized = normalizeService(req.body.service_requested)
+
     const insert = {
       user_id: userId,
-      company: req.body.company || 'babait',
+      company: req.body.company || resolveCompany(serviceNormalized),
       type: req.body.type || 'patient',
       name,
       phone,
@@ -60,7 +62,7 @@ router.post('/public/leads', async (req, res) => {
       coordinator: req.body.coordinator || null,
       source: req.body.source || null,
       lead_channel: req.body.lead_channel || null,
-      service_requested: normalizeService(req.body.service_requested),
+      service_requested: serviceNormalized,
       service_type: req.body.service_type || null,
       details: req.body.details || null,
       status: 'new',

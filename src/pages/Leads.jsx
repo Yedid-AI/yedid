@@ -444,6 +444,7 @@ export default function Leads() {
           <TableHeader>
             <TableRow>
               <TableHead>{t('common.name')}</TableHead>
+              <TableHead>{t('leads.type')}</TableHead>
               <TableHead>{t('leads.phone')}</TableHead>
               <TableHead>{t('leads.city')}</TableHead>
               <TableHead>{t('leads.branch')}</TableHead>
@@ -456,14 +457,15 @@ export default function Leads() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
             ) : leads.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
             ) : leads.map((lead) => {
               const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
               return (
                 <TableRow key={lead.id} className={`cursor-pointer ${selectedLead?.id === lead.id ? 'bg-primary/5' : ''}`} onClick={() => openLeadPanel(lead)}>
                   <TableCell className="font-medium">{lead.name}</TableCell>
+                  <TableCell>{lead.type === 'patient' ? '🧑‍🦳' : lead.type === 'caregiver' ? '👩‍⚕️' : '🌍'} {t(`leads.type_${lead.type}`)}</TableCell>
                   <TableCell>{lead.phone}</TableCell>
                   <TableCell>{lead.city || '-'}</TableCell>
                   <TableCell>{lead.branch || '-'}</TableCell>

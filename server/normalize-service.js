@@ -41,6 +41,20 @@ const SERVICE_MAP = {
 }
 
 /**
+ * Service → Company routing
+ */
+const SERVICE_COMPANY = {
+  'עובד זר':             'aviezer',
+  'מטפל/ת':              'babait',
+  'יעוץ':                'babait',
+  'שירות אמבולנס':       'babait',
+  'מחפש עבודה':          'babait',
+  'השגחה בבית חולים':    'udi',
+  'אחות פרטית':          'udi',
+  'שירות פרטי':          'udi',
+}
+
+/**
  * Normalize a raw service_requested value.
  * Returns the normalized value, or the original trimmed value if no mapping found.
  */
@@ -48,4 +62,13 @@ export function normalizeService(raw) {
   if (!raw) return null
   const trimmed = raw.trim()
   return SERVICE_MAP[trimmed] || trimmed
+}
+
+/**
+ * Resolve company from a normalized service_requested value.
+ * Returns 'aviezer', 'babait', 'udi', or the provided default.
+ */
+export function resolveCompany(normalizedService, defaultCompany = 'babait') {
+  if (!normalizedService) return defaultCompany
+  return SERVICE_COMPANY[normalizedService] || defaultCompany
 }
