@@ -434,13 +434,26 @@ function RecordingPlayer({ uuid, t }) {
 
 // ─── Follow-up Config Tab ────────────────────────────────
 function FollowupConfigTab({ t }) {
-  const { data: config, isLoading } = useFollowupConfig()
+  const { data: config, isLoading, refetch } = useFollowupConfig()
   const { data: agents } = useAgents()
   const { data: availableSources } = useFollowupSources()
   const { data: queue } = useFollowupQueue()
   const updateConfig = useUpdateFollowupConfig()
   const connectWhatsApp = useConnectFollowupWhatsApp()
   const [saving, setSaving] = useState(false)
+
+  // Detect callback from Unipile QR scan popup
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('followup') === 'connected') {
+      // Remove param from URL without reload
+      params.delete('followup')
+      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '')
+      window.history.replaceState({}, '', newUrl)
+      // Force refetch config
+      refetch()
+    }
+  }, [refetch])
 
   const [isActive, setIsActive] = useState(false)
   const [agentBotId, setAgentBotId] = useState(null)

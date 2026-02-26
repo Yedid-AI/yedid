@@ -796,6 +796,7 @@ export function useDispatchConfig() {
   return useQuery({
     queryKey: queryKeys.dispatchConfig,
     queryFn: () => api.get('/dispatch-config').then(r => r.config),
+    refetchInterval: 10_000,
   })
 }
 
@@ -838,6 +839,7 @@ export function useFollowupConfig() {
   return useQuery({
     queryKey: queryKeys.followupConfig,
     queryFn: () => api.get('/followup-config').then(r => r.config),
+    refetchInterval: 10_000,
   })
 }
 

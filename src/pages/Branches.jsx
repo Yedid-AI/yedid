@@ -339,10 +339,21 @@ export default function Branches() {
 
 // ─── Dispatch Configuration Tab ──────────────────────────
 function DispatchConfigTab({ t }) {
-  const { data: config, isLoading } = useDispatchConfig()
+  const { data: config, isLoading, refetch } = useDispatchConfig()
   const updateConfig = useUpdateDispatchConfig()
   const connectWhatsApp = useConnectDispatchWhatsApp()
   const [saving, setSaving] = useState(false)
+
+  // Detect callback from Unipile QR scan popup
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('dispatch') === 'connected') {
+      params.delete('dispatch')
+      const newUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '')
+      window.history.replaceState({}, '', newUrl)
+      refetch()
+    }
+  }, [refetch])
 
   const [fields, setFields] = useState([])
   const [header, setHeader] = useState('')
