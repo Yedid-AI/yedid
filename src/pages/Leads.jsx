@@ -447,6 +447,7 @@ export default function Leads() {
               <TableHead>{t('leads.phone')}</TableHead>
               <TableHead>{t('leads.city')}</TableHead>
               <TableHead>{t('leads.branch')}</TableHead>
+              <TableHead>{t('leads.serviceRequested')}</TableHead>
               <TableHead>{t('common.status')}</TableHead>
               <TableHead>{t('leads.source')}</TableHead>
               {user?.role === 'super_admin' && <TableHead>{t('leads.company')}</TableHead>}
@@ -455,9 +456,9 @@ export default function Leads() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
             ) : leads.length === 0 ? (
-              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
             ) : leads.map((lead) => {
               const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
               return (
@@ -466,6 +467,7 @@ export default function Leads() {
                   <TableCell>{lead.phone}</TableCell>
                   <TableCell>{lead.city || '-'}</TableCell>
                   <TableCell>{lead.branch || '-'}</TableCell>
+                  <TableCell>{lead.service_requested || '-'}</TableCell>
                   <TableCell>
                     <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
                   </TableCell>
