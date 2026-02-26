@@ -182,7 +182,16 @@ async function processQueue(supabase) {
     const chatwootInbox = config.inboxes
     const chatwootAccountId = chatwootInbox?.chatwoot_account_id
     const chatwootInboxId = chatwootInbox?.inbox_id
-    const accessToken = getSetting('CHATWOOT_ADMIN_TOKEN')
+    // Get user's Chatwoot token as fallback
+    let accessToken = getSetting('CHATWOOT_ADMIN_TOKEN')
+    if (!accessToken) {
+      const { data: cwAccounts } = await supabase
+        .from('chatwoot_accounts')
+        .select('access_token')
+        .eq('user_id', parseInt(userId))
+        .limit(1)
+      accessToken = cwAccounts?.[0]?.access_token
+    }
 
     for (const item of items) {
       if (leadPhones.has(item.phone)) {
