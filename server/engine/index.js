@@ -37,6 +37,10 @@ export function clearConfigCache() {
  * @param {Object} supabase - Supabase client (service role)
  */
 export async function handleWebhook(webhookBody, supabase) {
+  // --- Debug logging ---
+  const msg0 = webhookBody.conversation?.messages?.[0]
+  console.log(`[Engine] Webhook: type=${webhookBody.message_type} status=${webhookBody.conversation?.status} content="${(msg0?.content || '').slice(0, 50)}" attachments=${JSON.stringify(msg0?.attachments?.map(a => ({ file_type: a.file_type, data_url: !!a.data_url })) || [])}`)
+
   // --- 1. Filter ---
   if (!shouldProcess(webhookBody)) return
 
@@ -198,7 +202,8 @@ function shouldProcess(body) {
   const hasText = message?.content || message?.processed_message_content
   const hasAudio = message?.attachments?.some(a => a.file_type === 'audio')
   if (!hasText && !hasAudio) return false
-  if (body.conversation?.status === 'open') return false
+  // Allow audio messages through even when conversation is open
+  if (body.conversation?.status === 'open' && !hasAudio) return false
   return true
 }
 

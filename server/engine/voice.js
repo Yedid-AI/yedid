@@ -8,8 +8,9 @@ import { getOpenAIClient } from './llm.js'
  */
 export function extractAudioAttachment(message) {
   const attachments = message?.attachments
-  if (!Array.isArray(attachments)) return null
-  const audio = attachments.find(a => a.file_type === 'audio')
+  if (!Array.isArray(attachments) || attachments.length === 0) return null
+  console.log(`[Voice] Attachments found:`, JSON.stringify(attachments.map(a => ({ file_type: a.file_type, content_type: a.content_type, data_url: !!a.data_url }))))
+  const audio = attachments.find(a => a.file_type === 'audio' || a.content_type?.startsWith('audio/'))
   if (!audio?.data_url) return null
   return { dataUrl: audio.data_url }
 }
