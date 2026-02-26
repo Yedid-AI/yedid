@@ -15,53 +15,40 @@ router.get('/inboxes', checkRole('admin'), async (req, res) => {
   try {
     const userId = req.user.user_id
     const supabase = req.supabaseAdmin || req.supabase
-    const adminToken = getSetting('CHATWOOT_ADMIN_TOKEN')
 
     // ── Step A: Fetch Chatwoot inboxes from all relevant accounts ──
     const chatwootInboxMap = new Map() // chatwootAccountId-inboxId → inbox data
-    let syncSuccess = false // only sync if at least one Chatwoot fetch succeeded
+    let syncSuccess = false
 
-    // A1: Account 1 (shared — dispatch/relance inboxes live here)
-    if (adminToken) {
-      try {
-        const result = await accountApi('/api/v1/accounts/1/inboxes', 'GET', null, adminToken)
-        const cwInboxes = result?.payload || (Array.isArray(result) ? result : [])
-        console.log(`[inboxes/sync] Account 1: ${cwInboxes.length} inbox(es)`)
-        if (Array.isArray(cwInboxes) && cwInboxes.length > 0) {
-          for (const cwInbox of cwInboxes) {
-            chatwootInboxMap.set(`1-${cwInbox.id}`, { ...cwInbox, chatwoot_account_id: 1 })
-          }
-          syncSuccess = true
-        }
-      } catch (e) {
-        console.log('[inboxes/sync] Account 1 fetch skipped:', e.message)
-      }
-    }
-
-    // A2: User's own Chatwoot account (regular inboxes)
+    // Get user's Chatwoot account first (we need their token as fallback)
     const { data: chatwootAccounts } = await supabase
       .from('chatwoot_accounts')
       .select('account_id, access_token')
       .eq('user_id', userId)
       .limit(1)
 
-    if (chatwootAccounts?.length) {
-      const userAccountId = chatwootAccounts[0].account_id
-      const userToken = chatwootAccounts[0].access_token
-      if (userAccountId !== 1) { // avoid fetching account 1 twice
-        try {
-          const result = await accountApi(`/api/v1/accounts/${userAccountId}/inboxes`, 'GET', null, userToken || adminToken)
-          const cwInboxes = result?.payload || (Array.isArray(result) ? result : [])
-          console.log(`[inboxes/sync] Account ${userAccountId}: ${cwInboxes.length} inbox(es)`)
-          if (Array.isArray(cwInboxes) && cwInboxes.length > 0) {
-            for (const cwInbox of cwInboxes) {
-              chatwootInboxMap.set(`${userAccountId}-${cwInbox.id}`, { ...cwInbox, chatwoot_account_id: userAccountId })
-            }
-            syncSuccess = true
+    const userAccountId = chatwootAccounts?.[0]?.account_id
+    const userToken = chatwootAccounts?.[0]?.access_token
+    const adminToken = getSetting('CHATWOOT_ADMIN_TOKEN') || userToken // fallback to user token
+
+    // Fetch all Chatwoot accounts this user has access to
+    const accountsToFetch = new Set()
+    if (userAccountId) accountsToFetch.add(userAccountId)
+    accountsToFetch.add(1) // always include account 1 for dispatch/relance
+
+    for (const accountId of accountsToFetch) {
+      try {
+        const result = await accountApi(`/api/v1/accounts/${accountId}/inboxes`, 'GET', null, adminToken)
+        const cwInboxes = result?.payload || (Array.isArray(result) ? result : [])
+        console.log(`[inboxes/sync] Account ${accountId}: ${Array.isArray(cwInboxes) ? cwInboxes.length : 0} inbox(es)`)
+        if (Array.isArray(cwInboxes)) {
+          for (const cwInbox of cwInboxes) {
+            chatwootInboxMap.set(`${accountId}-${cwInbox.id}`, { ...cwInbox, chatwoot_account_id: accountId })
           }
-        } catch (e) {
-          console.log('[inboxes/sync] User account fetch skipped:', e.message)
+          syncSuccess = true
         }
+      } catch (e) {
+        console.log(`[inboxes/sync] Account ${accountId} fetch skipped:`, e.message)
       }
     }
 
