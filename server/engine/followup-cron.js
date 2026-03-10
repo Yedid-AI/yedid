@@ -238,15 +238,14 @@ async function processQueue(supabase) {
         if (claimErr || !claimed?.length) continue
 
         const message = config.message_template || 'שלום, ראינו שהתקשרת אלינו. איך נוכל לעזור?'
-        await sendMessage(config.whatsapp_account_id, item.phone, message)
 
-        // Track in Chatwoot if inbox is configured
+        // Send via Chatwoot → channel callback → Unipile (single path, no double send)
+        // If Chatwoot inbox is configured, let the channel callback handle WhatsApp delivery
         if (chatwootAccountId && chatwootInboxId && accessToken) {
-          try {
-            await createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, item.phone, message)
-          } catch (chatErr) {
-            console.error(`[Followup Cron] Chatwoot tracking failed for ${item.phone}:`, chatErr.message)
-          }
+          await createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, item.phone, message)
+        } else {
+          // Fallback: send directly via Unipile if no Chatwoot inbox
+          await sendMessage(config.whatsapp_account_id, item.phone, message)
         }
 
         await supabase
