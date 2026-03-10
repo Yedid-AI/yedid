@@ -60,7 +60,7 @@ export default function PlaybooksLibrary() {
       title: item.title,
       content: item.content,
       audience: item.audience || '',
-      rules: item.rules || '',
+      rules: typeof item.rules === 'string' ? item.rules : Array.isArray(item.rules) ? item.rules.join('\n') : '',
       tool_id: item.tools?.id ? String(item.tools.id) : '',
       emoji: item.emoji || '',
     })

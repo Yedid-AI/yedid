@@ -292,7 +292,7 @@ function RichEditor({
   useEffect(() => {
     if (!editor || value == null) return
     const currentMd = editor.storage.markdown.getMarkdown()
-    const norm = (s) => (s || '').replace(/\n+$/, '')
+    const norm = (s) => (typeof s === 'string' ? s : Array.isArray(s) ? s.join('\n') : String(s || '')).replace(/\n+$/, '')
     if (norm(value) !== norm(currentMd)) {
       editor.commands.setContent(value)
     }

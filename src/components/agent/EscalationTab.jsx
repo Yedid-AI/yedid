@@ -51,7 +51,7 @@ export default function EscalationTab({ agentBotId }) {
     setForm({
       title: item.title,
       trigger_description: item.trigger_description || '',
-      rules: item.rules || '',
+      rules: typeof item.rules === 'string' ? item.rules : Array.isArray(item.rules) ? item.rules.join('\n') : '',
       audience: item.audience || '',
       assign_to_agent: item.assign_to_agent ? String(item.assign_to_agent) : '',
       emoji: item.emoji || '',
