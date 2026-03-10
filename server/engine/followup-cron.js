@@ -15,6 +15,7 @@ import { getSetting } from '../settings.js'
 import { normalizePhone } from '../normalize-service.js'
 
 let cronTask = null
+let running = false
 
 export function startFollowupCron(supabase) {
   if (!supabase) return
@@ -37,11 +38,20 @@ export function stopFollowupCron() {
 }
 
 async function runFollowupCycle(supabase) {
-  // Step 1: Enqueue new calls
-  await enqueueNewCalls(supabase)
+  if (running) {
+    console.log('[Followup Cron] Already running, skipping')
+    return
+  }
+  running = true
+  try {
+    // Step 1: Enqueue new calls
+    await enqueueNewCalls(supabase)
 
-  // Step 2: Process pending queue items
-  await processQueue(supabase)
+    // Step 2: Process pending queue items
+    await processQueue(supabase)
+  } finally {
+    running = false
+  }
 }
 
 /**
@@ -193,7 +203,21 @@ async function processQueue(supabase) {
       accessToken = cwAccounts?.[0]?.access_token
     }
 
+    // Deduplicate by phone — only process the first queue entry per phone,
+    // mark the rest as skipped to prevent sending multiple messages
+    const seenPhones = new Set()
+
     for (const item of items) {
+      if (seenPhones.has(item.phone)) {
+        // Duplicate queue entry for same phone — skip
+        await supabase
+          .from('followup_queue')
+          .update({ status: 'skipped', result: 'Duplicate (same phone)', processed_at: now })
+          .eq('id', item.id)
+        continue
+      }
+      seenPhones.add(item.phone)
+
       if (leadPhones.has(item.phone)) {
         // Phone found in leads — skip
         await supabase
@@ -205,6 +229,15 @@ async function processQueue(supabase) {
 
       // Not in leads — send WhatsApp message + create Chatwoot conversation
       try {
+        // Atomically claim this item — if another cycle already processed it, skip
+        const { data: claimed, error: claimErr } = await supabase
+          .from('followup_queue')
+          .update({ status: 'processing', processed_at: new Date().toISOString() })
+          .eq('id', item.id)
+          .eq('status', 'pending')
+          .select('id')
+        if (claimErr || !claimed?.length) continue
+
         const message = config.message_template || 'שלום, ראינו שהתקשרת אלינו. איך נוכל לעזור?'
         await sendMessage(config.whatsapp_account_id, item.phone, message)
 

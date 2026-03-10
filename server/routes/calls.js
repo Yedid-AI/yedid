@@ -1,7 +1,13 @@
+import crypto from 'crypto'
 import { Router } from 'express'
 import { checkRole } from '../middleware.js'
 import { queryCdr, getCallMetadata, getRecordingUrl } from '../maskyoo.js'
 import { normalizePhone } from '../normalize-service.js'
+
+function deterministicId(row) {
+  const key = `${row.start_call || ''}_${row.cdr_ani || ''}_${row.cdr_ddi || ''}_${row.call_duration || ''}`
+  return 'gen_' + crypto.createHash('md5').update(key).digest('hex').slice(0, 16)
+}
 
 const router = Router()
 
@@ -116,7 +122,7 @@ router.post('/calls/sync', checkRole('admin'), async (req, res) => {
         }
         return {
         user_id: userId,
-        cdr_uniqueid: row.cdr_uniqueid || row.id || `unknown_${i}_${Math.random()}`,
+        cdr_uniqueid: row.cdr_uniqueid || row.id || deterministicId(row),
         start_call: row.start_call || null,
         end_call: row.end_call || null,
         call_duration: Number(row.call_duration) || 0,
@@ -240,7 +246,21 @@ router.get('/calls/:uuid/metadata', checkRole('admin'), async (req, res) => {
 
 // Maskyoo timestamps are in Asia/Jerusalem — format dates accordingly
 function toIsraelString(date) {
-  return date.toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' })
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+  const parts = {}
+  for (const { type, value } of fmt.formatToParts(date)) {
+    parts[type] = value
+  }
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`
 }
 
 export default router

@@ -5,12 +5,19 @@
  * Fetches the last 24h of CDR data and upserts into the calls table.
  */
 
+import crypto from 'crypto'
 import cron from 'node-cron'
 import { queryCdr } from '../maskyoo.js'
 import { getSetting } from '../settings.js'
 import { normalizePhone } from '../normalize-service.js'
 
+function deterministicId(row) {
+  const key = `${row.start_call || ''}_${row.cdr_ani || ''}_${row.cdr_ddi || ''}_${row.call_duration || ''}`
+  return 'gen_' + crypto.createHash('md5').update(key).digest('hex').slice(0, 16)
+}
+
 let cronTask = null
+let syncing = false
 
 export function startCallsCron(supabase) {
   if (!supabase) return
@@ -47,6 +54,19 @@ export function stopCallsCron() {
 }
 
 async function runCallsSync(supabase) {
+  if (syncing) {
+    console.log('[Calls Cron] Already syncing, skipping')
+    return
+  }
+  syncing = true
+  try {
+    await _doSync(supabase)
+  } finally {
+    syncing = false
+  }
+}
+
+async function _doSync(supabase) {
   const apiUrl = getSetting('MASKYOO_API_URL')
   const token = getSetting('MASKYOO_API_TOKEN')
   if (!apiUrl || !token) return
@@ -95,7 +115,7 @@ async function runCallsSync(supabase) {
     }
     return {
       user_id: owner.id,
-      cdr_uniqueid: row.cdr_uniqueid || row.id || `unknown_${Date.now()}_${Math.random()}`,
+      cdr_uniqueid: row.cdr_uniqueid || row.id || deterministicId(row),
       start_call: row.start_call || null,
       end_call: row.end_call || null,
       call_duration: Number(row.call_duration) || 0,
