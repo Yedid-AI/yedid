@@ -94,14 +94,13 @@ async function enqueueNewCalls(supabase) {
 
     if (!matchingCalls.length) continue
 
-    // Check which phones are already queued (avoid duplicates)
+    // Check which phones are already queued (any status — avoid re-enqueuing)
     const phones = [...new Set(matchingCalls.map(c => c.cdr_ani).filter(Boolean))]
     const { data: existingQueue } = await supabase
       .from('followup_queue')
       .select('phone')
       .eq('user_id', config.user_id)
       .in('phone', phones)
-      .in('status', ['pending', 'sent'])
 
     const alreadyQueued = new Set((existingQueue || []).map(q => q.phone))
 
