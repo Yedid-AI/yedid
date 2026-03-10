@@ -108,6 +108,14 @@ export async function handleWebhook(webhookBody, supabase) {
 
     const conversationHistory = await getConversationHistory(supabase, session.id, 10)
 
+    // --- 3b. Extract contact context from Chatwoot webhook ---
+    const sender = webhookBody.conversation?.meta?.sender || {}
+    const contactContext = {
+      phone: sender.phone_number || null,
+      name: sender.name || null,
+      ...(sender.custom_attributes || {}),
+    }
+
     // --- 4. Route (with last active playbook context) ---
     const lastPlaybookId = await getLastPlaybookId(supabase, session.id)
     const route = await routeMessage({
@@ -126,12 +134,12 @@ export async function handleWebhook(webhookBody, supabase) {
       await handleScenario({
         config, playbooks, route, userMessage, conversationHistory,
         supabase, accountId, conversationId, session,
-        isVoiceMessage,
+        isVoiceMessage, contactContext,
       })
     } else {
       await handleEscalation({
         config, escalationRules, route, userMessage, conversationHistory,
-        supabase, accountId, conversationId, session, webhookBody,
+        supabase, accountId, conversationId, session, webhookBody, contactContext,
       })
     }
   } catch (err) {
@@ -268,7 +276,7 @@ async function loadAgentConfig(supabase, inboxId) {
 
 // --- Scenario path ---
 
-async function handleScenario({ config, playbooks, route, userMessage, conversationHistory, supabase, accountId, conversationId, session, isVoiceMessage }) {
+async function handleScenario({ config, playbooks, route, userMessage, conversationHistory, supabase, accountId, conversationId, session, isVoiceMessage, contactContext }) {
   const { userId, botToken, agentConfig, allTools } = config
 
   // Find active playbook
@@ -287,6 +295,7 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     conversationHistory,
     supabase,
     userId,
+    contactContext,
   })
 
   if (!result || !result.content) {

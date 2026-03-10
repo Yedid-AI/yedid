@@ -241,8 +241,13 @@ async function processQueue(supabase) {
 
         // Send via Chatwoot → channel callback → Unipile (single path, no double send)
         // If Chatwoot inbox is configured, let the channel callback handle WhatsApp delivery
+        const callMeta = {
+          source: item.source_user_name || null,
+          maskyoo_number: item.source_cdr_ddi || null,
+          followup: true,
+        }
         if (chatwootAccountId && chatwootInboxId && accessToken) {
-          await createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, item.phone, message)
+          await createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, item.phone, message, callMeta)
         } else {
           // Fallback: send directly via Unipile if no Chatwoot inbox
           await sendMessage(config.whatsapp_account_id, item.phone, message)
@@ -269,7 +274,7 @@ async function processQueue(supabase) {
  * Create or find a Chatwoot contact + conversation and post the initial outgoing message.
  * This ensures the conversation appears in Chatwoot for agent tracking.
  */
-async function createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, phone, message) {
+async function createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, phone, message, callMeta = {}) {
   const searchQuery = phone.replace('+', '')
   let contactId = null
   let conversationId = null
@@ -307,6 +312,20 @@ async function createChatwootConversation(chatwootAccountId, chatwootInboxId, ac
     }
   }
 
+  // Update existing contact with call metadata
+  if (contactId && Object.keys(callMeta).length > 0) {
+    try {
+      await accountApi(
+        `/api/v1/accounts/${chatwootAccountId}/contacts/${contactId}`,
+        'PUT',
+        { custom_attributes: callMeta },
+        accessToken
+      )
+    } catch (e) {
+      console.log('[Followup Cron] Contact metadata update failed:', e.message)
+    }
+  }
+
   // Create contact if not found
   if (!contactId) {
     const newContact = await accountApi(
@@ -316,6 +335,7 @@ async function createChatwootConversation(chatwootAccountId, chatwootInboxId, ac
         inbox_id: chatwootInboxId,
         name: phone,
         phone_number: phone.startsWith('+') ? phone : `+${phone}`,
+        custom_attributes: callMeta,
       },
       accessToken
     )

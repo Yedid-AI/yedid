@@ -19,7 +19,7 @@ const MAX_TOOL_ROUNDS = 5
  * @param {string} opts.userId - User ID for KB filtering
  * @returns {Promise<string>} Agent response text
  */
-export async function runPlaybookAgent({ agentConfig, playbook, agentTools = [], userMessage, conversationHistory, supabase, userId }) {
+export async function runPlaybookAgent({ agentConfig, playbook, agentTools = [], userMessage, conversationHistory, supabase, userId, contactContext }) {
   const provider = agentConfig.llm_provider || 'openai'
   const model = agentConfig.llm_model || 'gpt-4.1-mini'
 
@@ -87,7 +87,10 @@ Example of BAD response (robotic pattern — NEVER do this):
 # ACTIVE PLAYBOOK: ${playbook.title}
 - Audience: ${playbook.audience || 'N/A'}
 - Scenario: ${playbook.content}
-- Rules: ${playbook.rules || 'N/A'}`
+- Rules: ${playbook.rules || 'N/A'}${contactContext?.phone ? `
+
+# Contact Info
+- Phone: ${contactContext.phone}${contactContext.name ? `\n- Name: ${contactContext.name}` : ''}${contactContext.source ? `\n- Call Source: ${contactContext.source}` : ''}${contactContext.maskyoo_number ? `\n- Called Number: ${contactContext.maskyoo_number}` : ''}${contactContext.followup ? `\n- Context: This person called and we're following up via WhatsApp` : ''}` : ''}`
 
   // Build available tools — KB search + all agent tools
   const tools = [knowledgeBaseToolDef]
