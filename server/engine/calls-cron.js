@@ -59,6 +59,8 @@ async function runCallsSync(supabase) {
   const dateFrom = toIsraelString(from)
   const dateTo = toIsraelString(now)
 
+  console.log(`[Calls Cron] Query range: ${dateFrom} → ${dateTo} (Israel time)`)
+
   const sql = `SELECT * FROM webserviceview WHERE start_call >= '${dateFrom}' AND start_call <= '${dateTo}' ORDER BY start_call DESC LIMIT 5000`
 
   let data
@@ -131,5 +133,21 @@ async function runCallsSync(supabase) {
 
 // Maskyoo timestamps are in Asia/Jerusalem — format dates accordingly
 function toIsraelString(date) {
-  return date.toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' })
+  // Use Intl.DateTimeFormat with explicit parts for reliable timezone conversion
+  // (toLocaleString can silently fall back to UTC in minimal Node.js environments)
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jerusalem',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+  const parts = {}
+  for (const { type, value } of fmt.formatToParts(date)) {
+    parts[type] = value
+  }
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}:${parts.second}`
 }
