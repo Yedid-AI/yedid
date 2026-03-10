@@ -497,6 +497,16 @@ export default {
   'followup.status.sent': 'Sent',
   'followup.status.skipped': 'Skipped',
   'followup.status.failed': 'Failed',
+  'followup.statusActive': 'Follow-up active',
+  'followup.statusInactive': 'Follow-up inactive',
+  'followup.lastSent': 'Last sent',
+  'followup.sentToday': 'Sent today',
+  'followup.pending': 'Pending',
+  'followup.skipped': 'Skipped',
+  'followup.failed': 'Failed',
+  'followup.needWhatsApp': 'Connect a WhatsApp to activate follow-ups.',
+  'followup.needActivate': 'Activate follow-ups to start automatic sending.',
+  'followup.needSources': 'Select at least one Maskyoo source.',
 
   // branches
   'branches.title': 'Branches',

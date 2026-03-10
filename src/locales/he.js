@@ -497,6 +497,16 @@ export default {
   'followup.status.sent': 'נשלח',
   'followup.status.skipped': 'דילוג',
   'followup.status.failed': 'נכשל',
+  'followup.statusActive': 'מעקב פעיל',
+  'followup.statusInactive': 'מעקב לא פעיל',
+  'followup.lastSent': 'שליחה אחרונה',
+  'followup.sentToday': 'נשלחו היום',
+  'followup.pending': 'ממתינים',
+  'followup.skipped': 'דילוגים',
+  'followup.failed': 'נכשלו',
+  'followup.needWhatsApp': 'חבר וואטסאפ כדי להפעיל מעקב.',
+  'followup.needActivate': 'הפעל מעקב כדי להתחיל שליחה אוטומטית.',
+  'followup.needSources': 'בחר לפחות מקור מסקיו אחד.',
 
   // branches
   'branches.title': 'סניפים',

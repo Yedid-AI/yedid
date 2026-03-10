@@ -134,6 +134,54 @@ router.get('/followup-config/sources', checkRole('admin'), async (req, res) => {
   }
 })
 
+// GET /api/followup-config/stats — health & stats for the followup system
+router.get('/followup-config/stats', checkRole('admin'), async (req, res) => {
+  try {
+    const userId = req.user.user_id
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+
+    // Counts by status (today)
+    const { data: todayStats } = await req.supabaseAdmin
+      .from('followup_queue')
+      .select('status')
+      .eq('user_id', userId)
+      .gte('created_at', todayStart.toISOString())
+
+    const counts = { sent: 0, pending: 0, skipped: 0, failed: 0 }
+    for (const row of (todayStats || [])) {
+      if (counts[row.status] !== undefined) counts[row.status]++
+    }
+
+    // Last sent
+    const { data: lastSent } = await req.supabaseAdmin
+      .from('followup_queue')
+      .select('phone, processed_at')
+      .eq('user_id', userId)
+      .eq('status', 'sent')
+      .order('processed_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    // Currently pending (not just today)
+    const { count: pendingTotal } = await req.supabaseAdmin
+      .from('followup_queue')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('status', 'pending')
+
+    res.json({
+      today: counts,
+      pending_total: pendingTotal || 0,
+      last_sent_at: lastSent?.processed_at || null,
+      last_sent_phone: lastSent?.phone || null,
+    })
+  } catch (err) {
+    console.error('[followup-config/stats]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
 // GET /api/followup-config/queue — recent queue entries
 router.get('/followup-config/queue', checkRole('admin'), async (req, res) => {
   try {

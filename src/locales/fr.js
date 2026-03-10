@@ -497,6 +497,16 @@ export default {
   'followup.status.sent': 'Envoye',
   'followup.status.skipped': 'Ignore',
   'followup.status.failed': 'Echoue',
+  'followup.statusActive': 'Relance active',
+  'followup.statusInactive': 'Relance inactive',
+  'followup.lastSent': 'Dernier envoi',
+  'followup.sentToday': 'Envoyes aujourd\'hui',
+  'followup.pending': 'En attente',
+  'followup.skipped': 'Ignores',
+  'followup.failed': 'Echoues',
+  'followup.needWhatsApp': 'Connectez un WhatsApp pour activer la relance.',
+  'followup.needActivate': 'Activez la relance pour commencer l\'envoi automatique.',
+  'followup.needSources': 'Selectionnez au moins une source Maskyoo.',
 
   // branches
   'branches.title': 'Branches',

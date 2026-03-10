@@ -873,3 +873,11 @@ export function useFollowupQueue() {
     refetchInterval: 30_000,
   })
 }
+
+export function useFollowupStats() {
+  return useQuery({
+    queryKey: queryKeys.followupStats,
+    queryFn: () => api.get('/followup-config/stats'),
+    refetchInterval: 15_000,
+  })
+}

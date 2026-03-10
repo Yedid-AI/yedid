@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useCalls, useCallMetadata, useCallSync, useCallSyncStatus, useAgents, useFollowupConfig, useUpdateFollowupConfig, useConnectFollowupWhatsApp, useFollowupSources, useFollowupQueue } from '../hooks/queries'
+import { useCalls, useCallMetadata, useCallSync, useCallSyncStatus, useAgents, useFollowupConfig, useUpdateFollowupConfig, useConnectFollowupWhatsApp, useFollowupSources, useFollowupQueue, useFollowupStats } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { useSidePanel } from '../lib/side-panel'
@@ -21,7 +21,7 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Download, Clock, Timer, RefreshCw, Loader2, UserCheck, MessageCircle, Bot, CheckCircle, Send, XCircle, SkipForward } from 'lucide-react'
+import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Download, Clock, Timer, RefreshCw, Loader2, UserCheck, MessageCircle, Bot, CheckCircle, Send, XCircle, SkipForward, Activity, AlertTriangle } from 'lucide-react'
 
 const calendarLocales = { fr: frLocale, en: enUS, he: heLocale }
 
@@ -438,6 +438,7 @@ function FollowupConfigTab({ t }) {
   const { data: agents } = useAgents()
   const { data: availableSources } = useFollowupSources()
   const { data: queue } = useFollowupQueue()
+  const { data: stats } = useFollowupStats()
   const updateConfig = useUpdateFollowupConfig()
   const connectWhatsApp = useConnectFollowupWhatsApp()
   const [saving, setSaving] = useState(false)
@@ -522,8 +523,69 @@ function FollowupConfigTab({ t }) {
 
   if (isLoading) return <div className="text-muted-foreground py-6 text-center">{t('common.loading')}</div>
 
+  const isSystemActive = config?.is_active && config?.whatsapp_connected && selectedSources.length > 0
+
   return (
     <div className="space-y-6">
+      {/* Status Indicator */}
+      {config && (
+        <Card className={isSystemActive
+          ? 'border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20'
+          : 'border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
+        }>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                {isSystemActive ? (
+                  <>
+                    <div className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                    </div>
+                    <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{t('followup.statusActive')}</span>
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle size={14} className="text-amber-500" />
+                    <span className="text-sm font-semibold text-amber-700 dark:text-amber-400">{t('followup.statusInactive')}</span>
+                  </>
+                )}
+              </div>
+              {stats?.last_sent_at && (
+                <span className="text-xs text-muted-foreground">
+                  {t('followup.lastSent')}: {new Date(stats.last_sent_at).toLocaleString()}
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-4 gap-3">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-emerald-600">{stats?.today?.sent ?? 0}</div>
+                <div className="text-xs text-muted-foreground">{t('followup.sentToday')}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-amber-600">{stats?.pending_total ?? 0}</div>
+                <div className="text-xs text-muted-foreground">{t('followup.pending')}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-gray-500">{stats?.today?.skipped ?? 0}</div>
+                <div className="text-xs text-muted-foreground">{t('followup.skipped')}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-red-500">{stats?.today?.failed ?? 0}</div>
+                <div className="text-xs text-muted-foreground">{t('followup.failed')}</div>
+              </div>
+            </div>
+            {!isSystemActive && (
+              <div className="mt-3 text-xs text-amber-600 dark:text-amber-400">
+                {!config?.whatsapp_connected && t('followup.needWhatsApp')}
+                {config?.whatsapp_connected && !config?.is_active && t('followup.needActivate')}
+                {config?.whatsapp_connected && config?.is_active && selectedSources.length === 0 && t('followup.needSources')}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Section 1: WhatsApp Connection */}
       <Card>
         <CardContent className="pt-4 pb-4">

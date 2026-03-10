@@ -52,4 +52,5 @@ export const queryKeys = {
   followupConfig: ['followup-config'],
   followupSources: ['followup-sources'],
   followupQueue: ['followup-queue'],
+  followupStats: ['followup-stats'],
 }
