@@ -53,10 +53,8 @@ function formatDuration(seconds) {
 function formatDateTime(dt) {
   if (!dt) return '-'
   try {
-    // Maskyoo timestamps are Israel local time stored as UTC — display raw UTC values
-    const d = new Date(dt)
-    const pad = (n) => String(n).padStart(2, '0')
-    return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`
+    // Timestamps are stored as proper UTC — display in Israel timezone
+    return new Date(dt).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   } catch {
     return dt
   }

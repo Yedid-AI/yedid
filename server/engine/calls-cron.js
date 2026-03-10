@@ -16,6 +16,26 @@ function deterministicId(row) {
   return 'gen_' + crypto.createHash('md5').update(key).digest('hex').slice(0, 16)
 }
 
+// Convert Israel local time string (from Maskyoo) to proper UTC ISO string
+// Handles DST automatically: tries +02:00 and +03:00, verifies via round-trip
+function israelToUTC(dateStr) {
+  if (!dateStr) return null
+  try {
+    const t = dateStr.replace(' ', 'T')
+    for (const off of ['+02:00', '+03:00']) {
+      const d = new Date(t + off)
+      if (isNaN(d)) continue
+      const p = {}
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+      }).formatToParts(d).forEach(x => p[x.type] = x.value)
+      if (`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}` === t) return d.toISOString()
+    }
+    return dateStr
+  } catch { return dateStr }
+}
+
 let cronTask = null
 let syncing = false
 
@@ -116,8 +136,8 @@ async function _doSync(supabase) {
     return {
       user_id: owner.id,
       cdr_uniqueid: row.cdr_uniqueid || row.id || deterministicId(row),
-      start_call: row.start_call || null,
-      end_call: row.end_call || null,
+      start_call: israelToUTC(row.start_call),
+      end_call: israelToUTC(row.end_call),
       call_duration: Number(row.call_duration) || 0,
       cdr_ani: normalizePhone(row.cdr_ani) || row.cdr_ani || null,
       cdr_ddi: row.cdr_ddi || null,
