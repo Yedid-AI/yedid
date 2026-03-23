@@ -608,6 +608,24 @@ export function useLeadCalls(leadId) {
   })
 }
 
+export function useLeadActivities(leadId) {
+  return useQuery({
+    queryKey: ['leads', 'activities', leadId],
+    queryFn: () => api.get(`/leads/${leadId}/activities`),
+    select: (data) => data.activities,
+    enabled: !!leadId,
+    staleTime: 30_000,
+  })
+}
+
+export function useAddLeadComment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ leadId, comment }) => api.post(`/leads/${leadId}/comment`, { comment }),
+    onSuccess: (_, { leadId }) => qc.invalidateQueries({ queryKey: ['leads', 'activities', leadId] }),
+  })
+}
+
 export function useCreateLead() {
   const qc = useQueryClient()
   return useMutation({
@@ -834,11 +852,74 @@ export function useUpdateSettings() {
   })
 }
 
-// ─── Follow-up Config (Relance) ──────────────────────────
-export function useFollowupConfig() {
+// ─── Maskyoo Orgs & Lines ────────────────────────────────
+export function useMaskyooOrgs() {
   return useQuery({
-    queryKey: queryKeys.followupConfig,
-    queryFn: () => api.get('/followup-config').then(r => r.config),
+    queryKey: queryKeys.maskyooOrgs,
+    queryFn: () => api.get('/maskyoo-orgs').then(r => r.orgs),
+  })
+}
+
+export function useCreateMaskyooOrg() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/maskyoo-orgs', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.maskyooOrgs }),
+  })
+}
+
+export function useUpdateMaskyooOrg() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }) => api.put(`/maskyoo-orgs/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.maskyooOrgs }),
+  })
+}
+
+export function useDeleteMaskyooOrg() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/maskyoo-orgs/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.maskyooOrgs }),
+  })
+}
+
+export function useMaskyooLines(orgId) {
+  return useQuery({
+    queryKey: queryKeys.maskyooLines(orgId),
+    queryFn: () => api.get(`/maskyoo-lines${orgId ? `?org_id=${orgId}` : ''}`).then(r => r.lines),
+  })
+}
+
+export function useUpdateMaskyooLine() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }) => api.put(`/maskyoo-lines/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['maskyoo-lines'] }),
+  })
+}
+
+export function useDeleteMaskyooLine() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/maskyoo-lines/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['maskyoo-lines'] }),
+  })
+}
+
+export function useSyncMaskyooLines() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post('/maskyoo-lines/sync'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['maskyoo-lines'] }),
+  })
+}
+
+// ─── Follow-up Config (Relance) ──────────────────────────
+export function useFollowupConfig(orgId) {
+  return useQuery({
+    queryKey: queryKeys.followupConfig(orgId),
+    queryFn: () => api.get(`/followup-config${orgId ? `?org_id=${orgId}` : ''}`).then(r => r.config),
     refetchInterval: 10_000,
   })
 }
@@ -847,22 +928,22 @@ export function useUpdateFollowupConfig() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body) => api.put('/followup-config', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.followupConfig }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['followup-config'] }),
   })
 }
 
 export function useConnectFollowupWhatsApp() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: () => api.post('/followup-config/connect-whatsapp'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.followupConfig }),
+    mutationFn: (orgId) => api.post('/followup-config/connect-whatsapp', { org_id: orgId || null }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['followup-config'] }),
   })
 }
 
-export function useFollowupSources() {
+export function useFollowupSources(orgId) {
   return useQuery({
-    queryKey: queryKeys.followupSources,
-    queryFn: () => api.get('/followup-config/sources').then(r => r.sources),
+    queryKey: queryKeys.followupSources(orgId),
+    queryFn: () => api.get(`/followup-config/sources${orgId ? `?org_id=${orgId}` : ''}`).then(r => r.sources),
   })
 }
 

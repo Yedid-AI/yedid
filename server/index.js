@@ -27,6 +27,7 @@ import dispatchConfigRoutes from './routes/dispatch-config.js'
 import callsRoutes from './routes/calls.js'
 import publicLeadsRoutes from './routes/public-leads.js'
 import followupConfigRoutes from './routes/followup-config.js'
+import maskyooLinesRoutes from './routes/maskyoo-lines.js'
 import { loadSettings } from './settings.js'
 import { startClosingCron } from './engine/closing-cron.js'
 import { startCallsCron } from './engine/calls-cron.js'
@@ -131,6 +132,7 @@ app.use('/api', checkAuth, branchesRoutes)
 app.use('/api', checkAuth, dispatchConfigRoutes)
 app.use('/api', checkAuth, callsRoutes)
 app.use('/api', checkAuth, followupConfigRoutes)
+app.use('/api', checkAuth, maskyooLinesRoutes)
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {

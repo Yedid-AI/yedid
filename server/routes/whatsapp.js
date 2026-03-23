@@ -41,7 +41,11 @@ router.post('/webhook/unipile/account', async (req, res) => {
     const supabase = req.supabaseAdmin || req.supabase
 
     if (String(name).startsWith('followup-')) {
-      const uid = parseInt(name.replace('followup-', ''))
+      // Parse name: "followup-{userId}" or "followup-{userId}-org-{orgId}"
+      const parts = String(name).match(/^followup-(\d+)(?:-org-(\d+))?$/)
+      if (!parts) return
+      const uid = parseInt(parts[1])
+      const orgId = parts[2] ? parseInt(parts[2]) : null
       if (!uid) return
 
       console.log(`[unipile/account] Followup WhatsApp connected: account=${account_id}, user=${uid}`)
@@ -73,12 +77,12 @@ router.post('/webhook/unipile/account', async (req, res) => {
       // Attach agent bot if configured in followup_config
       let agentBotDbId = null
       try {
-        const { data: fcfg } = await supabase
+        const fcfgQuery = supabase
           .from('followup_config')
           .select('agent_bot_id')
           .eq('user_id', uid)
-          .limit(1)
-          .maybeSingle()
+        if (orgId) { fcfgQuery.eq('org_id', orgId) } else { fcfgQuery.is('org_id', null) }
+        const { data: fcfg } = await fcfgQuery.limit(1).maybeSingle()
 
         if (fcfg?.agent_bot_id) {
           const { data: botData } = await supabase
@@ -124,11 +128,12 @@ router.post('/webhook/unipile/account', async (req, res) => {
         .from('followup_config')
         .upsert({
           user_id: uid,
+          org_id: orgId,
           whatsapp_account_id: account_id,
           whatsapp_connected: true,
           followup_inbox_id: newInbox.id,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' })
+        }, { onConflict: 'user_id,org_id' })
       if (upsertErr) {
         console.error('[unipile/account] Followup config upsert error:', upsertErr.message)
       }

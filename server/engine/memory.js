@@ -11,7 +11,7 @@
  * @param {number} [limit=10] - Max messages to return
  * @returns {Promise<Array<{role: string, content: string}>>}
  */
-export async function getConversationHistory(supabase, sessionId, limit = 10) {
+export async function getConversationHistory(supabase, sessionId, limit = 30) {
   if (!sessionId) return []
 
   const { data: messages, error } = await supabase

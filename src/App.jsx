@@ -46,12 +46,12 @@ function ContentWithPanel({ children }) {
   const { isOpen, setPanelContainer } = useSidePanel()
   return (
     <div className="flex flex-1 min-h-0 overflow-hidden">
-      <div className="flex-1 min-w-0 overflow-auto px-6 py-6">
+      <div className={`min-w-0 overflow-auto px-6 py-6 transition-[flex] duration-300 ease-in-out ${isOpen ? 'flex-1' : 'flex-1'}`}>
         {children}
       </div>
       <div
         ref={setPanelContainer}
-        className={`shrink-0 border-l bg-background overflow-hidden transition-[width] duration-300 ease-in-out ${isOpen ? 'w-[70%]' : 'w-0'}`}
+        className={`shrink-0 border-l bg-background overflow-hidden transition-[width] duration-300 ease-in-out ${isOpen ? 'w-1/2' : 'w-0'}`}
       />
     </div>
   )

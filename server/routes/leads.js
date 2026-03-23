@@ -145,6 +145,30 @@ router.get('/leads/:id/calls', checkRole('admin'), async (req, res) => {
   }
 })
 
+// GET /api/leads/:id/activities — activity timeline for a lead
+router.get('/leads/:id/activities', checkRole('admin'), async (req, res) => {
+  try {
+    // Verify lead ownership
+    let leadQuery = req.supabase.from('leads').select('id').eq('id', req.params.id)
+    if (req.user.role !== 'super_admin') leadQuery = leadQuery.eq('user_id', req.user.user_id)
+    const { data: lead } = await leadQuery.single()
+    if (!lead) return res.status(404).json({ error: 'Lead introuvable' })
+
+    const { data, error } = await req.supabaseAdmin
+      .from('lead_activities')
+      .select('*')
+      .eq('lead_id', req.params.id)
+      .order('created_at', { ascending: false })
+      .limit(100)
+
+    if (error) throw error
+    res.json({ activities: data || [] })
+  } catch (err) {
+    console.error('[lead-activities]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
 // POST /api/leads — UPSERT: merge by normalized phone + user_id
 router.post('/leads', checkRole('admin'), async (req, res) => {
   try {
@@ -208,6 +232,16 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
         .single()
 
       if (error) throw error
+
+      // Log enrichment activity
+      await req.supabaseAdmin.from('lead_activities').insert({
+        lead_id: data.id,
+        user_id: req.user.user_id,
+        action: 'enriched',
+        metadata: { source: req.body.source, lead_channel: req.body.lead_channel, service_requested: serviceNormalized },
+        actor: req.user.email || 'admin',
+      }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
+
       return res.status(200).json({ lead: data, merged: true })
     }
 
@@ -242,6 +276,15 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
       .single()
 
     if (error) throw error
+
+    // Log creation activity
+    await req.supabaseAdmin.from('lead_activities').insert({
+      lead_id: data.id,
+      user_id: req.user.user_id,
+      action: 'created',
+      metadata: { source: data.source, lead_channel: data.lead_channel },
+      actor: req.user.email || 'admin',
+    }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
 
     // Auto-dispatch if configured
     if (data.branch) {
@@ -283,6 +326,13 @@ router.put('/leads/:id', checkRole('admin'), async (req, res) => {
       'status', 'position_type', 'experience', 'ip_address', 'campaign',
       'custom_fields', 'metadata',
     ]
+
+    // Fetch current lead to compute diff
+    let fetchQuery = req.supabase.from('leads').select('*').eq('id', id)
+    if (req.user.role !== 'super_admin') fetchQuery = fetchQuery.eq('user_id', req.user.user_id)
+    const { data: before } = await fetchQuery.single()
+    if (!before) return res.status(404).json({ error: 'Lead introuvable' })
+
     const updates = { updated_at: new Date().toISOString() }
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key]
@@ -296,6 +346,27 @@ router.put('/leads/:id', checkRole('admin'), async (req, res) => {
 
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Lead introuvable' })
+
+    // Log changes as activity
+    const changes = {}
+    const skipFields = ['updated_at', 'custom_fields', 'metadata']
+    for (const key of allowed) {
+      if (skipFields.includes(key)) continue
+      if (req.body[key] !== undefined && String(req.body[key]) !== String(before[key] ?? '')) {
+        changes[key] = { from: before[key] ?? null, to: req.body[key] }
+      }
+    }
+    if (Object.keys(changes).length > 0) {
+      const action = changes.status ? 'status_changed' : 'updated'
+      await req.supabaseAdmin.from('lead_activities').insert({
+        lead_id: id,
+        user_id: req.user.user_id,
+        action,
+        changes,
+        actor: req.user.email || 'admin',
+      }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
+    }
+
     res.json({ lead: data })
   } catch (err) {
     console.error('[leads]', err.message)
@@ -419,10 +490,41 @@ router.post('/leads/:id/dispatch', checkRole('admin'), async (req, res) => {
     const result = await dispatchLead(req.supabase, lead, { skipScheduleCheck: true })
     if (result.error) return res.status(400).json({ error: result.error })
 
+    // Log dispatch activity
+    await req.supabaseAdmin.from('lead_activities').insert({
+      lead_id: id,
+      user_id: req.user.user_id,
+      action: 'dispatched',
+      metadata: { branch: lead.branch },
+      actor: req.user.email || 'admin',
+    }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
+
     const { data: updated } = await req.supabase.from('leads').select('*').eq('id', id).single()
     res.json({ success: true, lead: updated })
   } catch (err) {
     console.error('[leads/dispatch]', err.message)
+    res.status(500).json({ error: err.message || 'Erreur interne' })
+  }
+})
+
+// POST /api/leads/:id/comment — add a comment to lead timeline
+router.post('/leads/:id/comment', checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comment } = req.body
+    if (!comment?.trim()) return res.status(400).json({ error: 'Comment vide' })
+
+    const { error } = await req.supabaseAdmin.from('lead_activities').insert({
+      lead_id: id,
+      user_id: req.user.user_id,
+      action: 'comment',
+      metadata: { text: comment.trim() },
+      actor: req.user.email || 'admin',
+    })
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[leads/comment]', err.message)
     res.status(500).json({ error: err.message || 'Erreur interne' })
   }
 })

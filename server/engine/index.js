@@ -64,6 +64,30 @@ export async function handleWebhook(webhookBody, supabase) {
     return
   }
 
+  // --- Filter out phone call events (not real messages) ---
+  const VOICE_CALL_MESSAGES = ['Incoming Voice call', 'Missed voice call']
+  const isVoiceCallEvent = VOICE_CALL_MESSAGES.some(m => userMessage.trim().startsWith(m))
+  if (userMessage.trim().startsWith('Voice call ended')) {
+    console.log(`[Engine] Skipping voice call ended event`)
+    return
+  }
+  if (isVoiceCallEvent) {
+    console.log(`[Engine] Voice call detected, sending text invite: "${userMessage.slice(0, 50)}"`)
+    // Don't process through LLM — send a fixed reply inviting them to write
+    try {
+      const config = await loadAgentConfig(supabase, inboxId)
+      if (config?.botToken) {
+        await sendMessage(accountId, conversationId,
+          'היי! לצערנו אין באפשרותנו לקבל שיחות כאן 😊\nאבל אפשר לכתוב לנו ונשמח לעזור מיד!',
+          config.botToken
+        )
+      }
+    } catch (err) {
+      console.error('[Engine] Failed to send voice call reply:', err.message)
+    }
+    return
+  }
+
   try {
     console.log(`[Engine] Processing message for inbox ${inboxId}, conversation ${conversationId}`)
 
@@ -114,6 +138,14 @@ export async function handleWebhook(webhookBody, supabase) {
       phone: sender.phone_number || null,
       name: sender.name || null,
       ...(sender.custom_attributes || {}),
+    }
+
+    // Store contact info on session for closing cron lead creation
+    if (contactContext.phone) {
+      await supabase.from('sessions').update({
+        contact_phone: contactContext.phone,
+        ...(contactContext.name ? { contact_name: contactContext.name } : {}),
+      }).eq('id', session.id).is('contact_phone', null)
     }
 
     // --- 4. Route (with last active playbook context) ---
@@ -296,6 +328,7 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     supabase,
     userId,
     contactContext,
+    sessionId: session.id,
   })
 
   if (!result || !result.content) {

@@ -7,12 +7,15 @@
  *   1. Load conversation messages
  *   2. Call LLM to determine resolved / confidence / reason
  *   3. Close the session with the AI result
+ *   4. If no lead was saved during the session, auto-create/update the lead
  */
 
 import cron from 'node-cron'
 import { getSetting } from '../settings.js'
 import { createCompletion } from './llm.js'
 import { closeSession } from './session-logger.js'
+import { saveLead } from './internal-tools.js'
+import { normalizePhone } from '../normalize-service.js'
 
 const DEFAULT_CLOSING_PROMPT = `You are Yedid AI Closing Analyzer. Your task is to determine whether a support conversation was resolved by the AI assistant.
 
@@ -51,6 +54,19 @@ Return only valid JSON:
 {"resolved": true or false, "confidence": 0.0, "reason": "short explanation"}
 
 No introduction. Analyze strictly based on the provided messages. Respond only in JSON.`
+
+const LEAD_EXTRACTION_PROMPT = `Extract contact and lead information from this conversation.
+Return ONLY valid JSON with these fields (use null for unknown):
+
+{"name": "contact name or null", "service_requested": "what they need or null", "city": "city or null", "details": "brief summary of the request or null"}
+
+Rules:
+- Extract the contact's name if mentioned anywhere in the conversation
+- service_requested: the main service or product discussed
+- city: only if explicitly mentioned
+- details: 1-2 sentence summary of what the contact wanted
+- If the conversation is just greetings with no substance, return all nulls
+- Respond ONLY in JSON, no introduction.`
 
 let cronTask = null
 
@@ -99,10 +115,10 @@ export async function runClosingCycle(supabase) {
 
   const cutoff = new Date(Date.now() - inactivityMinutes * 60 * 1000).toISOString()
 
-  // 1. Find all open sessions
+  // 1. Find all open sessions (include contact info for lead creation)
   const { data: openSessions, error: sessErr } = await supabase
     .from('sessions')
-    .select('id, user_id, ai_reason')
+    .select('id, user_id, ai_reason, contact_phone, contact_name, created_at')
     .eq('status', 'open')
 
   if (sessErr || !openSessions || openSessions.length === 0) return
@@ -174,6 +190,9 @@ export async function runClosingCycle(supabase) {
 
       closedCount++
       console.log(`[Closing] Session ${session.id} → resolved: ${resolved}, confidence: ${analysis.confidence}`)
+
+      // 7. Auto-create/update lead if not already saved during session
+      await ensureLeadExists(supabase, session, messages, { provider, model })
     } catch (err) {
       console.error(`[Closing] Error processing session ${session.id}:`, err.message)
     }
@@ -181,5 +200,87 @@ export async function runClosingCycle(supabase) {
 
   if (closedCount > 0) {
     console.log(`[Closing] Cycle complete — closed ${closedCount} sessions`)
+  }
+}
+
+/**
+ * Ensure a lead exists for this session's contact.
+ * If the AI agent already called save_lead during the session, skip.
+ * Otherwise, extract info from messages and create/update the lead.
+ */
+async function ensureLeadExists(supabase, session, messages, llmConfig) {
+  const phone = session.contact_phone
+  if (!phone) return // No phone → can't create lead
+
+  const normalizedPhone = normalizePhone(phone)
+
+  // Check if lead was already saved by chatbot during this session
+  const { data: activities } = await supabase
+    .from('lead_activities')
+    .select('id')
+    .eq('user_id', session.user_id)
+    .in('actor', ['chatbot'])
+    .gte('created_at', session.created_at)
+    .limit(1)
+
+  // Need to verify the activity is for the same phone
+  if (activities?.length) {
+    const { data: existingLead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('user_id', session.user_id)
+      .eq('phone', normalizedPhone)
+      .gte('updated_at', session.created_at)
+      .limit(1)
+
+    if (existingLead?.length) {
+      console.log(`[Closing] Lead already saved for ${normalizedPhone} during session ${session.id}`)
+      return
+    }
+  }
+
+  // Extract lead info from conversation via LLM
+  let extracted = {}
+  try {
+    const extractResult = await createCompletion({
+      provider: llmConfig.provider,
+      model: llmConfig.model,
+      systemPrompt: LEAD_EXTRACTION_PROMPT,
+      messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      responseFormat: { type: 'json_object' },
+    })
+    extracted = JSON.parse(extractResult.content)
+  } catch (err) {
+    console.error(`[Closing] Lead extraction failed for session ${session.id}:`, err.message)
+  }
+
+  // Build lead params — use extracted name, fallback to contact_name, fallback to phone
+  const leadParams = {
+    name: extracted.name || session.contact_name || normalizedPhone,
+    phone: normalizedPhone,
+    source: 'closing_cron',
+    lead_channel: 'whatsapp',
+    service_requested: extracted.service_requested || null,
+    city: extracted.city || null,
+    details: extracted.details || null,
+  }
+
+  try {
+    const result = await saveLead(leadParams, { supabase, userId: session.user_id })
+    const parsed = JSON.parse(result)
+
+    // Update activity actor to closing_cron (saveLead logs as 'chatbot' by default)
+    if (parsed.success && parsed.lead_id) {
+      await supabase
+        .from('lead_activities')
+        .update({ actor: 'closing_cron' })
+        .eq('lead_id', parsed.lead_id)
+        .eq('actor', 'chatbot')
+        .gte('created_at', new Date(Date.now() - 5000).toISOString())
+
+      console.log(`[Closing] Lead ${parsed.updated ? 'enriched' : 'created'}: ${leadParams.name} (${normalizedPhone}) for session ${session.id}`)
+    }
+  } catch (err) {
+    console.error(`[Closing] Lead creation failed for session ${session.id}:`, err.message)
   }
 }

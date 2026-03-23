@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useCalls, useCallMetadata, useCallSync, useCallSyncStatus, useAgents, useFollowupConfig, useUpdateFollowupConfig, useConnectFollowupWhatsApp, useFollowupSources, useFollowupQueue, useFollowupStats } from '../hooks/queries'
+import { useCalls, useCallMetadata, useCallSync, useCallSyncStatus, useAgents, useFollowupConfig, useUpdateFollowupConfig, useConnectFollowupWhatsApp, useFollowupSources, useFollowupQueue, useFollowupStats, useMaskyooOrgs, useCreateMaskyooOrg, useUpdateMaskyooOrg, useDeleteMaskyooOrg, useMaskyooLines, useUpdateMaskyooLine, useDeleteMaskyooLine, useSyncMaskyooLines } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { useSidePanel } from '../lib/side-panel'
@@ -21,7 +21,8 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Download, Clock, Timer, RefreshCw, Loader2, UserCheck, MessageCircle, Bot, CheckCircle, Send, XCircle, SkipForward, Activity, AlertTriangle } from 'lucide-react'
+import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Download, Clock, Timer, RefreshCw, Loader2, UserCheck, MessageCircle, Bot, CheckCircle, Send, XCircle, SkipForward, Activity, AlertTriangle, Building2, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 
 const calendarLocales = { fr: frLocale, en: enUS, he: heLocale }
 
@@ -179,6 +180,10 @@ export default function Calls() {
           <TabsTrigger value="followup" className="gap-1.5">
             <MessageCircle size={14} />
             {t('calls.followupTab')}
+          </TabsTrigger>
+          <TabsTrigger value="lines" className="gap-1.5">
+            <Building2 size={14} />
+            {t('calls.linesTab') || 'Lignes'}
           </TabsTrigger>
         </TabsList>
 
@@ -345,6 +350,10 @@ export default function Calls() {
         <TabsContent value="followup">
           <FollowupConfigTab t={t} />
         </TabsContent>
+
+        <TabsContent value="lines">
+          <MaskyooLinesTab t={t} />
+        </TabsContent>
       </Tabs>
 
       {/* Header actions — Sync button */}
@@ -432,9 +441,17 @@ function RecordingPlayer({ uuid, t }) {
 
 // ─── Follow-up Config Tab ────────────────────────────────
 function FollowupConfigTab({ t }) {
-  const { data: config, isLoading, refetch } = useFollowupConfig()
+  const { data: orgs } = useMaskyooOrgs()
+  const [selectedOrgId, setSelectedOrgId] = useState(null)
+  // Auto-select first org once loaded
+  useEffect(() => {
+    if (orgs?.length && selectedOrgId === null) {
+      setSelectedOrgId(orgs[0].id)
+    }
+  }, [orgs, selectedOrgId])
+  const { data: config, isLoading, refetch } = useFollowupConfig(selectedOrgId)
   const { data: agents } = useAgents()
-  const { data: availableSources } = useFollowupSources()
+  const { data: availableSources } = useFollowupSources(selectedOrgId)
   const { data: queue } = useFollowupQueue()
   const { data: stats } = useFollowupStats()
   const updateConfig = useUpdateFollowupConfig()
@@ -474,6 +491,7 @@ function FollowupConfigTab({ t }) {
     setSaving(true)
     try {
       await updateConfig.mutateAsync({
+        org_id: selectedOrgId || null,
         is_active: isActive,
         agent_bot_id: agentBotId,
         delay_minutes: delayMinutes,
@@ -488,7 +506,7 @@ function FollowupConfigTab({ t }) {
 
   const handleConnectWhatsApp = async () => {
     try {
-      const data = await connectWhatsApp.mutateAsync()
+      const data = await connectWhatsApp.mutateAsync(selectedOrgId)
       if (data.url) {
         const w = 480, h = 720
         const left = window.screenX + Math.round((window.outerWidth - w) / 2)
@@ -521,10 +539,33 @@ function FollowupConfigTab({ t }) {
 
   if (isLoading) return <div className="text-muted-foreground py-6 text-center">{t('common.loading')}</div>
 
-  const isSystemActive = config?.is_active && config?.whatsapp_connected && selectedSources.length > 0
+  const isSystemActive = config?.is_active && config?.whatsapp_connected && (selectedSources.length > 0 || selectedOrgId)
 
   return (
     <div className="space-y-6">
+      {/* Org Selector */}
+      {orgs && orgs.length > 0 && (
+        <Card>
+          <CardContent className="pt-4 pb-4">
+            <div className="flex items-center gap-3">
+              <Building2 size={16} className="text-primary shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-sm font-semibold">{t('followup.selectOrg') || 'Organisation'}</h3>
+                <p className="text-xs text-muted-foreground">{t('followup.selectOrgDesc') || 'Chaque org a sa propre config de relance'}</p>
+              </div>
+              <Select value={selectedOrgId ? String(selectedOrgId) : ''} onValueChange={(v) => setSelectedOrgId(parseInt(v))}>
+                <SelectTrigger className="w-[200px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {orgs.map(o => (
+                    <SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Status Indicator */}
       {config && (
         <Card className={isSystemActive
@@ -751,6 +792,233 @@ function FollowupConfigTab({ t }) {
           </CardContent>
         </Card>
       )}
+    </div>
+  )
+}
+
+// ─── Maskyoo Lines Tab ──────────────────────────────────
+function MaskyooLinesTab({ t }) {
+  const { data: orgs, isLoading: orgsLoading } = useMaskyooOrgs()
+  const { data: lines, isLoading: linesLoading } = useMaskyooLines()
+  const createOrg = useCreateMaskyooOrg()
+  const updateOrg = useUpdateMaskyooOrg()
+  const deleteOrg = useDeleteMaskyooOrg()
+  const updateLine = useUpdateMaskyooLine()
+  const deleteLine = useDeleteMaskyooLine()
+  const syncLines = useSyncMaskyooLines()
+
+  const [newOrgName, setNewOrgName] = useState('')
+  const [editingOrg, setEditingOrg] = useState(null)
+  const [editOrgName, setEditOrgName] = useState('')
+  const [editingLine, setEditingLine] = useState(null)
+  const [editLineLabel, setEditLineLabel] = useState('')
+  const [editLineOrgId, setEditLineOrgId] = useState(null)
+
+  const handleCreateOrg = async () => {
+    if (!newOrgName.trim()) return
+    await createOrg.mutateAsync({ name: newOrgName.trim() })
+    setNewOrgName('')
+  }
+
+  const handleUpdateOrg = async () => {
+    if (!editingOrg || !editOrgName.trim()) return
+    await updateOrg.mutateAsync({ id: editingOrg, name: editOrgName.trim() })
+    setEditingOrg(null)
+  }
+
+  const handleDeleteOrg = async (id) => {
+    if (!confirm(t('common.confirmDelete') || 'Supprimer ?')) return
+    await deleteOrg.mutateAsync(id)
+  }
+
+  const openEditLine = (line) => {
+    setEditingLine(line)
+    setEditLineLabel(line.label || '')
+    setEditLineOrgId(line.org_id || null)
+  }
+
+  const handleSaveLine = async () => {
+    if (!editingLine) return
+    await updateLine.mutateAsync({ id: editingLine.id, label: editLineLabel, org_id: editLineOrgId })
+    setEditingLine(null)
+  }
+
+  const isLoading = orgsLoading || linesLoading
+
+  if (isLoading) return <div className="text-muted-foreground py-6 text-center">{t('common.loading')}</div>
+
+  return (
+    <div className="space-y-6">
+      {/* Orgs section */}
+      <Card>
+        <CardContent className="pt-4 pb-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">{t('lines.orgs') || 'Organisations'}</h3>
+              <p className="text-xs text-muted-foreground">{t('lines.orgsDesc') || 'Groupez vos lignes Maskyoo par organisation'}</p>
+            </div>
+          </div>
+
+          {/* Create org */}
+          <div className="flex gap-2">
+            <Input
+              value={newOrgName}
+              onChange={(e) => setNewOrgName(e.target.value)}
+              placeholder={t('lines.orgName') || 'Nom de l\'organisation'}
+              className="h-9 max-w-[250px]"
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateOrg()}
+            />
+            <Button size="sm" onClick={handleCreateOrg} disabled={createOrg.isPending || !newOrgName.trim()}>
+              <Plus size={14} className="me-1" />
+              {t('common.add') || 'Ajouter'}
+            </Button>
+          </div>
+
+          {/* Org list */}
+          {(orgs || []).length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {orgs.map((org) => {
+                const lineCount = org.maskyoo_lines?.[0]?.count ?? 0
+                return (
+                  <div key={org.id} className="flex items-center justify-between p-3 rounded-lg border bg-card hover:shadow-soft-sm transition-all">
+                    {editingOrg === org.id ? (
+                      <div className="flex gap-2 flex-1">
+                        <Input
+                          value={editOrgName}
+                          onChange={(e) => setEditOrgName(e.target.value)}
+                          className="h-8 text-sm"
+                          onKeyDown={(e) => e.key === 'Enter' && handleUpdateOrg()}
+                          autoFocus
+                        />
+                        <Button size="sm" variant="ghost" onClick={handleUpdateOrg}><CheckCircle size={14} /></Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingOrg(null)}><X size={14} /></Button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <Building2 size={16} className="text-primary shrink-0" />
+                          <div>
+                            <span className="text-sm font-medium">{org.name}</span>
+                            <span className="text-xs text-muted-foreground ms-2">{lineCount} {t('lines.lines') || 'lignes'}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setEditingOrg(org.id); setEditOrgName(org.name) }}>
+                            <Pencil size={12} />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteOrg(org.id)}>
+                            <Trash2 size={12} />
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Lines section */}
+      <Card>
+        <CardContent className="pt-4 pb-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-sm font-semibold">{t('lines.maskyooLines') || 'Lignes Maskyoo'}</h3>
+              <p className="text-xs text-muted-foreground">{t('lines.linesDesc') || 'Attribuez vos lignes aux organisations'}</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => syncLines.mutate()} disabled={syncLines.isPending}>
+              {syncLines.isPending ? <Loader2 size={14} className="animate-spin me-1" /> : <RefreshCw size={14} className="me-1" />}
+              {t('lines.sync') || 'Sync Maskyoo'}
+            </Button>
+          </div>
+
+          {(!lines || lines.length === 0) ? (
+            <div className="text-sm text-muted-foreground text-center py-4">
+              {t('lines.noLines') || 'Aucune ligne. Cliquez sur "Sync Maskyoo" pour importer vos lignes.'}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>{t('lines.label') || 'Label'}</TableHead>
+                  <TableHead>{t('calls.userName') || 'Nom Maskyoo'}</TableHead>
+                  <TableHead>{t('calls.maskyooNumber') || 'Numéro DDI'}</TableHead>
+                  <TableHead>{t('lines.org') || 'Organisation'}</TableHead>
+                  <TableHead className="w-[80px]"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {lines.map((line) => (
+                  <TableRow key={line.id}>
+                    <TableCell className="font-medium text-sm">{line.label || <span className="text-muted-foreground italic">{t('lines.noLabel') || 'Sans nom'}</span>}</TableCell>
+                    <TableCell className="text-sm">{line.user_name}</TableCell>
+                    <TableCell className="text-sm font-mono">{line.cdr_ddi}</TableCell>
+                    <TableCell>
+                      {line.org ? (
+                        <Badge variant="outline" className="gap-1">
+                          <Building2 size={10} />
+                          {line.org.name}
+                        </Badge>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEditLine(line)}>
+                          <Pencil size={12} />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={async () => {
+                          if (!confirm(t('common.confirmDelete') || 'Supprimer ?')) return
+                          await deleteLine.mutateAsync(line.id)
+                        }}>
+                          <Trash2 size={12} />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Edit line dialog */}
+      <Dialog open={!!editingLine} onOpenChange={(open) => !open && setEditingLine(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>{t('lines.editLine') || 'Modifier la ligne'}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-sm">{t('lines.label') || 'Label'}</Label>
+              <Input value={editLineLabel} onChange={(e) => setEditLineLabel(e.target.value)} placeholder={editingLine?.user_name || ''} className="h-9" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm">{t('lines.org') || 'Organisation'}</Label>
+              <Select value={editLineOrgId ? String(editLineOrgId) : 'none'} onValueChange={(v) => setEditLineOrgId(v === 'none' ? null : parseInt(v))}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— {t('lines.noOrg') || 'Aucune'}</SelectItem>
+                  {(orgs || []).map(o => (
+                    <SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {editingLine?.user_name} / {editingLine?.cdr_ddi}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingLine(null)}>{t('common.cancel') || 'Annuler'}</Button>
+            <Button onClick={handleSaveLine}>{t('common.save') || 'Enregistrer'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -5,23 +5,30 @@ import { getSetting } from '../settings.js'
 
 const router = Router()
 
-// GET /api/followup-config
+// GET /api/followup-config?org_id=X
 router.get('/followup-config', checkRole('admin'), async (req, res) => {
   try {
     const userId = req.user.user_id
+    const orgId = req.query.org_id ? parseInt(req.query.org_id) : null
 
-    const { data, error } = await req.supabase
+    const query = req.supabase
       .from('followup_config')
       .select('*')
       .eq('user_id', userId)
-      .limit(1)
-      .maybeSingle()
 
+    if (orgId) {
+      query.eq('org_id', orgId)
+    } else {
+      query.is('org_id', null)
+    }
+
+    const { data, error } = await query.limit(1).maybeSingle()
     if (error) throw error
 
     res.json({
       config: data || {
         user_id: userId,
+        org_id: orgId,
         is_active: false,
         delay_minutes: 3,
         message_template: '',
@@ -38,19 +45,25 @@ router.get('/followup-config', checkRole('admin'), async (req, res) => {
 router.put('/followup-config', checkRole('admin'), async (req, res) => {
   try {
     const userId = req.user.user_id
+    const orgId = req.body.org_id !== undefined ? (req.body.org_id || null) : null
+
     const allowed = [
       'is_active', 'agent_bot_id', 'delay_minutes',
       'message_template', 'sources',
     ]
 
-    const updates = { user_id: userId, updated_at: new Date().toISOString() }
+    const updates = {
+      user_id: userId,
+      org_id: orgId,
+      updated_at: new Date().toISOString(),
+    }
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key]
     }
 
     const { data, error } = await req.supabase
       .from('followup_config')
-      .upsert(updates, { onConflict: 'user_id' })
+      .upsert(updates, { onConflict: 'user_id,org_id' })
       .select()
       .single()
 
@@ -71,7 +84,7 @@ router.post('/followup-config/connect-whatsapp', checkRole('admin'), async (req,
     const result = await createHostedAuthLink({
       callbackUrl: `${appBaseUrl}/calls?followup=connected`,
       notifyUrl: `${appBaseUrl}/api/webhook/unipile/account`,
-      name: `followup-${req.user.user_id}`,
+      name: req.body.org_id ? `followup-${req.user.user_id}-org-${req.body.org_id}` : `followup-${req.user.user_id}`,
     })
 
     res.json({ url: result.url })
@@ -102,16 +115,33 @@ router.get('/followup-config/whatsapp-status', checkRole('admin'), async (req, r
   }
 })
 
-// GET /api/followup-config/sources — distinct Maskyoo sources from calls table
+// GET /api/followup-config/sources?org_id=X — lines for a given org, or all from calls
 router.get('/followup-config/sources', checkRole('admin'), async (req, res) => {
   try {
+    const userId = req.user.user_id
+    const orgId = req.query.org_id ? parseInt(req.query.org_id) : null
+
+    // If org_id specified, return lines assigned to that org
+    if (orgId) {
+      const { data, error } = await req.supabaseAdmin
+        .from('maskyoo_lines')
+        .select('user_name, cdr_ddi, label')
+        .eq('user_id', userId)
+        .eq('org_id', orgId)
+        .order('user_name')
+
+      if (error) throw error
+      return res.json({ sources: data || [] })
+    }
+
+    // Fallback: distinct sources from calls table (legacy)
     const { data, error } = await req.supabaseAdmin
       .from('calls')
       .select('user_name, cdr_ddi')
+      .eq('user_id', userId)
 
     if (error) throw error
 
-    // Deduplicate by user_name + cdr_ddi
     const seen = new Set()
     const sources = []
     for (const row of (data || [])) {
@@ -124,9 +154,7 @@ router.get('/followup-config/sources', checkRole('admin'), async (req, res) => {
         cdr_ddi: row.cdr_ddi || null,
       })
     }
-
     sources.sort((a, b) => (a.user_name || '').localeCompare(b.user_name || ''))
-
     res.json({ sources })
   } catch (err) {
     console.error('[followup-config/sources]', err.message)

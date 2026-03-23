@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls } from '../hooks/queries'
+import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls, useLeadActivities, useAddLeadComment } from '../hooks/queries'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
@@ -21,7 +21,7 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, PhoneIncoming, PhoneMissed, Phone as PhoneIcon, Send, Settings, Plus, Trash2, History } from 'lucide-react'
+import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, PhoneIncoming, PhoneMissed, Phone as PhoneIcon, Send, Settings, Plus, Trash2, History, Bot, ArrowRight, MessageSquare, Mail, MapPin, Building2, Briefcase, User, Hash, Globe } from 'lucide-react'
 import babaitLogo from '@/assets/babaitlogo.png'
 import aviezerLogo from '@/assets/aviezer logo.png'
 
@@ -76,7 +76,7 @@ export default function Leads() {
   const [fieldsDialogOpen, setFieldsDialogOpen] = useState(false)
   const [error, setError] = useState('')
 
-  const { panelContainer } = useSidePanel(!!selectedLead)
+  const { panelContainer, isOpen: panelOpen } = useSidePanel(!!selectedLead)
 
   // Date range computation
   const { dateFrom, dateTo } = useMemo(() => {
@@ -323,105 +323,197 @@ export default function Leads() {
   const branchNames = useMemo(() => branches.map(b => b.name).sort(), [branches])
 
   return (
-    <div>
+    <div className={panelOpen ? '-mx-4 -mt-6' : ''}>
       {/* Filters */}
-      <div className="flex gap-3 mb-4 flex-wrap items-center">
-        <div className="relative mr-auto">
-          <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-8 w-[220px] h-9"
-            placeholder={t('leads.search')}
-            value={filterSearch}
-            onChange={(e) => setFilterSearch(e.target.value)}
-          />
-        </div>
-
-        {user?.role === 'super_admin' && (
-          <Select value={filterCompany || 'all'} onValueChange={(v) => setFilterCompany(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('leads.allCompanies')}</SelectItem>
-              <SelectItem value="babait">Babait</SelectItem>
-              <SelectItem value="aviezer">Aviezer</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-
-        <Select value={filterType || 'all'} onValueChange={(v) => setFilterType(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('leads.allTypes')}</SelectItem>
-            <SelectItem value="patient">{t('leads.typePatient')}</SelectItem>
-            <SelectItem value="caregiver">{t('leads.typeCaregiver')}</SelectItem>
-            <SelectItem value="foreign_caregiver">{t('leads.typeForeignCaregiver')}</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={filterStatus || 'all'} onValueChange={(v) => setFilterStatus(v === 'all' ? '' : v)}>
-          <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">{t('sessions.allStatuses')}</SelectItem>
-            <SelectItem value="new">{t('leads.statusNew')}</SelectItem>
-            <SelectItem value="sent_to_branch">{t('leads.statusSentToBranch')}</SelectItem>
-            <SelectItem value="in_progress">{t('leads.statusInProgress')}</SelectItem>
-            <SelectItem value="handled">{t('leads.statusHandled')}</SelectItem>
-            <SelectItem value="not_relevant">{t('leads.statusNotRelevant')}</SelectItem>
-            <SelectItem value="no_answer">{t('leads.statusNoAnswer')}</SelectItem>
-          </SelectContent>
-        </Select>
-
-        {branchNames.length > 0 && (
-          <Select value={filterBranch || 'all'} onValueChange={(v) => setFilterBranch(v === 'all' ? '' : v)}>
-            <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t('leads.allBranches')}</SelectItem>
-              {branchNames.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-
-        <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" className="gap-2 h-9 px-3 text-sm">
-              <CalendarDays size={14} />
-              {dateRangeLabel}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="end">
-            <div className="flex flex-col">
-              <div className="flex flex-col gap-0.5 p-2">
-                {['today', 'thisWeek', 'last30', 'thisMonth', 'all', 'custom'].map((preset) => (
-                  <button
-                    key={preset}
-                    onClick={() => selectDatePreset(preset)}
-                    className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
-                  >
-                    {preset === 'all' ? t('leads.allTime') : t(`sessions.${preset}`)}
-                  </button>
-                ))}
-              </div>
-              {filterDateRange === 'custom' && (
-                <div className="border-t p-2">
-                  <Calendar
-                    mode="range"
-                    locale={calendarLocales[locale]}
-                    selected={customRange}
-                    onSelect={(range) => setCustomRange(range || { from: undefined, to: undefined })}
-                    numberOfMonths={1}
-                  />
-                </div>
+      <div className={panelOpen ? 'px-4 py-3 border-b space-y-2' : 'flex gap-3 flex-wrap items-center mb-4'}>
+        {panelOpen ? (
+          <>
+            <div className="flex gap-2 items-center flex-wrap">
+              {user?.role === 'super_admin' && (
+                <Select value={filterCompany || 'all'} onValueChange={(v) => setFilterCompany(v === 'all' ? '' : v)}>
+                  <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('leads.allCompanies')}</SelectItem>
+                    <SelectItem value="babait">Babait</SelectItem>
+                    <SelectItem value="aviezer">Aviezer</SelectItem>
+                  </SelectContent>
+                </Select>
               )}
+              <Select value={filterType || 'all'} onValueChange={(v) => setFilterType(v === 'all' ? '' : v)}>
+                <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('leads.allTypes')}</SelectItem>
+                  <SelectItem value="patient">{t('leads.typePatient')}</SelectItem>
+                  <SelectItem value="caregiver">{t('leads.typeCaregiver')}</SelectItem>
+                  <SelectItem value="foreign_caregiver">{t('leads.typeForeignCaregiver')}</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filterStatus || 'all'} onValueChange={(v) => setFilterStatus(v === 'all' ? '' : v)}>
+                <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('sessions.allStatuses')}</SelectItem>
+                  <SelectItem value="new">{t('leads.statusNew')}</SelectItem>
+                  <SelectItem value="sent_to_branch">{t('leads.statusSentToBranch')}</SelectItem>
+                  <SelectItem value="in_progress">{t('leads.statusInProgress')}</SelectItem>
+                  <SelectItem value="handled">{t('leads.statusHandled')}</SelectItem>
+                  <SelectItem value="not_relevant">{t('leads.statusNotRelevant')}</SelectItem>
+                  <SelectItem value="no_answer">{t('leads.statusNoAnswer')}</SelectItem>
+                </SelectContent>
+              </Select>
+              {branchNames.length > 0 && (
+                <Select value={filterBranch || 'all'} onValueChange={(v) => setFilterBranch(v === 'all' ? '' : v)}>
+                  <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('leads.allBranches')}</SelectItem>
+                    {branchNames.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              )}
+              <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="gap-2 h-8 px-3 text-xs">
+                    <CalendarDays size={12} />
+                    {dateRangeLabel}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="end">
+                  <div className="flex flex-col">
+                    <div className="flex flex-col gap-0.5 p-2">
+                      {['today', 'thisWeek', 'last30', 'thisMonth', 'all', 'custom'].map((preset) => (
+                        <button
+                          key={preset}
+                          onClick={() => selectDatePreset(preset)}
+                          className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
+                        >
+                          {preset === 'all' ? t('leads.allTime') : t(`sessions.${preset}`)}
+                        </button>
+                      ))}
+                    </div>
+                    {filterDateRange === 'custom' && (
+                      <div className="border-t p-2">
+                        <Calendar
+                          mode="range"
+                          locale={calendarLocales[locale]}
+                          selected={customRange}
+                          onSelect={(range) => setCustomRange(range || { from: undefined, to: undefined })}
+                          numberOfMonths={1}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
-          </PopoverContent>
-        </Popover>
+            <div className="relative">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-8 w-full h-8 text-sm"
+                placeholder={t('leads.search')}
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="relative mr-auto">
+              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-8 w-[220px] h-9"
+                placeholder={t('leads.search')}
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+              />
+            </div>
+
+            {user?.role === 'super_admin' && (
+              <Select value={filterCompany || 'all'} onValueChange={(v) => setFilterCompany(v === 'all' ? '' : v)}>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('leads.allCompanies')}</SelectItem>
+                  <SelectItem value="babait">Babait</SelectItem>
+                  <SelectItem value="aviezer">Aviezer</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            <Select value={filterType || 'all'} onValueChange={(v) => setFilterType(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('leads.allTypes')}</SelectItem>
+                <SelectItem value="patient">{t('leads.typePatient')}</SelectItem>
+                <SelectItem value="caregiver">{t('leads.typeCaregiver')}</SelectItem>
+                <SelectItem value="foreign_caregiver">{t('leads.typeForeignCaregiver')}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={filterStatus || 'all'} onValueChange={(v) => setFilterStatus(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('sessions.allStatuses')}</SelectItem>
+                <SelectItem value="new">{t('leads.statusNew')}</SelectItem>
+                <SelectItem value="sent_to_branch">{t('leads.statusSentToBranch')}</SelectItem>
+                <SelectItem value="in_progress">{t('leads.statusInProgress')}</SelectItem>
+                <SelectItem value="handled">{t('leads.statusHandled')}</SelectItem>
+                <SelectItem value="not_relevant">{t('leads.statusNotRelevant')}</SelectItem>
+                <SelectItem value="no_answer">{t('leads.statusNoAnswer')}</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {branchNames.length > 0 && (
+              <Select value={filterBranch || 'all'} onValueChange={(v) => setFilterBranch(v === 'all' ? '' : v)}>
+                <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('leads.allBranches')}</SelectItem>
+                  {branchNames.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+
+            <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" className="gap-2 h-9 px-3 text-sm">
+                  <CalendarDays size={14} />
+                  {dateRangeLabel}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <div className="flex flex-col">
+                  <div className="flex flex-col gap-0.5 p-2">
+                    {['today', 'thisWeek', 'last30', 'thisMonth', 'all', 'custom'].map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => selectDatePreset(preset)}
+                        className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
+                      >
+                        {preset === 'all' ? t('leads.allTime') : t(`sessions.${preset}`)}
+                      </button>
+                    ))}
+                  </div>
+                  {filterDateRange === 'custom' && (
+                    <div className="border-t p-2">
+                      <Calendar
+                        mode="range"
+                        locale={calendarLocales[locale]}
+                        selected={customRange}
+                        onSelect={(range) => setCustomRange(range || { from: undefined, to: undefined })}
+                        numberOfMonths={1}
+                      />
+                    </div>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
+          </>
+        )}
       </div>
 
       {error && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
       )}
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
+      {/* Stat cards — hidden when side panel is open */}
+      {!panelOpen && <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         {statCards.map((card) => {
           const Icon = card.icon
           return (
@@ -436,83 +528,178 @@ export default function Leads() {
             </Card>
           )
         })}
-      </div>
+      </div>}
 
       {/* Table */}
-      <Card>
-        <Table className="[&_th:first-child]:pl-3 [&_td:first-child]:pl-3">
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('common.name')}</TableHead>
-              <TableHead>{t('leads.type')}</TableHead>
-              <TableHead>{t('leads.phone')}</TableHead>
-              <TableHead>{t('leads.city')}</TableHead>
-              <TableHead>{t('leads.branch')}</TableHead>
-              <TableHead>{t('leads.serviceRequested')}</TableHead>
-              <TableHead>{t('common.status')}</TableHead>
-              <TableHead>Maskyoo</TableHead>
-              {user?.role === 'super_admin' && <TableHead>{t('leads.company')}</TableHead>}
-              <TableHead>{t('common.date')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
-            ) : leads.length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
-            ) : leads.map((lead) => {
-              const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
-              return (
-                <TableRow key={lead.id} className={`cursor-pointer ${selectedLead?.id === lead.id ? 'bg-primary/5' : ''}`} onClick={() => openLeadPanel(lead)}>
-                  <TableCell className="font-medium">{lead.name}</TableCell>
-                  <TableCell>{lead.type === 'patient' ? '🧑‍🦳' : lead.type === 'caregiver' ? '👩‍⚕️' : '🌍'} {t(`leads.type_${lead.type}`)}</TableCell>
-                  <TableCell>{lead.phone}</TableCell>
-                  <TableCell>{lead.city || '-'}</TableCell>
-                  <TableCell>{lead.branch || '-'}</TableCell>
-                  <TableCell>{lead.service_requested || '-'}</TableCell>
-                  <TableCell>
-                    <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-xs">{lead.maskyoo_user || '-'}</TableCell>
-                  {user?.role === 'super_admin' && <TableCell>
-                    {COMPANY_LOGOS[lead.company] ? (
-                      <div className="flex items-center gap-1.5">
-                        <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-5 w-5 rounded-sm object-contain" />
-                        <span className="text-xs font-medium">{COMPANY_LOGOS[lead.company].label}</span>
-                      </div>
-                    ) : <Badge variant="outline">{lead.company}</Badge>}
-                  </TableCell>}
-                  <TableCell className="text-muted-foreground">{new Date(lead.created_at).toLocaleDateString()}</TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
-        {totalFiltered > 0 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{t('sessions.rowsPerPage')}</span>
-              <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
-                <SelectTrigger className="w-[70px] h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="25">25</SelectItem>
-                  <SelectItem value="50">50</SelectItem>
-                  <SelectItem value="100">100</SelectItem>
-                </SelectContent>
-              </Select>
+      {panelOpen ? (
+        /* Table without Card wrapper when panel is open — no border, no margin, edge-to-edge */
+        <div className="flex-1 min-h-0 overflow-auto">
+          <Table className="[&_th:first-child]:pl-3 [&_td:first-child]:pl-3">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('common.name')}</TableHead>
+                <TableHead>{t('leads.type')}</TableHead>
+                <TableHead>{t('leads.phone')}</TableHead>
+                <TableHead>{t('leads.city')}</TableHead>
+                <TableHead>{t('leads.branch')}</TableHead>
+                <TableHead>{t('leads.serviceRequested')}</TableHead>
+                <TableHead>{t('common.status')}</TableHead>
+                <TableHead>Maskyoo</TableHead>
+                {user?.role === 'super_admin' && <TableHead>{t('leads.company')}</TableHead>}
+                <TableHead>{t('common.date')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+              ) : leads.length === 0 ? (
+                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+              ) : leads.map((lead) => {
+                const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
+                return (
+                  <TableRow key={lead.id} className={`cursor-pointer ${selectedLead?.id === lead.id ? 'bg-primary/5' : ''}`} onClick={() => openLeadPanel(lead)}>
+                    <TableCell className="font-medium">
+                      <span className="flex items-center gap-1.5">
+                        {lead.source === 'chatbot' && <Bot size={13} className="text-violet-500 shrink-0" title="Lead Bot" />}
+                        {lead.name}
+                        {lead.metadata?.history?.length > 0 && (
+                          <Badge className="bg-orange-500/10 text-orange-600 border-0 text-[9px] py-0 px-1.5 shrink-0">{t('leads.recurring')}</Badge>
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell>{lead.type === 'patient' ? '🧑‍🦳' : lead.type === 'caregiver' ? '👩‍⚕️' : '🌍'} {t(`leads.type_${lead.type}`)}</TableCell>
+                    <TableCell>{lead.phone}</TableCell>
+                    <TableCell>{lead.city || '-'}</TableCell>
+                    <TableCell>{lead.branch || '-'}</TableCell>
+                    <TableCell>{lead.service_requested || '-'}</TableCell>
+                    <TableCell>
+                      <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{lead.maskyoo_user || '-'}</TableCell>
+                    {user?.role === 'super_admin' && <TableCell>
+                      {COMPANY_LOGOS[lead.company] ? (
+                        <div className="flex items-center gap-1.5">
+                          <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-5 w-5 rounded-sm object-contain" />
+                          <span className="text-xs font-medium">{COMPANY_LOGOS[lead.company].label}</span>
+                        </div>
+                      ) : <Badge variant="outline">{lead.company}</Badge>}
+                    </TableCell>}
+                    <TableCell className="text-muted-foreground">{new Date(lead.created_at).toLocaleDateString()}</TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+          {totalFiltered > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>{t('sessions.rowsPerPage')}</span>
+                <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                  <SelectTrigger className="w-[70px] h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>{currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, totalFiltered)} / {totalFiltered}</span>
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>
+                  <ChevronLeft size={14} />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage(currentPage + 1)}>
+                  <ChevronRight size={14} />
+                </Button>
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <span>{currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, totalFiltered)} / {totalFiltered}</span>
-              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>
-                <ChevronLeft size={14} />
-              </Button>
-              <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage(currentPage + 1)}>
-                <ChevronRight size={14} />
-              </Button>
+          )}
+        </div>
+      ) : (
+        /* Full table with Card when no panel */
+        <Card>
+          <Table className="[&_th:first-child]:pl-3 [&_td:first-child]:pl-3">
+            <TableHeader>
+              <TableRow>
+                <TableHead>{t('common.name')}</TableHead>
+                <TableHead>{t('leads.type')}</TableHead>
+                <TableHead>{t('leads.phone')}</TableHead>
+                <TableHead>{t('leads.city')}</TableHead>
+                <TableHead>{t('leads.branch')}</TableHead>
+                <TableHead>{t('leads.serviceRequested')}</TableHead>
+                <TableHead>{t('common.status')}</TableHead>
+                <TableHead>Maskyoo</TableHead>
+                {user?.role === 'super_admin' && <TableHead>{t('leads.company')}</TableHead>}
+                <TableHead>{t('common.date')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+              ) : leads.length === 0 ? (
+                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+              ) : leads.map((lead) => {
+                const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
+                return (
+                  <TableRow key={lead.id} className={`cursor-pointer ${selectedLead?.id === lead.id ? 'bg-primary/5' : ''}`} onClick={() => openLeadPanel(lead)}>
+                    <TableCell className="font-medium">
+                      <span className="flex items-center gap-1.5">
+                        {lead.source === 'chatbot' && <Bot size={13} className="text-violet-500 shrink-0" title="Lead Bot" />}
+                        {lead.name}
+                        {lead.metadata?.history?.length > 0 && (
+                          <Badge className="bg-orange-500/10 text-orange-600 border-0 text-[9px] py-0 px-1.5 shrink-0">{t('leads.recurring')}</Badge>
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell>{lead.type === 'patient' ? '🧑‍🦳' : lead.type === 'caregiver' ? '👩‍⚕️' : '🌍'} {t(`leads.type_${lead.type}`)}</TableCell>
+                    <TableCell>{lead.phone}</TableCell>
+                    <TableCell>{lead.city || '-'}</TableCell>
+                    <TableCell>{lead.branch || '-'}</TableCell>
+                    <TableCell>{lead.service_requested || '-'}</TableCell>
+                    <TableCell>
+                      <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{lead.maskyoo_user || '-'}</TableCell>
+                    {user?.role === 'super_admin' && <TableCell>
+                      {COMPANY_LOGOS[lead.company] ? (
+                        <div className="flex items-center gap-1.5">
+                          <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-5 w-5 rounded-sm object-contain" />
+                          <span className="text-xs font-medium">{COMPANY_LOGOS[lead.company].label}</span>
+                        </div>
+                      ) : <Badge variant="outline">{lead.company}</Badge>}
+                    </TableCell>}
+                    <TableCell className="text-muted-foreground">{new Date(lead.created_at).toLocaleDateString()}</TableCell>
+                  </TableRow>
+                )
+              })}
+            </TableBody>
+          </Table>
+          {totalFiltered > 0 && (
+            <div className="flex items-center justify-between px-4 py-3 border-t">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>{t('sessions.rowsPerPage')}</span>
+                <Select value={String(pageSize)} onValueChange={(v) => setPageSize(Number(v))}>
+                  <SelectTrigger className="w-[70px] h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                    <SelectItem value="100">100</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span>{currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, totalFiltered)} / {totalFiltered}</span>
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>
+                  <ChevronLeft size={14} />
+                </Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage(currentPage + 1)}>
+                  <ChevronRight size={14} />
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-      </Card>
+          )}
+        </Card>
+      )}
 
       {/* Side panel — Lead detail/edit */}
       {panelContainer && selectedLead && createPortal(
@@ -581,6 +768,7 @@ export default function Leads() {
               <LeadDetail lead={selectedLead} t={t} leadFields={leadFields} isSuperAdmin={user?.role === 'super_admin'} />
             )}
           </div>
+          {!editMode && <LeadCommentInput leadId={selectedLead.id} t={t} />}
         </div>,
         panelContainer
       )}
@@ -893,165 +1081,337 @@ function formatCallDate(dt) {
   } catch { return dt }
 }
 
+const FIELD_LABELS = {
+  name: 'common.name', phone: 'leads.phone', email: 'common.email', city: 'leads.city',
+  branch: 'leads.branch', source: 'leads.source', service_requested: 'leads.serviceRequested',
+  service_type: 'leads.serviceType', coordinator: 'leads.coordinator', status: 'common.status',
+  type: 'leads.type', company: 'leads.company', details: 'common.details',
+  position_type: 'leads.positionType', campaign: 'leads.campaign', lead_channel: 'leads.leadChannel',
+}
+
+const ACTION_CONFIG = {
+  created: { icon: CircleDot, color: 'text-blue-500', bg: 'bg-blue-500', labelKey: 'leads.action_created' },
+  updated: { icon: Settings, color: 'text-orange-500', bg: 'bg-orange-500', labelKey: 'leads.action_updated' },
+  status_changed: { icon: ArrowRight, color: 'text-emerald-500', bg: 'bg-emerald-500', labelKey: 'leads.action_status_changed' },
+  dispatched: { icon: Send, color: 'text-indigo-500', bg: 'bg-indigo-500', labelKey: 'leads.action_dispatched' },
+  enriched: { icon: UserPlus, color: 'text-purple-500', bg: 'bg-purple-500', labelKey: 'leads.action_enriched' },
+  call: { icon: PhoneIncoming, color: 'text-cyan-500', bg: 'bg-cyan-500', labelKey: 'leads.action_call' },
+  history: { icon: History, color: 'text-gray-400', bg: 'bg-gray-400', labelKey: 'leads.action_history' },
+  bot: { icon: Bot, color: 'text-violet-500', bg: 'bg-violet-500', labelKey: 'leads.action_bot' },
+  comment: { icon: MessageSquare, color: 'text-amber-600', bg: 'bg-amber-500', labelKey: 'leads.action_comment' },
+  bot_transcript: { icon: Bot, color: 'text-violet-500', bg: 'bg-violet-500', labelKey: 'leads.action_bot_transcript' },
+}
+
 function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
   const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
-  const { data: maskyooCalls, isLoading: loadingCalls } = useLeadCalls(lead.id)
+  const { data: maskyooCalls } = useLeadCalls(lead.id)
+  const { data: activities } = useLeadActivities(lead.id)
+
+  const isBot = (actor) => actor === 'chatbot' || actor === 'bot'
+
+  // Build unified timeline from all sources
+  const timeline = useMemo(() => {
+    const items = []
+
+    // DB activities (created, updated, status_changed, dispatched, enriched)
+    if (activities?.length) {
+      for (const a of activities) {
+        const type = isBot(a.actor) && a.action === 'created' ? 'created' : a.action
+        items.push({ type, date: a.created_at, actor: a.actor, changes: a.changes, metadata: a.metadata, id: a.id, isBot: isBot(a.actor) })
+      }
+    }
+
+    // Maskyoo calls
+    if (maskyooCalls?.length) {
+      for (const call of maskyooCalls) {
+        items.push({
+          type: 'call', date: call.start_call, id: `call-${call.cdr_uniqueid}`,
+          actor: call.user_name || 'Maskyoo',
+          metadata: { call_status: call.call_status, duration: call.call_duration, ddi: call.cdr_ddi, user_phone: call.user_phone },
+        })
+      }
+    }
+
+    // Legacy metadata.history (for older leads without activities)
+    if (lead.metadata?.history?.length) {
+      for (const [i, entry] of lead.metadata.history.entries()) {
+        items.push({
+          type: 'history', date: entry.date, id: `hist-${i}`,
+          actor: entry.source || 'system',
+          metadata: { lead_channel: entry.lead_channel, service_requested: entry.service_requested, details: entry.details, campaign: entry.campaign, name: entry.name },
+        })
+      }
+    }
+
+    // Always include creation event if no activity for it
+    if (!items.some(i => i.type === 'created')) {
+      items.push({ type: 'created', date: lead.created_at, id: 'creation', actor: lead.source || 'system', metadata: { source: lead.source, lead_channel: lead.lead_channel }, isBot: lead.source === 'chatbot' })
+    }
+
+    // Sort oldest first (chronological)
+    items.sort((a, b) => new Date(a.date) - new Date(b.date))
+    return items
+  }, [activities, maskyooCalls, lead])
+
+  const formatDate = (dt) => {
+    if (!dt) return '-'
+    const d = new Date(dt)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+
+  const relativeTime = (dt) => {
+    if (!dt) return ''
+    const diff = Date.now() - new Date(dt).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return t('leads.justNow')
+    if (mins < 60) return t('leads.minutesAgo', { n: mins })
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return t('leads.hoursAgo', { n: hrs })
+    const days = Math.floor(hrs / 24)
+    if (days < 7) return t('leads.daysAgo', { n: days })
+    return formatDate(dt)
+  }
+
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <div className="text-xs text-muted-foreground">{t('common.status')}</div>
-            <Badge className={`${sc.color} border-0 mt-1`}>{t(`leads.status_${lead.status}`)}</Badge>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <div className="text-xs text-muted-foreground">{t('leads.type')}</div>
-            <div className="text-sm font-semibold mt-1">{t(`leads.type_${lead.type}`)}</div>
-          </CardContent>
-        </Card>
-        {isSuperAdmin && (
-          <Card>
-            <CardContent className="pt-3 pb-3">
-              <div className="text-xs text-muted-foreground">{t('leads.company')}</div>
-              {COMPANY_LOGOS[lead.company] ? (
-                <div className="flex items-center gap-2 mt-1">
-                  <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-6 w-6 rounded-sm object-contain" />
-                  <span className="text-sm font-semibold">{COMPANY_LOGOS[lead.company].label}</span>
-                </div>
-              ) : <Badge variant="outline" className="mt-1">{lead.company}</Badge>}
-            </CardContent>
-          </Card>
-        )}
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <div className="text-xs text-muted-foreground">{t('common.date')}</div>
-            <div className="text-sm font-semibold mt-1">{new Date(lead.created_at).toLocaleDateString()}</div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="space-y-2">
-        <DetailRow label={t('common.name')} value={lead.name} />
-        <DetailRow label={t('leads.phone')} value={lead.phone} />
-        <DetailRow label={t('common.email')} value={lead.email} />
-        <DetailRow label={t('leads.city')} value={lead.city} />
-        <DetailRow label={t('leads.branch')} value={lead.branch} />
-        <DetailRow label={t('leads.source')} value={lead.source} />
-        <DetailRow label={t('leads.serviceRequested')} value={lead.service_requested} />
-        {lead.service_type && <DetailRow label={t('leads.serviceType')} value={lead.service_type} />}
-        {lead.coordinator && <DetailRow label={t('leads.coordinator')} value={lead.coordinator} />}
-        {lead.position_type && <DetailRow label={t('leads.positionType')} value={lead.position_type} />}
-        {lead.campaign && <DetailRow label={t('leads.campaign')} value={lead.campaign} />}
-      </div>
-
-      {lead.dispatched_at && (
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <div className="text-xs text-muted-foreground mb-1">{t('leads.dispatchedAt')}</div>
-            <div className="text-sm font-medium">{new Date(lead.dispatched_at).toLocaleString()}</div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Maskyoo calls */}
-      {!loadingCalls && maskyooCalls?.length > 0 && (
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <PhoneIncoming className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">Maskyoo</span>
-              <Badge variant="outline" className="text-[10px] ml-auto">{maskyooCalls.length}</Badge>
+      {/* Lead header */}
+      <div className="rounded-xl border bg-card shadow-soft-sm overflow-hidden">
+        {/* Top banner with avatar + name */}
+        <div className="bg-gradient-to-r from-primary/8 to-primary/3 dark:from-primary/15 dark:to-primary/5 px-4 py-4">
+          <div className="flex items-start gap-3">
+            <div className="h-11 w-11 rounded-full bg-primary/15 dark:bg-primary/25 flex items-center justify-center shrink-0 ring-2 ring-background shadow-soft-sm">
+              <span className="text-sm font-bold text-primary">{(lead.name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
             </div>
-            <div className="space-y-2">
-              {maskyooCalls.map((call, i) => {
-                const cs = getMaskyooStatus(call.call_status)
-                const Icon = cs.icon
-                return (
-                  <div key={i} className="border rounded-md p-2.5 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <Badge className={`${cs.color} border-0 gap-1 text-[10px]`}>
-                        <Icon size={10} />
-                        {call.call_status || '-'}
-                      </Badge>
-                      <span className="text-xs text-muted-foreground">{formatCallDate(call.start_call)}</span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs">
-                      <div className="flex justify-between"><span className="text-muted-foreground">משתמש</span><span className="font-medium">{call.user_name || '-'}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">משך</span><span className="font-medium">{formatCallDuration(call.call_duration)}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">מספר Maskyoo</span><span className="font-medium">{call.cdr_ddi || '-'}</span></div>
-                      <div className="flex justify-between"><span className="text-muted-foreground">יעד</span><span className="font-medium">{call.user_phone || '-'}</span></div>
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-base leading-tight truncate">{lead.name}</h3>
+              <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                <Badge className={`${sc.color} border-0 text-[10px] py-0`}>{t(`leads.status_${lead.status}`)}</Badge>
+                <Badge variant="outline" className="text-[10px] py-0">{t(`leads.type_${lead.type}`)}</Badge>
+                {lead.source === 'chatbot' && (
+                  <Badge className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-0 gap-0.5 text-[10px] py-0">
+                    <Bot size={9} /> Bot
+                  </Badge>
+                )}
+                {lead.metadata?.history?.length > 0 && (
+                  <Badge className="bg-orange-500/10 text-orange-600 border-0 text-[10px] py-0">{t('leads.recurring')}</Badge>
+                )}
+              </div>
             </div>
-          </CardContent>
-        </Card>
-      )}
-      {loadingCalls && (
-        <Card>
-          <CardContent className="pt-3 pb-3 text-center text-sm text-muted-foreground">
-            {t('common.loading')}
-          </CardContent>
-        </Card>
-      )}
-
-      {lead.details && (
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <div className="text-xs text-muted-foreground mb-1">{t('common.details')}</div>
-            <p className="text-sm whitespace-pre-wrap">{lead.details}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* History — interactions from merged duplicate leads */}
-      {lead.metadata?.history?.length > 0 && (
-        <Card>
-          <CardContent className="pt-3 pb-3">
-            <div className="flex items-center gap-1.5 mb-2">
-              <History className="h-3.5 w-3.5 text-muted-foreground" />
-              <span className="text-xs text-muted-foreground uppercase tracking-wider">{t('leads.history') || 'History'}</span>
-              <Badge variant="outline" className="text-[10px] ml-auto">{lead.metadata.history.length}</Badge>
-            </div>
-            <div className="space-y-3">
-              {[...lead.metadata.history].reverse().map((entry, i) => (
-                <div key={i} className="border-l-2 border-muted pl-3 py-1">
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <span>{new Date(entry.date).toLocaleDateString()}</span>
-                    <span>{new Date(entry.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    {entry.source && <Badge variant="outline" className="text-[10px]">{entry.source}</Badge>}
-                    {entry.lead_channel && <Badge variant="outline" className="text-[10px]">{entry.lead_channel}</Badge>}
-                  </div>
-                  {entry.service_requested && (
-                    <div className="text-sm mt-0.5">{entry.service_requested}</div>
-                  )}
-                  {entry.details && (
-                    <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap">{entry.details}</p>
-                  )}
-                  {entry.campaign && (
-                    <div className="text-xs text-muted-foreground mt-0.5">📢 {entry.campaign}</div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Custom fields */}
-      {leadFields.length > 0 && Object.keys(lead.custom_fields || {}).length > 0 && (
-        <div className="space-y-2 border-t pt-3">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">{t('leads.customFields')}</div>
-          {leadFields.map((fd) => {
-            const val = lead.custom_fields?.[fd.field_key]
-            if (!val) return null
-            return <DetailRow key={fd.id} label={fd.label} value={val} />
-          })}
+            {isSuperAdmin && COMPANY_LOGOS[lead.company] && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-6 w-6 rounded object-contain" />
+              </div>
+            )}
+          </div>
         </div>
-      )}
+
+        {/* Contact info */}
+        <div className="px-4 py-3 space-y-1.5 border-b">
+          <ContactRow icon={PhoneIcon} value={lead.phone} href={`tel:${lead.phone}`} />
+          {lead.email && <ContactRow icon={Mail} value={lead.email} href={`mailto:${lead.email}`} />}
+          {lead.city && <ContactRow icon={MapPin} value={lead.city} />}
+        </div>
+
+        {/* Service info */}
+        {(lead.branch || lead.service_requested || lead.service_type) && (
+          <div className="px-4 py-3 space-y-1.5 border-b">
+            {lead.branch && <ContactRow icon={Building2} label={t('leads.branch')} value={lead.branch} />}
+            {lead.service_requested && <ContactRow icon={Briefcase} label={t('leads.serviceRequested')} value={lead.service_requested} />}
+            {lead.service_type && <ContactRow icon={Hash} label={t('leads.serviceType')} value={lead.service_type} />}
+          </div>
+        )}
+
+        {/* Details */}
+        {lead.details && (
+          <div className="px-4 py-3 border-b">
+            <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{lead.details}</p>
+          </div>
+        )}
+
+        {/* Custom fields */}
+        {leadFields.length > 0 && Object.keys(lead.custom_fields || {}).length > 0 && (
+          <div className="px-4 py-3 space-y-1.5">
+            {leadFields.map((fd) => {
+              const val = lead.custom_fields?.[fd.field_key]
+              if (!val) return null
+              return <ContactRow key={fd.id} icon={Hash} label={fd.label} value={val} />
+            })}
+          </div>
+        )}
+
+        {/* Meta footer */}
+        <div className="px-4 py-2 bg-muted/30 flex items-center justify-between text-[10px] text-muted-foreground">
+          <span>{t('leads.createdAt')} {formatDate(lead.created_at)}</span>
+          {lead.source && <Badge variant="outline" className="text-[9px] py-0 h-4">{lead.source}</Badge>}
+        </div>
+      </div>
+
+      {/* Timeline */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <History size={14} className="text-muted-foreground" />
+          <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{t('leads.timeline')}</span>
+          <span className="text-[10px] text-muted-foreground/60">({timeline.length})</span>
+        </div>
+        <div className="relative">
+          {/* Vertical line */}
+          <div className="absolute left-[9px] top-3 bottom-3 w-[2px] bg-border/60 rounded-full" />
+
+          <div className="space-y-1">
+            {timeline.map((item) => {
+              const cfg = item.isBot ? ACTION_CONFIG.bot : (ACTION_CONFIG[item.type] || ACTION_CONFIG.history)
+              const Icon = item.isBot && item.type !== 'call' ? Bot : cfg.icon
+              const label = item.isBot && item.type === 'created' ? t('leads.action_bot_created') : t(cfg.labelKey)
+              return (
+                <div key={item.id} className="relative flex gap-3 py-2 group">
+                  {/* Dot */}
+                  <div className={`relative z-10 mt-0.5 h-[20px] w-[20px] rounded-full border-2 border-background ${cfg.bg} flex items-center justify-center shrink-0 shadow-sm`}>
+                    <Icon size={10} className="text-white" strokeWidth={2.5} />
+                  </div>
+                  {/* Content card */}
+                  <div className="flex-1 min-w-0 rounded-lg border bg-card/50 px-3 py-2 group-hover:bg-card transition-colors">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-xs font-semibold ${cfg.color}`}>{label}</span>
+                        {item.isBot && item.type !== 'created' && (
+                          <Bot size={11} className="text-violet-500" />
+                        )}
+                      </div>
+                      <span className="text-[10px] text-muted-foreground whitespace-nowrap" title={formatDate(item.date)}>{relativeTime(item.date)}</span>
+                    </div>
+                    {item.actor && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                        {item.isBot ? <Bot size={9} className="text-violet-400" /> : null}
+                        <span>{t('leads.by')} {item.isBot ? t('leads.botAI') : item.actor}</span>
+                      </div>
+                    )}
+
+                    {/* Status change details */}
+                    {item.type === 'status_changed' && item.changes?.status && (
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <Badge variant="outline" className="text-[10px] py-0">{t(`leads.status_${item.changes.status.from}`) || item.changes.status.from || 'new'}</Badge>
+                        <ArrowRight size={10} className="text-muted-foreground" />
+                        <Badge className={`${(STATUS_CONFIG[item.changes.status.to] || STATUS_CONFIG.new).color} border-0 text-[10px] py-0`}>
+                          {t(`leads.status_${item.changes.status.to}`) || item.changes.status.to}
+                        </Badge>
+                      </div>
+                    )}
+
+                    {/* Field changes */}
+                    {item.type === 'updated' && item.changes && (
+                      <div className="mt-1.5 space-y-1 border-t border-border/50 pt-1.5">
+                        {Object.entries(item.changes).map(([field, { from, to }]) => (
+                          <div key={field} className="text-[11px] flex items-center gap-1">
+                            <span className="font-medium text-foreground">{t(FIELD_LABELS[field] || field)}</span>
+                            {from ? (
+                              <>
+                                <span className="text-muted-foreground line-through">{String(from)}</span>
+                                <ArrowRight size={8} className="text-muted-foreground shrink-0" />
+                                <span className="text-foreground">{String(to)}</span>
+                              </>
+                            ) : (
+                              <span className="text-foreground">{String(to)}</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Dispatch details */}
+                    {item.type === 'dispatched' && item.metadata?.branch && (
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                        <ArrowRight size={10} />
+                        <span className="font-medium">{item.metadata.branch}</span>
+                      </div>
+                    )}
+
+                    {/* Call details */}
+                    {item.type === 'call' && item.metadata && (
+                      <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+                        <Badge className={`${getMaskyooStatus(item.metadata.call_status).color} border-0 text-[10px] py-0 gap-0.5`}>
+                          {item.metadata.call_status || '-'}
+                        </Badge>
+                        <span className="text-muted-foreground">{formatCallDuration(item.metadata.duration)}</span>
+                        {item.metadata.ddi && <span className="text-muted-foreground">{item.metadata.ddi}</span>}
+                      </div>
+                    )}
+
+                    {/* Legacy history details */}
+                    {item.type === 'history' && item.metadata && (
+                      <div className="mt-1 space-y-0.5">
+                        <div className="flex gap-1 flex-wrap">
+                          {item.metadata.lead_channel && <Badge variant="outline" className="text-[10px] py-0">{item.metadata.lead_channel}</Badge>}
+                          {item.metadata.campaign && <Badge variant="outline" className="text-[10px] py-0">{item.metadata.campaign}</Badge>}
+                        </div>
+                        {item.metadata.service_requested && <span className="text-xs block">{item.metadata.service_requested}</span>}
+                        {item.metadata.details && <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">{item.metadata.details}</p>}
+                      </div>
+                    )}
+
+                    {/* Comment text */}
+                    {item.type === 'comment' && item.metadata?.text && (
+                      <p className="text-sm mt-1 whitespace-pre-wrap">{item.metadata.text}</p>
+                    )}
+
+                    {/* Bot transcript */}
+                    {item.type === 'bot_transcript' && item.metadata?.transcript && (
+                      <div className="mt-1.5 rounded border bg-violet-50/50 dark:bg-violet-950/20 p-2 max-h-48 overflow-y-auto">
+                        <div className="text-[10px] text-muted-foreground mb-1">{item.metadata.message_count} {t('leads.messages')}</div>
+                        <div className="space-y-1">
+                          {item.metadata.transcript.split('\n').map((line, i) => (
+                            <p key={i} className={`text-[11px] leading-relaxed ${line.startsWith('🤖') ? 'text-violet-600 dark:text-violet-400' : 'text-foreground'}`}>{line}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Created metadata */}
+                    {item.type === 'created' && item.metadata && (
+                      <div className="mt-1 flex gap-1">
+                        {item.metadata.source && <Badge variant="outline" className="text-[10px] py-0">{item.metadata.source}</Badge>}
+                        {item.metadata.lead_channel && <Badge variant="outline" className="text-[10px] py-0">{item.metadata.lead_channel}</Badge>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  )
+}
+
+function LeadCommentInput({ leadId, t }) {
+  const addComment = useAddLeadComment()
+  const [text, setText] = useState('')
+  return (
+    <div className="shrink-0 border-t px-4 py-3 bg-background">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!text.trim()) return
+          const msg = text.trim()
+          setText('')
+          addComment.mutate({ leadId, comment: msg })
+        }}
+        className="flex gap-2 items-end"
+      >
+        <Textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); e.target.form.requestSubmit() } }}
+          placeholder={t('leads.addComment')}
+          rows={3}
+          className="flex-1 text-sm resize-none"
+        />
+        <Button type="submit" size="sm" className="h-9 px-3" disabled={!text.trim() || addComment.isPending}>
+          <Send size={14} />
+        </Button>
+      </form>
     </div>
   )
 }
@@ -1227,12 +1587,17 @@ function FieldsDialog({ open, onOpenChange, leadFields, t }) {
   )
 }
 
-function DetailRow({ label, value }) {
+function ContactRow({ icon: Icon, label, value, href }) {
   if (!value) return null
-  return (
-    <div className="flex items-center justify-between py-1 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium text-right">{value}</span>
+  const content = (
+    <div className="flex items-center gap-2.5 py-1 group/row">
+      <Icon size={14} className="text-muted-foreground shrink-0" />
+      <div className="flex-1 min-w-0">
+        {label && <span className="text-[10px] text-muted-foreground block leading-none mb-0.5">{label}</span>}
+        <span className={`text-sm ${href ? 'text-primary group-hover/row:underline' : 'text-foreground'} truncate block`}>{value}</span>
+      </div>
     </div>
   )
+  if (href) return <a href={href} onClick={e => e.stopPropagation()} className="block">{content}</a>
+  return content
 }

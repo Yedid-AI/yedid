@@ -19,7 +19,7 @@ const MAX_TOOL_ROUNDS = 5
  * @param {string} opts.userId - User ID for KB filtering
  * @returns {Promise<string>} Agent response text
  */
-export async function runPlaybookAgent({ agentConfig, playbook, agentTools = [], userMessage, conversationHistory, supabase, userId, contactContext }) {
+export async function runPlaybookAgent({ agentConfig, playbook, agentTools = [], userMessage, conversationHistory, supabase, userId, contactContext, sessionId }) {
   const provider = agentConfig.llm_provider || 'openai'
   const model = agentConfig.llm_model || 'gpt-4.1-mini'
 
@@ -89,8 +89,9 @@ Example of BAD response (robotic pattern — NEVER do this):
 - Scenario: ${playbook.content}
 - Rules: ${playbook.rules || 'N/A'}${contactContext?.phone ? `
 
-# Contact Info
-- Phone: ${contactContext.phone}${contactContext.name ? `\n- Name: ${contactContext.name}` : ''}${contactContext.source ? `\n- Call Source: ${contactContext.source}` : ''}${contactContext.maskyoo_number ? `\n- Called Number: ${contactContext.maskyoo_number}` : ''}${contactContext.followup ? `\n- Context: This person called and we're following up via WhatsApp` : ''}` : ''}`
+# Contact Info — ALREADY KNOWN (do NOT ask for these)
+- Phone: ${contactContext.phone}${contactContext.name ? `\n- Name: ${contactContext.name}` : ''}${contactContext.source ? `\n- Call Source: ${contactContext.source}` : ''}${contactContext.maskyoo_number ? `\n- Called Number: ${contactContext.maskyoo_number}` : ''}${contactContext.followup ? `\n- Context: This person called and we're following up via WhatsApp` : ''}
+IMPORTANT: You already have the contact's phone number${contactContext.name ? ' and name' : ''}. NEVER ask for information you already have above.` : ''}`
 
   // Build available tools — KB search + all agent tools
   const tools = [knowledgeBaseToolDef]
@@ -156,7 +157,13 @@ Example of BAD response (robotic pattern — NEVER do this):
           // Lookup tool from the agent's tool map
           const matchedTool = toolMap.get(toolCall.name)
           if (matchedTool?.type === 'internal') {
-            toolResult = await executeInternalTool(matchedTool.handler, toolCall.arguments, { supabase, userId })
+            // Auto-inject contact info for save_lead if available from WhatsApp context
+            if (matchedTool.handler === 'save_lead' && contactContext?.phone) {
+              const args = toolCall.arguments?.body || toolCall.arguments || {}
+              if (!args.phone) args.phone = contactContext.phone
+              toolCall.arguments = args
+            }
+            toolResult = await executeInternalTool(matchedTool.handler, toolCall.arguments, { supabase, userId, sessionId })
             metadata.tool_calls.push({ name: matchedTool.name, handler: matchedTool.handler, arguments: toolCall.arguments })
           } else if (matchedTool) {
             toolResult = await executeTool(matchedTool, toolCall.arguments?.body || toolCall.arguments)

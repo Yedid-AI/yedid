@@ -68,10 +68,21 @@ async function enqueueNewCalls(supabase) {
   if (cfgErr || !configs?.length) return
 
   for (const config of configs) {
-    if (!config.sources?.length || !config.whatsapp_account_id) continue
+    if (!config.whatsapp_account_id) continue
 
-    // Build source filters
-    const sourceFilters = config.sources
+    // Resolve source filters: org-based lines or legacy JSONB sources
+    let sourceFilters = []
+    if (config.org_id) {
+      const { data: orgLines } = await supabase
+        .from('maskyoo_lines')
+        .select('user_name, cdr_ddi')
+        .eq('org_id', config.org_id)
+      sourceFilters = orgLines || []
+    } else if (config.sources?.length) {
+      sourceFilters = config.sources
+    }
+
+    if (!sourceFilters.length) continue
 
     // Find calls from the last 30 minutes that match any configured source
     const since = new Date(Date.now() - 30 * 60 * 1000).toISOString()
@@ -113,6 +124,7 @@ async function enqueueNewCalls(supabase) {
 
       toInsert.push({
         user_id: config.user_id,
+        org_id: config.org_id || null,
         phone,
         call_id: call.id,
         source_user_name: call.user_name,
@@ -130,7 +142,7 @@ async function enqueueNewCalls(supabase) {
       if (insertErr) {
         console.error('[Followup Cron] Enqueue error:', insertErr.message)
       } else {
-        console.log(`[Followup Cron] Enqueued ${toInsert.length} follow-ups for user ${config.user_id}`)
+        console.log(`[Followup Cron] Enqueued ${toInsert.length} follow-ups for user ${config.user_id} org ${config.org_id || 'legacy'}`)
       }
     }
   }
@@ -152,22 +164,29 @@ async function processQueue(supabase) {
 
   if (pendErr || !pending?.length) return
 
-  // Group by user_id to load config once per user
-  const byUser = {}
+  // Group by user_id + org_id to load config once per combo
+  const byKey = {}
   for (const item of pending) {
-    if (!byUser[item.user_id]) byUser[item.user_id] = []
-    byUser[item.user_id].push(item)
+    const key = `${item.user_id}|${item.org_id || 'null'}`
+    if (!byKey[key]) byKey[key] = { userId: item.user_id, orgId: item.org_id || null, items: [] }
+    byKey[key].items.push(item)
   }
 
-  for (const [userId, items] of Object.entries(byUser)) {
-    // Load the user's followup config with inbox join
-    const { data: config } = await supabase
+  for (const { userId, orgId, items } of Object.values(byKey)) {
+    // Load the followup config for this user+org with inbox join
+    const configQuery = supabase
       .from('followup_config')
       .select('*, inboxes:followup_inbox_id(id, chatwoot_account_id, inbox_id, unipile_account_id)')
-      .eq('user_id', parseInt(userId))
+      .eq('user_id', userId)
       .eq('is_active', true)
-      .limit(1)
-      .maybeSingle()
+
+    if (orgId) {
+      configQuery.eq('org_id', orgId)
+    } else {
+      configQuery.is('org_id', null)
+    }
+
+    const { data: config } = await configQuery.limit(1).maybeSingle()
 
     if (!config || !config.whatsapp_account_id) {
       // Config deactivated — skip all
@@ -178,12 +197,14 @@ async function processQueue(supabase) {
       continue
     }
 
-    // Check which phones exist in leads
+    // Check which phones have recent lead activity (created/updated < 1 hour ago)
     const phones = items.map(i => i.phone)
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
     const { data: leads } = await supabase
       .from('leads')
       .select('phone')
       .in('phone', phones)
+      .gte('updated_at', oneHourAgo)
 
     const leadPhones = new Set((leads || []).map(l => l.phone))
 

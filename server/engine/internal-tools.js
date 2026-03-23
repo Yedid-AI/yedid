@@ -7,9 +7,32 @@ import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } 
  */
 
 /**
+ * Log bot conversation transcript as a lead activity.
+ */
+async function logBotTranscript(supabase, leadId, userId, sessionId) {
+  if (!sessionId) return
+  try {
+    const { data: msgs } = await supabase
+      .from('conversation_messages')
+      .select('role, content, created_at')
+      .eq('session_id', sessionId)
+      .order('created_at', { ascending: true })
+    if (!msgs?.length) return
+    const transcript = msgs.map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`).join('\n')
+    await supabase.from('lead_activities').insert({
+      lead_id: leadId, user_id: userId, action: 'bot_transcript',
+      metadata: { session_id: sessionId, message_count: msgs.length, transcript },
+      actor: 'chatbot',
+    })
+  } catch (e) {
+    console.error('[lead-activity/transcript]', e.message)
+  }
+}
+
+/**
  * save_lead — UPSERT a lead by phone number (enrich if exists, create if new).
  */
-async function saveLead(params, { supabase, userId }) {
+export async function saveLead(params, { supabase, userId, sessionId }) {
   const body = params?.body || params || {}
 
   const name = body.name
@@ -77,6 +100,16 @@ async function saveLead(params, { supabase, userId }) {
       console.error('[internal-tools/save_lead]', error.message)
       return JSON.stringify({ success: false, error: error.message })
     }
+    // Log enrichment activity
+    await supabase.from('lead_activities').insert({
+      lead_id: data.id, user_id: userId, action: 'enriched',
+      metadata: { source: body.source || 'chatbot', lead_channel: body.lead_channel || 'whatsapp', service_requested: serviceNorm },
+      actor: 'chatbot',
+    }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
+
+    // Log bot conversation transcript
+    logBotTranscript(supabase, data.id, userId, sessionId)
+
     return JSON.stringify({ success: true, lead_id: data.id, updated: true, message: `Lead enriched: ${data.name} (${data.phone})` })
   }
 
@@ -113,6 +146,16 @@ async function saveLead(params, { supabase, userId }) {
     console.error('[internal-tools/save_lead]', error.message)
     return JSON.stringify({ success: false, error: error.message })
   }
+
+  // Log creation activity
+  await supabase.from('lead_activities').insert({
+    lead_id: data.id, user_id: userId, action: 'created',
+    metadata: { source: body.source || 'chatbot', lead_channel: body.lead_channel || 'whatsapp' },
+    actor: 'chatbot',
+  }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
+
+  // Log bot conversation transcript
+  logBotTranscript(supabase, data.id, userId, sessionId)
 
   return JSON.stringify({ success: true, lead_id: data.id, message: `Lead saved: ${data.name} (${data.phone})` })
 }

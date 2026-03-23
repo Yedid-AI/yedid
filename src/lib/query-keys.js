@@ -48,9 +48,13 @@ export const queryKeys = {
   callMetadata: (uuid) => ['calls', 'metadata', uuid],
   callSyncStatus: ['calls', 'sync-status'],
 
+  // Maskyoo orgs & lines
+  maskyooOrgs: ['maskyoo-orgs'],
+  maskyooLines: (orgId) => ['maskyoo-lines', orgId || 'all'],
+
   // Follow-up module (Relance)
-  followupConfig: ['followup-config'],
-  followupSources: ['followup-sources'],
+  followupConfig: (orgId) => ['followup-config', orgId || 'default'],
+  followupSources: (orgId) => ['followup-sources', orgId || 'default'],
   followupQueue: ['followup-queue'],
   followupStats: ['followup-stats'],
 }
