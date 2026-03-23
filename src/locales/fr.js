@@ -307,6 +307,9 @@ export default {
   'settings.subtitle': 'Configuration du compte',
   'settings.profile': 'Profil',
   'settings.chatwootWidget': 'Widget Chat',
+  'settings.activeSessions': 'Sessions actives',
+  'settings.noSessions': 'Aucune session active',
+  'settings.you': 'Vous',
 
   // environment
   'environment.title': 'Environnement',

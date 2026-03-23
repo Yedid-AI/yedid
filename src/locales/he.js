@@ -307,6 +307,9 @@ export default {
   'settings.subtitle': 'תצורת חשבון',
   'settings.profile': 'פרופיל',
   'settings.chatwootWidget': 'ווידג\'ט צ\'אט',
+  'settings.activeSessions': 'חיבורים פעילים',
+  'settings.noSessions': 'אין חיבורים פעילים',
+  'settings.you': 'אתה',
 
   // environment
   'environment.title': 'סביבה',

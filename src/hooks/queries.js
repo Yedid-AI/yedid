@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect, useCallback } from 'react'
 import { api } from '../lib/api'
 import { queryKeys } from '../lib/query-keys'
 
@@ -913,6 +914,37 @@ export function useSyncMaskyooLines() {
     mutationFn: () => api.post('/maskyoo-lines/sync'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['maskyoo-lines'] }),
   })
+}
+
+// ─── Heartbeat / Active Sessions ─────────────────────────
+const SESSION_ID_KEY = '__yedid_session_id'
+function getSessionId() {
+  let id = sessionStorage.getItem(SESSION_ID_KEY)
+  if (!id) {
+    id = crypto.randomUUID()
+    sessionStorage.setItem(SESSION_ID_KEY, id)
+  }
+  return id
+}
+
+export function useHeartbeat() {
+  const [sessions, setSessions] = useState([])
+  const sessionId = getSessionId()
+
+  const ping = useCallback(async () => {
+    try {
+      const data = await api.post('/heartbeat', { session_id: sessionId })
+      setSessions(data.sessions || [])
+    } catch {}
+  }, [sessionId])
+
+  useEffect(() => {
+    ping()
+    const interval = setInterval(ping, 30_000)
+    return () => clearInterval(interval)
+  }, [ping])
+
+  return { sessions, sessionId }
 }
 
 // ─── Follow-up Config (Relance) ──────────────────────────

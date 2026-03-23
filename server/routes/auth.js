@@ -311,6 +311,49 @@ router.delete('/users/:id', checkAuth, checkRole('super_admin'), async (req, res
   }
 })
 
+// POST /api/heartbeat — presence ping + return active sessions
+router.post('/heartbeat', checkAuth, async (req, res) => {
+  try {
+    const { session_id } = req.body
+    if (!session_id) return res.status(400).json({ error: 'session_id requis' })
+
+    const ip = req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip
+    const userAgent = req.headers['user-agent'] || ''
+
+    // Upsert this session's heartbeat
+    await req.supabaseAdmin
+      .from('active_sessions')
+      .upsert({
+        id: session_id,
+        user_id: req.user.user_id,
+        last_seen: new Date().toISOString(),
+        ip_address: ip,
+        user_agent: userAgent,
+      }, { onConflict: 'id' })
+
+    // Clean up stale sessions (> 2 min) for this user
+    const cutoff = new Date(Date.now() - 2 * 60 * 1000).toISOString()
+    await req.supabaseAdmin
+      .from('active_sessions')
+      .delete()
+      .eq('user_id', req.user.user_id)
+      .lt('last_seen', cutoff)
+
+    // Return active sessions for this user
+    const { data: sessions } = await req.supabaseAdmin
+      .from('active_sessions')
+      .select('id, last_seen, ip_address, user_agent')
+      .eq('user_id', req.user.user_id)
+      .gte('last_seen', cutoff)
+      .order('last_seen', { ascending: false })
+
+    res.json({ sessions: sessions || [] })
+  } catch (err) {
+    console.error('[heartbeat]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
 // POST /api/auth/refresh — refresh access token
 router.post('/auth/refresh', async (req, res) => {
   try {
