@@ -8,10 +8,7 @@ router.get('/branches', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     const supabase = req.supabaseAdmin || req.supabase
     let query = supabase.from('branches').select('*')
-    if (req.user.role === 'admin') {
-      query = query.eq('user_id', req.user.user_id)
-    }
-    // marketeur + super_admin see all branches
+    // admin + super_admin see all branches, marketeur too
     const { data, error } = await query.order('name', { ascending: true })
 
     if (error) throw error
@@ -57,8 +54,9 @@ router.put('/branches/:id', checkRole('admin'), async (req, res) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key]
     }
 
-    let query = req.supabase.from('branches').update(updates).eq('id', id)
-    if (req.user.role !== 'super_admin') {
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let query = sb.from('branches').update(updates).eq('id', id)
+    if (!['super_admin', 'admin'].includes(req.user.role)) {
       query = query.eq('user_id', req.user.user_id)
     }
     const { data, error } = await query.select().single()
@@ -76,8 +74,9 @@ router.put('/branches/:id', checkRole('admin'), async (req, res) => {
 router.delete('/branches/:id', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
-    let query = req.supabase.from('branches').delete().eq('id', id)
-    if (req.user.role !== 'super_admin') {
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let query = sb.from('branches').delete().eq('id', id)
+    if (!['super_admin', 'admin'].includes(req.user.role)) {
       query = query.eq('user_id', req.user.user_id)
     }
     const { error } = await query
@@ -95,8 +94,9 @@ router.delete('/branches/:id', checkRole('admin'), async (req, res) => {
 // GET /api/city-index
 router.get('/city-index', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
-    let query = req.supabase.from('city_branch_index').select('*')
-    if (req.user.role !== 'super_admin') {
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let query = sb.from('city_branch_index').select('*')
+    if (!['super_admin', 'admin'].includes(req.user.role)) {
       query = query.eq('user_id', req.user.user_id)
     }
     const { data, error } = await query.order('city', { ascending: true })

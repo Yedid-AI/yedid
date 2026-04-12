@@ -41,10 +41,11 @@ const navGroups = [
   },
   {
     labelKey: 'nav.workspace',
+    ai: true, // AI section — hidden for admin
     items: [
-      { path: '/inboxes', labelKey: 'nav.inboxes', icon: Radio, roles: ['admin'] },
-      { path: '/agents', labelKey: 'nav.agents', icon: Sparkles, roles: ['admin'] },
-      { path: '/sources', labelKey: 'nav.knowledge', icon: Brain, roles: ['admin'] },
+      { path: '/inboxes', labelKey: 'nav.inboxes', icon: Radio, roles: ['super_admin'] },
+      { path: '/agents', labelKey: 'nav.agents', icon: Sparkles, roles: ['super_admin'] },
+      { path: '/sources', labelKey: 'nav.knowledge', icon: Brain, roles: ['super_admin'] },
     ],
   },
   {
@@ -57,17 +58,23 @@ const navGroups = [
   },
   {
     labelKey: 'nav.configure',
+    ai: true,
     items: [
-      { path: '/playbooks', labelKey: 'nav.playbooks', icon: Route, roles: ['admin'] },
-      { path: '/escalation', labelKey: 'nav.escalation', icon: ArrowRightLeft, roles: ['admin'] },
-      { path: '/tools', labelKey: 'nav.tools', icon: Plug, roles: ['admin'] },
+      { path: '/playbooks', labelKey: 'nav.playbooks', icon: Route, roles: ['super_admin'] },
+      { path: '/escalation', labelKey: 'nav.escalation', icon: ArrowRightLeft, roles: ['super_admin'] },
+      { path: '/tools', labelKey: 'nav.tools', icon: Plug, roles: ['super_admin'] },
+    ],
+  },
+  {
+    labelKey: 'nav.settings',
+    items: [
       { path: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['admin'] },
+      { path: '/users', labelKey: 'nav.users', icon: Users, roles: ['admin'] },
     ],
   },
   {
     labelKey: 'nav.platform',
     items: [
-      { path: '/users', labelKey: 'nav.users', icon: Users, roles: ['super_admin'] },
       { path: '/environment', labelKey: 'nav.environment', icon: KeyRound, roles: ['super_admin'] },
       { path: '/closing', labelKey: 'nav.closing', icon: CalendarClock, roles: ['super_admin'] },
     ],

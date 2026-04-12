@@ -4,8 +4,8 @@ import { CONFIGURABLE_KEYS, getSetting, upsertSettings, loadSettings } from '../
 
 const router = Router()
 
-// GET /api/settings (super_admin only)
-router.get('/settings', checkRole('super_admin'), async (req, res) => {
+// GET /api/settings (super_admin + admin)
+router.get('/settings', checkRole('admin'), async (req, res) => {
   try {
     const settings = {}
     for (const key of CONFIGURABLE_KEYS) {
@@ -25,8 +25,8 @@ router.get('/settings', checkRole('super_admin'), async (req, res) => {
   }
 })
 
-// PUT /api/settings (super_admin only)
-router.put('/settings', checkRole('super_admin'), async (req, res) => {
+// PUT /api/settings (super_admin + admin)
+router.put('/settings', checkRole('admin'), async (req, res) => {
   try {
     const { settings } = req.body
     if (!settings || typeof settings !== 'object') {
@@ -50,8 +50,8 @@ router.put('/settings', checkRole('super_admin'), async (req, res) => {
   }
 })
 
-// POST /api/settings/reload — force refresh settings cache from DB
-router.post('/settings/reload', checkRole('super_admin'), async (req, res) => {
+// POST /api/settings/reload
+router.post('/settings/reload', checkRole('admin'), async (req, res) => {
   try {
     const supabase = req.supabaseAdmin || req.supabase
     await loadSettings(supabase)

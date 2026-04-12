@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser, useProvisionChat } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
+import { useAuth } from '../lib/auth'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +17,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 
 export default function Users() {
   const { t } = useI18n()
+  const { user: currentUser } = useAuth()
   usePageTitle(t('users.title'))
   const { actionsContainer } = usePageHeader()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -135,18 +137,25 @@ export default function Users() {
               <div className="space-y-2">
                 <Label>{t('users.role')}</Label>
                 <Select value={form.role} onValueChange={(v) => setForm({ ...form, role: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="agent">Agent</SelectItem>
-                    <SelectItem value="admin">Admin</SelectItem>
-                    <SelectItem value="marketeur">Marketeur / משווק</SelectItem>
-                    <SelectItem value="super_admin">Super Admin</SelectItem>
+                    <SelectItem value="admin">מנהל</SelectItem>
+                    <SelectItem value="marketeur">משווק</SelectItem>
+                    <SelectItem value="agent">סוכן</SelectItem>
+                    {currentUser?.role === 'super_admin' && <SelectItem value="super_admin">סופר אדמין</SelectItem>}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>{t('users.enterprise')}</Label>
-                <Input value={form.enterprise} onChange={(e) => setForm({ ...form, enterprise: e.target.value })} />
+                <Select value={form.enterprise || '__empty__'} onValueChange={(v) => setForm({ ...form, enterprise: v === '__empty__' ? '' : v })}>
+                  <SelectTrigger className="h-10 w-full"><SelectValue placeholder="-" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__empty__">-</SelectItem>
+                    <SelectItem value="babait">Babait</SelectItem>
+                    <SelectItem value="aviezer">Aviezer</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="flex gap-2 justify-end">

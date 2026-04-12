@@ -151,12 +151,12 @@ export default function App() {
             </ProtectedRoute>
           } />
           <Route path="/users" element={
-            <ProtectedRoute roles={['super_admin']}>
+            <ProtectedRoute roles={['admin']}>
               <AppLayout><Users /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/users/:id" element={
-            <ProtectedRoute roles={['super_admin']}>
+            <ProtectedRoute roles={['admin']}>
               <AppLayout><UserDetail /></AppLayout>
             </ProtectedRoute>
           } />

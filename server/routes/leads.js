@@ -21,6 +21,10 @@ async function verifyMarketeurAccess(req, leadId) {
 // GET /api/leads — list with filters + stats (server-side filtering & pagination)
 router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
+    // Admin sees all leads — use supabaseAdmin to bypass RLS
+    const supabase = ['super_admin', 'admin'].includes(req.user.role)
+      ? (req.supabaseAdmin || req.supabase)
+      : req.supabase
     const page = Math.max(0, parseInt(req.query.page) || 0)
     const pageSize = Math.min(100, Math.max(1, parseInt(req.query.page_size) || 50))
     const emptyResult = { leads: [], stats: { total: 0 }, total: 0, page, page_size: pageSize }
@@ -46,7 +50,7 @@ router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
     const applyBaseFilters = (q) => {
       // Access scope
       if (scopeIds) q = q.in('id', scopeIds)
-      else if (req.user.role !== 'super_admin') q = q.eq('user_id', req.user.user_id)
+      else if (!['super_admin', 'admin'].includes(req.user.role)) q = q.eq('user_id', req.user.user_id)
       if (affiliatedFilterIds) q = q.in('id', affiliatedFilterIds)
       // Date range
       if (req.query.date_from) q = q.gte('created_at', req.query.date_from)
@@ -69,7 +73,7 @@ router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
     }
 
     // ── Query 1: Stats (date-scoped only, no table filters) — lightweight select ──
-    let statsQuery = req.supabase.from('leads').select('status, company, type')
+    let statsQuery = supabase.from('leads').select('status, company, type')
     statsQuery = applyBaseFilters(statsQuery)
     const { data: statsRows, error: statsErr } = await statsQuery
     if (statsErr) throw statsErr
@@ -86,7 +90,7 @@ router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
     }
 
     // ── Query 2: Paginated leads (all filters + count) ──
-    let leadsQuery = req.supabase.from('leads').select('*', { count: 'exact' })
+    let leadsQuery = supabase.from('leads').select('*', { count: 'exact' })
     leadsQuery = applyBaseFilters(leadsQuery)
     leadsQuery = applyTableFilters(leadsQuery)
     leadsQuery = leadsQuery.order('created_at', { ascending: false })
@@ -114,6 +118,24 @@ router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
       }
     }
 
+    // ── Enrich with creator name per user_id (admin/super_admin only) ──
+    if (['super_admin', 'admin'].includes(req.user.role) && leads?.length) {
+      const userIds = [...new Set(leads.map(l => l.user_id).filter(Boolean))]
+      if (userIds.length > 0) {
+        const { data: userRows } = await req.supabaseAdmin
+          .from('users')
+          .select('id, first_name, email')
+          .in('id', userIds)
+        if (userRows?.length) {
+          const idToName = {}
+          for (const u of userRows) idToName[u.id] = u.first_name || u.email
+          for (const lead of leads) {
+            if (lead.user_id && idToName[lead.user_id]) lead.creator_name = idToName[lead.user_id]
+          }
+        }
+      }
+    }
+
     res.json({ leads: leads || [], stats, total: totalFiltered ?? 0, page, page_size: pageSize })
   } catch (err) {
     console.error('[leads]', err.message)
@@ -124,13 +146,14 @@ router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
 // GET /api/leads/:id
 router.get('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
-    let query = req.supabase.from('leads').select('*').eq('id', req.params.id)
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let query = sb.from('leads').select('*').eq('id', req.params.id)
     if (req.user.role === 'marketeur') {
       // Verify affiliation
       const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
         .select('id').eq('lead_id', req.params.id).eq('user_id', req.user.user_id).limit(1)
       if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
-    } else if (req.user.role !== 'super_admin') {
+    } else if (!['super_admin', 'admin'].includes(req.user.role)) {
       query = query.eq('user_id', req.user.user_id)
     }
     const { data, error } = await query.single()
@@ -146,12 +169,13 @@ router.get('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
 // GET /api/leads/:id/calls — Maskyoo calls for a lead (matched by phone)
 router.get('/leads/:id/calls', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
-    let query = req.supabase.from('leads').select('phone').eq('id', req.params.id)
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let query = sb.from('leads').select('phone').eq('id', req.params.id)
     if (req.user.role === 'marketeur') {
       const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
         .select('id').eq('lead_id', req.params.id).eq('user_id', req.user.user_id).limit(1)
       if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
-    } else if (req.user.role !== 'super_admin') {
+    } else if (!['super_admin', 'admin'].includes(req.user.role)) {
       query = query.eq('user_id', req.user.user_id)
     }
     const { data: lead, error } = await query.single()
@@ -181,8 +205,9 @@ router.get('/leads/:id/activities', checkRole('admin', 'marketeur'), async (req,
         .select('id').eq('lead_id', req.params.id).eq('user_id', req.user.user_id).limit(1)
       if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
     }
-    let leadQuery = req.supabase.from('leads').select('id').eq('id', req.params.id)
-    if (!['super_admin', 'marketeur'].includes(req.user.role)) leadQuery = leadQuery.eq('user_id', req.user.user_id)
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let leadQuery = sb.from('leads').select('id').eq('id', req.params.id)
+    if (!['super_admin', 'admin', 'marketeur'].includes(req.user.role)) leadQuery = leadQuery.eq('user_id', req.user.user_id)
     const { data: lead } = await leadQuery.single()
     if (!lead) return res.status(404).json({ error: 'Lead introuvable' })
 
@@ -371,12 +396,13 @@ router.put('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
     ]
 
     // Fetch current lead to compute diff
-    let fetchQuery = req.supabase.from('leads').select('*').eq('id', id)
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let fetchQuery = sb.from('leads').select('*').eq('id', id)
     if (req.user.role === 'marketeur') {
       const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
         .select('id').eq('lead_id', id).eq('user_id', req.user.user_id).limit(1)
       if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
-    } else if (req.user.role !== 'super_admin') {
+    } else if (!['super_admin', 'admin'].includes(req.user.role)) {
       fetchQuery = fetchQuery.eq('user_id', req.user.user_id)
     }
     const { data: before } = await fetchQuery.single()
@@ -387,8 +413,8 @@ router.put('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key]
     }
 
-    let query = req.supabase.from('leads').update(updates).eq('id', id)
-    if (!['super_admin', 'marketeur'].includes(req.user.role)) {
+    let query = sb.from('leads').update(updates).eq('id', id)
+    if (!['super_admin', 'admin', 'marketeur'].includes(req.user.role)) {
       query = query.eq('user_id', req.user.user_id)
     }
     const { data, error } = await query.select().single()
@@ -427,8 +453,9 @@ router.put('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
 router.delete('/leads/:id', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
-    let query = req.supabase.from('leads').delete().eq('id', id)
-    if (req.user.role !== 'super_admin') {
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let query = sb.from('leads').delete().eq('id', id)
+    if (!['super_admin', 'admin'].includes(req.user.role)) {
       query = query.eq('user_id', req.user.user_id)
     }
     const { error } = await query
@@ -531,12 +558,13 @@ async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) 
 router.post('/leads/:id/dispatch', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     const { id } = req.params
-    let leadQuery = req.supabase.from('leads').select('*').eq('id', id)
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let leadQuery = sb.from('leads').select('*').eq('id', id)
     if (req.user.role === 'marketeur') {
       const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
         .select('id').eq('lead_id', id).eq('user_id', req.user.user_id).limit(1)
       if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
-    } else if (req.user.role !== 'super_admin') {
+    } else if (!['super_admin', 'admin'].includes(req.user.role)) {
       leadQuery = leadQuery.eq('user_id', req.user.user_id)
     }
     const { data: lead, error: leadErr } = await leadQuery.single()
@@ -554,7 +582,7 @@ router.post('/leads/:id/dispatch', checkRole('admin', 'marketeur'), async (req, 
       actor: req.user.email || 'admin',
     }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
 
-    const { data: updated } = await req.supabase.from('leads').select('*').eq('id', id).single()
+    const { data: updated } = await sb.from('leads').select('*').eq('id', id).single()
     res.json({ success: true, lead: updated })
   } catch (err) {
     console.error('[leads/dispatch]', err.message)
@@ -589,8 +617,9 @@ router.post('/leads/:id/comment', checkRole('admin', 'marketeur'), async (req, r
 // GET /api/lead-fields
 router.get('/lead-fields', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
-    let query = req.supabase.from('lead_field_definitions').select('*')
-    if (req.user.role !== 'super_admin') {
+    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
+    let query = sb.from('lead_field_definitions').select('*')
+    if (!['super_admin', 'admin'].includes(req.user.role)) {
       query = query.eq('user_id', req.user.user_id)
     }
     const { data, error } = await query.order('display_order', { ascending: true })

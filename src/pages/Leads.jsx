@@ -338,7 +338,7 @@ export default function Leads() {
         {panelOpen ? (
           <>
             <div className="flex gap-2 items-center flex-wrap">
-              {user?.role === 'super_admin' && (
+              {isAdminOrAbove && (
                 <Select value={filterCompany || 'all'} onValueChange={(v) => setFilterCompany(v === 'all' ? '' : v)}>
                   <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -378,7 +378,7 @@ export default function Leads() {
                   </SelectContent>
                 </Select>
               )}
-              {user?.role === 'super_admin' && allUsers?.length > 0 && (
+              {isAdminOrAbove && allUsers?.length > 0 && (
                 <Select value={filterAffiliatedUser || 'all'} onValueChange={(v) => setFilterAffiliatedUser(v === 'all' ? '' : v)}>
                   <SelectTrigger className="w-[120px] h-8 text-xs">
                     <Users size={12} className="me-1" />
@@ -451,7 +451,7 @@ export default function Leads() {
               />
             </div>
 
-            {user?.role === 'super_admin' && (
+            {isAdminOrAbove && (
               <Select value={filterCompany || 'all'} onValueChange={(v) => setFilterCompany(v === 'all' ? '' : v)}>
                 <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -495,7 +495,7 @@ export default function Leads() {
               </Select>
             )}
 
-            {user?.role === 'super_admin' && allUsers?.length > 0 && (
+            {isAdminOrAbove && allUsers?.length > 0 && (
               <Select value={filterAffiliatedUser || 'all'} onValueChange={(v) => setFilterAffiliatedUser(v === 'all' ? '' : v)}>
                 <SelectTrigger className="w-[180px] h-9">
                   <Users size={14} className="me-1" />
@@ -587,15 +587,16 @@ export default function Leads() {
                 <TableHead>{t('leads.serviceRequested')}</TableHead>
                 <TableHead>{t('common.status')}</TableHead>
                 <TableHead>Maskyoo</TableHead>
-                {user?.role === 'super_admin' && <TableHead>{t('leads.company')}</TableHead>}
+                {isAdminOrAbove && <TableHead>{t('leads.company')}</TableHead>}
+                {isAdminOrAbove && <TableHead>{t('leads.creator')}</TableHead>}
                 <TableHead>{t('common.date')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isAdminOrAbove ? 12 : 10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
               ) : leads.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isAdminOrAbove ? 12 : 10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
               ) : leads.map((lead) => {
                 const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
                 return (
@@ -618,7 +619,7 @@ export default function Leads() {
                       <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">{lead.maskyoo_user || '-'}</TableCell>
-                    {user?.role === 'super_admin' && <TableCell>
+                    {isAdminOrAbove && <TableCell>
                       {COMPANY_LOGOS[lead.company] ? (
                         <div className="flex items-center gap-1.5">
                           <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-5 w-5 rounded-sm object-contain" />
@@ -626,6 +627,7 @@ export default function Leads() {
                         </div>
                       ) : <Badge variant="outline">{lead.company}</Badge>}
                     </TableCell>}
+                    {isAdminOrAbove && <TableCell className="text-muted-foreground text-xs">{lead.creator_name || '-'}</TableCell>}
                     <TableCell className="text-muted-foreground">{new Date(lead.created_at).toLocaleDateString()}</TableCell>
                   </TableRow>
                 )
@@ -671,15 +673,16 @@ export default function Leads() {
                 <TableHead>{t('leads.serviceRequested')}</TableHead>
                 <TableHead>{t('common.status')}</TableHead>
                 <TableHead>Maskyoo</TableHead>
-                {user?.role === 'super_admin' && <TableHead>{t('leads.company')}</TableHead>}
+                {isAdminOrAbove && <TableHead>{t('leads.company')}</TableHead>}
+                {isAdminOrAbove && <TableHead>{t('leads.creator')}</TableHead>}
                 <TableHead>{t('common.date')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isAdminOrAbove ? 12 : 10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
               ) : leads.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={isAdminOrAbove ? 12 : 10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
               ) : leads.map((lead) => {
                 const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
                 return (
@@ -702,7 +705,7 @@ export default function Leads() {
                       <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">{lead.maskyoo_user || '-'}</TableCell>
-                    {user?.role === 'super_admin' && <TableCell>
+                    {isAdminOrAbove && <TableCell>
                       {COMPANY_LOGOS[lead.company] ? (
                         <div className="flex items-center gap-1.5">
                           <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-5 w-5 rounded-sm object-contain" />
@@ -710,6 +713,7 @@ export default function Leads() {
                         </div>
                       ) : <Badge variant="outline">{lead.company}</Badge>}
                     </TableCell>}
+                    {isAdminOrAbove && <TableCell className="text-muted-foreground text-xs">{lead.creator_name || '-'}</TableCell>}
                     <TableCell className="text-muted-foreground">{new Date(lead.created_at).toLocaleDateString()}</TableCell>
                   </TableRow>
                 )
@@ -804,10 +808,10 @@ export default function Leads() {
           <div className="flex-1 overflow-y-auto px-6 py-4">
             {editMode ? (
               <form id="lead-edit-form" onSubmit={handleUpdate} className="space-y-4">
-                <LeadFormFields form={form} setForm={setForm} t={t} branches={branches} cities={cities} leadFields={leadFields} showCompany={user?.role === 'super_admin'} />
+                <LeadFormFields form={form} setForm={setForm} t={t} branches={branches} cities={cities} leadFields={leadFields} showCompany={isAdminOrAbove} />
               </form>
             ) : (
-              <LeadDetail lead={selectedLead} t={t} leadFields={leadFields} isSuperAdmin={user?.role === 'super_admin'} userRole={user?.role} />
+              <LeadDetail lead={selectedLead} t={t} leadFields={leadFields} isSuperAdmin={isAdminOrAbove} userRole={user?.role} />
             )}
           </div>
           {!editMode && <LeadCommentInput leadId={selectedLead.id} t={t} />}

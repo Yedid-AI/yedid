@@ -624,7 +624,18 @@ export function useCreateLead() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (body) => api.post('/leads', body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['leads'] }),
+    onSuccess: (data) => {
+      // Instantly prepend the new lead to cached queries
+      const newLead = data?.lead
+      if (newLead) {
+        qc.setQueriesData({ queryKey: ['leads'] }, (old) => {
+          if (!old?.leads) return old
+          return { ...old, leads: [newLead, ...old.leads], total: (old.total || 0) + 1 }
+        })
+      }
+      // Fire-and-forget background refetch (don't block the mutation)
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['leads'] }), 100)
+    },
   })
 }
 

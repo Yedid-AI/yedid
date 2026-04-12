@@ -88,8 +88,8 @@ router.get('/verify', checkAuth, async (req, res) => {
   }
 })
 
-// POST /api/register (super_admin only)
-router.post('/register', checkAuth, checkRole('super_admin'), async (req, res) => {
+// POST /api/register (super_admin + admin)
+router.post('/register', checkAuth, checkRole('admin'), async (req, res) => {
   try {
     const { email, password, first_name, last_name, role, enterprise } = req.body
     if (!email || !password) {
@@ -99,6 +99,10 @@ router.post('/register', checkAuth, checkRole('super_admin'), async (req, res) =
     const validRoles = ['super_admin', 'admin', 'agent', 'marketeur']
     if (role && !validRoles.includes(role)) {
       return res.status(400).json({ error: 'Role invalide' })
+    }
+    // Admin cannot create super_admin users
+    if (req.user.role === 'admin' && role === 'super_admin') {
+      return res.status(403).json({ error: 'Impossible de creer un super_admin' })
     }
 
     // Create user in Supabase Auth (GoTrue)
@@ -147,10 +151,11 @@ router.post('/register', checkAuth, checkRole('super_admin'), async (req, res) =
   }
 })
 
-// GET /api/users (super_admin only)
-router.get('/users', checkAuth, checkRole('super_admin'), async (req, res) => {
+// GET /api/users (super_admin + admin)
+router.get('/users', checkAuth, checkRole('admin'), async (req, res) => {
   try {
-    const { data, error } = await req.supabase
+    const sb = req.supabaseAdmin || req.supabase
+    const { data, error } = await sb
       .from('users')
       .select('id, email, first_name, last_name, role, enterprise, created_at, chatwoot_accounts(account_id)')
       .order('created_at', { ascending: false })
@@ -163,8 +168,8 @@ router.get('/users', checkAuth, checkRole('super_admin'), async (req, res) => {
   }
 })
 
-// GET /api/users/:id (super_admin only — detail with chatwoot + stats)
-router.get('/users/:id', checkAuth, checkRole('super_admin'), async (req, res) => {
+// GET /api/users/:id (super_admin + admin — detail with chatwoot + stats)
+router.get('/users/:id', checkAuth, checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -229,11 +234,16 @@ router.get('/users/:id', checkAuth, checkRole('super_admin'), async (req, res) =
   }
 })
 
-// PUT /api/users/:id (super_admin only)
-router.put('/users/:id', checkAuth, checkRole('super_admin'), async (req, res) => {
+// PUT /api/users/:id (super_admin + admin)
+router.put('/users/:id', checkAuth, checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
     const { first_name, last_name, role, enterprise, password } = req.body
+
+    // Admin cannot promote to super_admin
+    if (req.user.role === 'admin' && role === 'super_admin') {
+      return res.status(403).json({ error: 'Impossible de definir le role super_admin' })
+    }
 
     // If password is being changed, update in Supabase Auth
     if (password) {
@@ -273,8 +283,8 @@ router.put('/users/:id', checkAuth, checkRole('super_admin'), async (req, res) =
   }
 })
 
-// DELETE /api/users/:id (super_admin only)
-router.delete('/users/:id', checkAuth, checkRole('super_admin'), async (req, res) => {
+// DELETE /api/users/:id (super_admin + admin)
+router.delete('/users/:id', checkAuth, checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
     if (parseInt(id) === req.user.user_id) {

@@ -389,6 +389,7 @@ export default {
   'leads.allBranches': 'כל הסניפים',
   'leads.allTime': 'כל הזמנים',
   'leads.company': 'חברה',
+  'leads.creator': 'נוצר ע״י',
   'leads.type': 'סוג',
   'leads.phone': 'טלפון',
   'leads.city': 'עיר',
