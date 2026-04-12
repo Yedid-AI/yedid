@@ -9,7 +9,6 @@ export function useAgents() {
     queryKey: queryKeys.agents,
     queryFn: () => api.get('/agent-bots'),
     select: (data) => data.agent_bots,
-    refetchInterval: 30_000,
   })
 }
 
@@ -163,7 +162,6 @@ export function usePlaybooksLibrary() {
     queryKey: queryKeys.playbooksLibrary,
     queryFn: () => api.get('/playbooks'),
     select: (data) => data.playbooks,
-    refetchInterval: 30_000,
   })
 }
 
@@ -197,7 +195,6 @@ export function useToolsLibrary() {
     queryKey: queryKeys.toolsLibrary,
     queryFn: () => api.get('/tools'),
     select: (data) => data.tools,
-    refetchInterval: 30_000,
   })
 }
 
@@ -240,7 +237,6 @@ export function useEscalationRulesLibrary() {
     queryKey: queryKeys.escalationRulesLibrary,
     queryFn: () => api.get('/escalation-rules'),
     select: (data) => data.rules,
-    refetchInterval: 30_000,
   })
 }
 
@@ -309,7 +305,6 @@ export function useInboxes() {
     queryKey: queryKeys.inboxes,
     queryFn: () => api.get('/inboxes'),
     select: (data) => data.inboxes,
-    refetchInterval: 30_000,
   })
 }
 
@@ -461,7 +456,6 @@ export function useSessions(filters) {
       const qs = params.toString()
       return api.get(`/sessions${qs ? '?' + qs : ''}`)
     },
-    refetchInterval: 10_000,
   })
 }
 
@@ -471,7 +465,6 @@ export function useSession(id) {
     queryFn: () => api.get(`/sessions/${id}`),
     select: (data) => data.session,
     enabled: !!id,
-    refetchInterval: 10_000,
   })
 }
 
@@ -481,7 +474,6 @@ export function useSessionMessages(id) {
     queryFn: () => api.get(`/sessions/${id}/messages`),
     select: (data) => data.messages || [],
     enabled: !!id,
-    refetchInterval: 10_000,
   })
 }
 
@@ -518,12 +510,13 @@ export function useDeleteSource() {
 }
 
 // ─── Users ───────────────────────────────────────────────
-export function useUsers() {
+export function useUsers({ enabled = true } = {}) {
   return useQuery({
     queryKey: queryKeys.users,
     queryFn: () => api.get('/users'),
     select: (data) => data.users,
-    refetchInterval: 60_000,
+    staleTime: 5 * 60_000,
+    enabled,
   })
 }
 
@@ -583,10 +576,10 @@ export function useLeads(filters) {
       if (filters?.date_to) params.set('date_to', filters.date_to)
       if (filters?.page != null) params.set('page', filters.page)
       if (filters?.page_size) params.set('page_size', filters.page_size)
+      if (filters?.affiliated_user_id) params.set('affiliated_user_id', filters.affiliated_user_id)
       const qs = params.toString()
       return api.get(`/leads${qs ? '?' + qs : ''}`)
     },
-    refetchInterval: 10_000,
   })
 }
 
@@ -700,6 +693,58 @@ export function useDeleteLeadField() {
   })
 }
 
+// ─── Lead Documents ─────────────────────────────────────
+export function useLeadDocuments(leadId) {
+  return useQuery({
+    queryKey: queryKeys.leadDocuments(leadId),
+    queryFn: () => api.get(`/leads/${leadId}/documents`),
+    select: (data) => data.documents,
+    enabled: !!leadId,
+  })
+}
+
+export function useUploadLeadDocument() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ leadId, formData }) => api.upload(`/leads/${leadId}/documents`, formData),
+    onSuccess: (_, { leadId }) => qc.invalidateQueries({ queryKey: queryKeys.leadDocuments(leadId) }),
+  })
+}
+
+export function useDeleteLeadDocument() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ leadId, docId }) => api.delete(`/leads/${leadId}/documents/${docId}`),
+    onSuccess: (_, { leadId }) => qc.invalidateQueries({ queryKey: queryKeys.leadDocuments(leadId) }),
+  })
+}
+
+// ─── Lead Affiliations ──────────────────────────────────
+export function useLeadAffiliations(leadId) {
+  return useQuery({
+    queryKey: queryKeys.leadAffiliations(leadId),
+    queryFn: () => api.get(`/leads/${leadId}/affiliations`),
+    select: (data) => data.affiliations,
+    enabled: !!leadId,
+  })
+}
+
+export function useAddLeadAffiliation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ leadId, userId }) => api.post(`/leads/${leadId}/affiliations`, { user_id: userId }),
+    onSuccess: (_, { leadId }) => qc.invalidateQueries({ queryKey: queryKeys.leadAffiliations(leadId) }),
+  })
+}
+
+export function useRemoveLeadAffiliation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ leadId, userId }) => api.delete(`/leads/${leadId}/affiliations/${userId}`),
+    onSuccess: (_, { leadId }) => qc.invalidateQueries({ queryKey: queryKeys.leadAffiliations(leadId) }),
+  })
+}
+
 // ─── Branches ───────────────────────────────────────────
 export function useBranches() {
   return useQuery({
@@ -747,7 +792,6 @@ export function useCalls(filters) {
       const qs = params.toString()
       return api.get(`/calls${qs ? '?' + qs : ''}`)
     },
-    refetchInterval: 30_000,
   })
 }
 
@@ -815,7 +859,6 @@ export function useDispatchConfig() {
   return useQuery({
     queryKey: queryKeys.dispatchConfig,
     queryFn: () => api.get('/dispatch-config').then(r => r.config),
-    refetchInterval: 10_000,
   })
 }
 
@@ -952,7 +995,6 @@ export function useFollowupConfig(orgId) {
   return useQuery({
     queryKey: queryKeys.followupConfig(orgId),
     queryFn: () => api.get(`/followup-config${orgId ? `?org_id=${orgId}` : ''}`).then(r => r.config),
-    refetchInterval: 10_000,
   })
 }
 
@@ -983,7 +1025,7 @@ export function useFollowupQueue() {
   return useQuery({
     queryKey: queryKeys.followupQueue,
     queryFn: () => api.get('/followup-config/queue').then(r => r.queue),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   })
 }
 
@@ -991,6 +1033,6 @@ export function useFollowupStats() {
   return useQuery({
     queryKey: queryKeys.followupStats,
     queryFn: () => api.get('/followup-config/stats'),
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   })
 }

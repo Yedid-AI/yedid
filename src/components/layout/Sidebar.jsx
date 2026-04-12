@@ -50,7 +50,7 @@ const navGroups = [
   {
     labelKey: 'nav.leads',
     items: [
-      { path: '/leads', labelKey: 'nav.leadsPage', icon: UserPlus, roles: ['admin'] },
+      { path: '/leads', labelKey: 'nav.leadsPage', icon: UserPlus, roles: ['admin', 'marketeur'] },
       { path: '/branches', labelKey: 'nav.branches', icon: Building2, roles: ['admin'] },
       { path: '/calls', labelKey: 'nav.calls', icon: Phone, roles: ['admin'] },
     ],
@@ -163,11 +163,11 @@ export function AppSidebar() {
                   <div className="bg-sidebar-primary/20 text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg text-xs font-medium uppercase">
                     {(user?.first_name?.[0] || user?.email?.[0] || '?')}
                   </div>
-                  <div className="grid flex-1 text-left text-sm leading-tight">
+                  <div className="grid flex-1 text-start text-sm leading-tight">
                     <span className="truncate font-medium">{user?.first_name || user?.email}</span>
                     <span className="truncate text-xs opacity-70">{user?.email}</span>
                   </div>
-                  <ChevronsUpDown className="ml-auto size-4" />
+                  <ChevronsUpDown className="ms-auto size-4" />
                 </SidebarMenuButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent

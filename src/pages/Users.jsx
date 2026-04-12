@@ -139,6 +139,7 @@ export default function Users() {
                   <SelectContent>
                     <SelectItem value="agent">Agent</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="marketeur">Marketeur / משווק</SelectItem>
                     <SelectItem value="super_admin">Super Admin</SelectItem>
                   </SelectContent>
                 </Select>

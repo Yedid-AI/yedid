@@ -54,7 +54,7 @@ export function EmojiPicker({ value, onChange, className }) {
           <button
             type="button"
             onClick={handleRemove}
-            className="w-full text-left text-xs text-muted-foreground hover:text-destructive px-2 py-1.5 rounded-md hover:bg-accent transition-colors mb-1"
+            className="w-full text-start text-xs text-muted-foreground hover:text-destructive px-2 py-1.5 rounded-md hover:bg-accent transition-colors mb-1"
           >
             Supprimer
           </button>

@@ -8,75 +8,95 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 
 
 const router = Router()
 
+// Helper: verify marketeur has affiliation to a lead (returns true if allowed)
+async function verifyMarketeurAccess(req, leadId) {
+  if (req.user.role !== 'marketeur') return true
+  const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
+    .select('id').eq('lead_id', leadId).eq('user_id', req.user.user_id).limit(1)
+  return aff?.length > 0
+}
+
 // ─── Leads CRUD ──────────────────────────────────────────
 
-// GET /api/leads — list with filters + stats
-router.get('/leads', checkRole('admin'), async (req, res) => {
+// GET /api/leads — list with filters + stats (server-side filtering & pagination)
+router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
-    // Super admin sees all leads; admin sees only their own
-    // Use select with count, and range(0, 9999) to bypass Supabase default 1000 limit
-    let query = req.supabase.from('leads').select('*', { count: 'exact' })
-    if (req.user.role !== 'super_admin') {
-      query = query.eq('user_id', req.user.user_id)
-    }
-    query = query.order('created_at', { ascending: false }).range(0, 9999)
+    const page = Math.max(0, parseInt(req.query.page) || 0)
+    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.page_size) || 50))
+    const emptyResult = { leads: [], stats: { total: 0 }, total: 0, page, page_size: pageSize }
 
-    const { data: allData, error } = await query
-    if (error) throw error
-
-    // Date range filter
-    let dateFiltered = allData || []
-    if (req.query.date_from) {
-      const from = new Date(req.query.date_from)
-      dateFiltered = dateFiltered.filter((l) => new Date(l.created_at) >= from)
+    // ── Resolve access scope (affiliation IDs for marketeur / affiliated_user filter) ──
+    let scopeIds = null
+    if (req.user.role === 'marketeur') {
+      const { data: affiliations, error: affErr } = await req.supabaseAdmin
+        .from('lead_affiliations').select('lead_id').eq('user_id', req.user.user_id)
+      if (affErr) console.error('[leads/GET] affiliation query error:', affErr.message)
+      scopeIds = (affiliations || []).map(a => a.lead_id)
+      if (scopeIds.length === 0) return res.json(emptyResult)
     }
-    if (req.query.date_to) {
-      const to = new Date(req.query.date_to)
-      dateFiltered = dateFiltered.filter((l) => new Date(l.created_at) <= to)
+    let affiliatedFilterIds = null
+    if (req.query.affiliated_user_id && ['super_admin', 'admin'].includes(req.user.role)) {
+      const { data: affiliations } = await req.supabaseAdmin
+        .from('lead_affiliations').select('lead_id').eq('user_id', parseInt(req.query.affiliated_user_id))
+      affiliatedFilterIds = (affiliations || []).map(a => a.lead_id)
+      if (affiliatedFilterIds.length === 0) return res.json(emptyResult)
     }
 
-    // Stats (from date-filtered data)
+    // ── Helper: apply shared filters to a query ──
+    const applyBaseFilters = (q) => {
+      // Access scope
+      if (scopeIds) q = q.in('id', scopeIds)
+      else if (req.user.role !== 'super_admin') q = q.eq('user_id', req.user.user_id)
+      if (affiliatedFilterIds) q = q.in('id', affiliatedFilterIds)
+      // Date range
+      if (req.query.date_from) q = q.gte('created_at', req.query.date_from)
+      if (req.query.date_to) q = q.lte('created_at', req.query.date_to)
+      return q
+    }
+
+    const applyTableFilters = (q) => {
+      if (req.query.company) q = q.eq('company', req.query.company)
+      if (req.query.type) q = q.eq('type', req.query.type)
+      if (req.query.status) q = q.eq('status', req.query.status)
+      if (req.query.branch) q = q.eq('branch', req.query.branch)
+      if (req.query.source) q = q.eq('source', req.query.source)
+      if (req.query.search) {
+        // Sanitize: strip PostgREST special chars to prevent filter injection
+        const s = req.query.search.replace(/[,.()"'\\]/g, '')
+        if (s) q = q.or(`name.ilike.%${s}%,phone.ilike.%${s}%,city.ilike.%${s}%,details.ilike.%${s}%`)
+      }
+      return q
+    }
+
+    // ── Query 1: Stats (date-scoped only, no table filters) — lightweight select ──
+    let statsQuery = req.supabase.from('leads').select('status, company, type')
+    statsQuery = applyBaseFilters(statsQuery)
+    const { data: statsRows, error: statsErr } = await statsQuery
+    if (statsErr) throw statsErr
+
     const stats = {
-      total: dateFiltered.length,
-      new: dateFiltered.filter((l) => l.status === 'new').length,
-      sent_to_branch: dateFiltered.filter((l) => l.status === 'sent_to_branch').length,
-      in_progress: dateFiltered.filter((l) => l.status === 'in_progress').length,
-      handled: dateFiltered.filter((l) => l.status === 'handled').length,
-      not_relevant: dateFiltered.filter((l) => l.status === 'not_relevant').length,
-      no_answer: dateFiltered.filter((l) => l.status === 'no_answer').length,
-      by_company: {},
-      by_type: {},
+      total: statsRows.length,
+      new: 0, sent_to_branch: 0, in_progress: 0, handled: 0, not_relevant: 0, no_answer: 0,
+      by_company: {}, by_type: {},
     }
-    for (const l of dateFiltered) {
+    for (const l of statsRows) {
+      if (stats[l.status] !== undefined) stats[l.status]++
       stats.by_company[l.company] = (stats.by_company[l.company] || 0) + 1
       stats.by_type[l.type] = (stats.by_type[l.type] || 0) + 1
     }
 
-    // Apply table filters
-    let filtered = dateFiltered
-    if (req.query.company) filtered = filtered.filter((l) => l.company === req.query.company)
-    if (req.query.type) filtered = filtered.filter((l) => l.type === req.query.type)
-    if (req.query.status) filtered = filtered.filter((l) => l.status === req.query.status)
-    if (req.query.branch) filtered = filtered.filter((l) => l.branch === req.query.branch)
-    if (req.query.source) filtered = filtered.filter((l) => l.source === req.query.source)
-    if (req.query.search) {
-      const s = req.query.search.toLowerCase()
-      filtered = filtered.filter((l) =>
-        l.name?.toLowerCase().includes(s) ||
-        l.phone?.includes(s) ||
-        l.city?.toLowerCase().includes(s) ||
-        l.details?.toLowerCase().includes(s)
-      )
-    }
+    // ── Query 2: Paginated leads (all filters + count) ──
+    let leadsQuery = req.supabase.from('leads').select('*', { count: 'exact' })
+    leadsQuery = applyBaseFilters(leadsQuery)
+    leadsQuery = applyTableFilters(leadsQuery)
+    leadsQuery = leadsQuery.order('created_at', { ascending: false })
+      .range(page * pageSize, (page + 1) * pageSize - 1)
 
-    // Pagination
-    const page = Math.max(0, parseInt(req.query.page) || 0)
-    const pageSize = Math.min(100, Math.max(1, parseInt(req.query.page_size) || 50))
-    const totalFiltered = filtered.length
-    const paginatedLeads = filtered.slice(page * pageSize, (page + 1) * pageSize)
+    const { data: leads, count: totalFiltered, error: leadsErr } = await leadsQuery
+    if (leadsErr) throw leadsErr
 
-    // Enrich with latest Maskyoo user_name per phone
-    const phones = [...new Set(paginatedLeads.map(l => l.phone).filter(Boolean))]
+    // ── Enrich with latest Maskyoo user_name per phone ──
+    const phones = [...new Set((leads || []).map(l => l.phone).filter(Boolean))]
     if (phones.length > 0) {
       const { data: callRows } = await req.supabaseAdmin
         .from('calls')
@@ -88,15 +108,13 @@ router.get('/leads', checkRole('admin'), async (req, res) => {
         for (const c of callRows) {
           if (!phoneToUser[c.cdr_ani]) phoneToUser[c.cdr_ani] = c.user_name
         }
-        for (const lead of paginatedLeads) {
-          if (lead.phone && phoneToUser[lead.phone]) {
-            lead.maskyoo_user = phoneToUser[lead.phone]
-          }
+        for (const lead of leads) {
+          if (lead.phone && phoneToUser[lead.phone]) lead.maskyoo_user = phoneToUser[lead.phone]
         }
       }
     }
 
-    res.json({ leads: paginatedLeads, stats, total: totalFiltered, page, page_size: pageSize })
+    res.json({ leads: leads || [], stats, total: totalFiltered ?? 0, page, page_size: pageSize })
   } catch (err) {
     console.error('[leads]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
@@ -104,10 +122,15 @@ router.get('/leads', checkRole('admin'), async (req, res) => {
 })
 
 // GET /api/leads/:id
-router.get('/leads/:id', checkRole('admin'), async (req, res) => {
+router.get('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     let query = req.supabase.from('leads').select('*').eq('id', req.params.id)
-    if (req.user.role !== 'super_admin') {
+    if (req.user.role === 'marketeur') {
+      // Verify affiliation
+      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
+        .select('id').eq('lead_id', req.params.id).eq('user_id', req.user.user_id).limit(1)
+      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
+    } else if (req.user.role !== 'super_admin') {
       query = query.eq('user_id', req.user.user_id)
     }
     const { data, error } = await query.single()
@@ -121,10 +144,14 @@ router.get('/leads/:id', checkRole('admin'), async (req, res) => {
 })
 
 // GET /api/leads/:id/calls — Maskyoo calls for a lead (matched by phone)
-router.get('/leads/:id/calls', checkRole('admin'), async (req, res) => {
+router.get('/leads/:id/calls', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     let query = req.supabase.from('leads').select('phone').eq('id', req.params.id)
-    if (req.user.role !== 'super_admin') {
+    if (req.user.role === 'marketeur') {
+      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
+        .select('id').eq('lead_id', req.params.id).eq('user_id', req.user.user_id).limit(1)
+      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
+    } else if (req.user.role !== 'super_admin') {
       query = query.eq('user_id', req.user.user_id)
     }
     const { data: lead, error } = await query.single()
@@ -146,11 +173,16 @@ router.get('/leads/:id/calls', checkRole('admin'), async (req, res) => {
 })
 
 // GET /api/leads/:id/activities — activity timeline for a lead
-router.get('/leads/:id/activities', checkRole('admin'), async (req, res) => {
+router.get('/leads/:id/activities', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
-    // Verify lead ownership
+    // Verify lead ownership or affiliation
+    if (req.user.role === 'marketeur') {
+      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
+        .select('id').eq('lead_id', req.params.id).eq('user_id', req.user.user_id).limit(1)
+      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
+    }
     let leadQuery = req.supabase.from('leads').select('id').eq('id', req.params.id)
-    if (req.user.role !== 'super_admin') leadQuery = leadQuery.eq('user_id', req.user.user_id)
+    if (!['super_admin', 'marketeur'].includes(req.user.role)) leadQuery = leadQuery.eq('user_id', req.user.user_id)
     const { data: lead } = await leadQuery.single()
     if (!lead) return res.status(404).json({ error: 'Lead introuvable' })
 
@@ -170,7 +202,7 @@ router.get('/leads/:id/activities', checkRole('admin'), async (req, res) => {
 })
 
 // POST /api/leads — UPSERT: merge by normalized phone + user_id
-router.post('/leads', checkRole('admin'), async (req, res) => {
+router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     const { name } = req.body
     const phone = normalizePhone(req.body.phone)
@@ -242,6 +274,14 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
         actor: req.user.email || 'admin',
       }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
 
+      // Auto-affiliate lead to creator
+      const { error: mergeAffErr } = await req.supabaseAdmin.from('lead_affiliations').upsert({
+        lead_id: data.id,
+        user_id: req.user.user_id,
+        source: 'manual',
+      }, { onConflict: 'lead_id,user_id' })
+      if (mergeAffErr) console.error('[lead-affiliation] merge failed:', mergeAffErr.message, mergeAffErr.details)
+
       return res.status(200).json({ lead: data, merged: true })
     }
 
@@ -286,30 +326,33 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
       actor: req.user.email || 'admin',
     }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
 
-    // Auto-dispatch if configured
-    if (data.branch) {
-      try {
-        const { data: config } = await req.supabase
-          .from('dispatch_config')
-          .select('auto_dispatch')
-          .eq('user_id', req.user.user_id)
-          .limit(1)
-          .maybeSingle()
+    // Auto-affiliate lead to creator
+    const { error: affErr } = await req.supabaseAdmin.from('lead_affiliations').upsert({
+      lead_id: data.id,
+      user_id: req.user.user_id,
+      source: 'manual',
+    }, { onConflict: 'lead_id,user_id' })
+    if (affErr) console.error('[lead-affiliation] create failed:', affErr.message, affErr.details)
 
-        if (config?.auto_dispatch) {
-          const result = await dispatchLead(req.supabase, data)
-          if (result.success || result.queued) {
-            // Re-fetch updated lead
-            const { data: refreshed } = await req.supabase.from('leads').select('*').eq('id', data.id).single()
-            if (refreshed) return res.status(201).json({ lead: refreshed })
-          }
-        }
-      } catch (dispatchErr) {
-        console.log('[leads/auto-dispatch]', dispatchErr.message)
-      }
-    }
-
+    // Respond immediately — don't block on auto-dispatch
     res.status(201).json({ lead: data })
+
+    // Auto-dispatch in background (fire-and-forget)
+    if (data.branch) {
+      req.supabase
+        .from('dispatch_config')
+        .select('auto_dispatch')
+        .eq('user_id', req.user.user_id)
+        .limit(1)
+        .maybeSingle()
+        .then(({ data: config }) => {
+          if (config?.auto_dispatch) {
+            return dispatchLead(req.supabase, data)
+          }
+        })
+        .then(() => {})
+        .catch(err => console.log('[leads/auto-dispatch]', err.message))
+    }
   } catch (err) {
     console.error('[leads]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
@@ -317,7 +360,7 @@ router.post('/leads', checkRole('admin'), async (req, res) => {
 })
 
 // PUT /api/leads/:id
-router.put('/leads/:id', checkRole('admin'), async (req, res) => {
+router.put('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     const { id } = req.params
     const allowed = [
@@ -329,7 +372,13 @@ router.put('/leads/:id', checkRole('admin'), async (req, res) => {
 
     // Fetch current lead to compute diff
     let fetchQuery = req.supabase.from('leads').select('*').eq('id', id)
-    if (req.user.role !== 'super_admin') fetchQuery = fetchQuery.eq('user_id', req.user.user_id)
+    if (req.user.role === 'marketeur') {
+      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
+        .select('id').eq('lead_id', id).eq('user_id', req.user.user_id).limit(1)
+      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
+    } else if (req.user.role !== 'super_admin') {
+      fetchQuery = fetchQuery.eq('user_id', req.user.user_id)
+    }
     const { data: before } = await fetchQuery.single()
     if (!before) return res.status(404).json({ error: 'Lead introuvable' })
 
@@ -339,7 +388,7 @@ router.put('/leads/:id', checkRole('admin'), async (req, res) => {
     }
 
     let query = req.supabase.from('leads').update(updates).eq('id', id)
-    if (req.user.role !== 'super_admin') {
+    if (!['super_admin', 'marketeur'].includes(req.user.role)) {
       query = query.eq('user_id', req.user.user_id)
     }
     const { data, error } = await query.select().single()
@@ -479,11 +528,17 @@ async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) 
 }
 
 // POST /api/leads/:id/dispatch — send lead to branch via WhatsApp
-router.post('/leads/:id/dispatch', checkRole('admin'), async (req, res) => {
+router.post('/leads/:id/dispatch', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     const { id } = req.params
     let leadQuery = req.supabase.from('leads').select('*').eq('id', id)
-    if (req.user.role !== 'super_admin') leadQuery = leadQuery.eq('user_id', req.user.user_id)
+    if (req.user.role === 'marketeur') {
+      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
+        .select('id').eq('lead_id', id).eq('user_id', req.user.user_id).limit(1)
+      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
+    } else if (req.user.role !== 'super_admin') {
+      leadQuery = leadQuery.eq('user_id', req.user.user_id)
+    }
     const { data: lead, error: leadErr } = await leadQuery.single()
     if (leadErr || !lead) return res.status(404).json({ error: 'Lead introuvable' })
 
@@ -508,7 +563,7 @@ router.post('/leads/:id/dispatch', checkRole('admin'), async (req, res) => {
 })
 
 // POST /api/leads/:id/comment — add a comment to lead timeline
-router.post('/leads/:id/comment', checkRole('admin'), async (req, res) => {
+router.post('/leads/:id/comment', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     const { id } = req.params
     const { comment } = req.body
@@ -532,7 +587,7 @@ router.post('/leads/:id/comment', checkRole('admin'), async (req, res) => {
 // ─── Lead Field Definitions ─────────────────────────────
 
 // GET /api/lead-fields
-router.get('/lead-fields', checkRole('admin'), async (req, res) => {
+router.get('/lead-fields', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     let query = req.supabase.from('lead_field_definitions').select('*')
     if (req.user.role !== 'super_admin') {
@@ -760,6 +815,149 @@ function parseCSV(text) {
   }
   return rows
 }
+
+// ─── Lead Documents ─────────────────────────────────────
+
+const docUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/', 'application/pdf', 'application/msword', 'application/vnd.openxmlformats', 'text/']
+    if (allowed.some(t => file.mimetype.startsWith(t))) cb(null, true)
+    else cb(new Error('Type de fichier non supporte'))
+  },
+})
+
+// GET /api/leads/:id/documents
+router.get('/leads/:id/documents', checkRole('admin', 'marketeur'), async (req, res) => {
+  try {
+    if (!await verifyMarketeurAccess(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+    const { data, error } = await req.supabaseAdmin
+      .from('lead_documents')
+      .select('*')
+      .eq('lead_id', req.params.id)
+      .order('created_at', { ascending: false })
+    if (error) throw error
+    res.json({ documents: data || [] })
+  } catch (err) {
+    console.error('[lead-documents]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// POST /api/leads/:id/documents
+router.post('/leads/:id/documents', checkRole('admin', 'marketeur'), docUpload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Fichier requis' })
+    if (!await verifyMarketeurAccess(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+
+    const ext = req.file.originalname.split('.').pop()
+    const filename = `lead-docs/${req.params.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+
+    const { error: uploadErr } = await req.supabaseAdmin.storage
+      .from('chat-attachments')
+      .upload(filename, req.file.buffer, { contentType: req.file.mimetype })
+    if (uploadErr) throw uploadErr
+
+    const { data: { publicUrl } } = req.supabaseAdmin.storage
+      .from('chat-attachments')
+      .getPublicUrl(filename)
+
+    const { data, error } = await req.supabaseAdmin
+      .from('lead_documents')
+      .insert({
+        lead_id: parseInt(req.params.id),
+        uploaded_by: req.user.user_id,
+        name: req.file.originalname,
+        url: publicUrl,
+        mime_type: req.file.mimetype,
+        size: req.file.size,
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+    res.status(201).json({ document: data })
+  } catch (err) {
+    console.error('[lead-documents]', err.message)
+    res.status(500).json({ error: err.message || 'Erreur interne' })
+  }
+})
+
+// DELETE /api/leads/:id/documents/:docId
+router.delete('/leads/:id/documents/:docId', checkRole('admin'), async (req, res) => {
+  try {
+    const { error } = await req.supabaseAdmin
+      .from('lead_documents')
+      .delete()
+      .eq('id', req.params.docId)
+      .eq('lead_id', req.params.id)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[lead-documents]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// ─── Lead Affiliations ─────────────────────────────────
+
+// GET /api/leads/:id/affiliations
+router.get('/leads/:id/affiliations', checkRole('admin', 'marketeur'), async (req, res) => {
+  try {
+    if (!await verifyMarketeurAccess(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+    const { data, error } = await req.supabaseAdmin
+      .from('lead_affiliations')
+      .select('id, user_id, source, created_at, users(id, email, first_name, last_name, role)')
+      .eq('lead_id', req.params.id)
+      .order('created_at', { ascending: true })
+    if (error) throw error
+    res.json({ affiliations: data || [] })
+  } catch (err) {
+    console.error('[lead-affiliations]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// POST /api/leads/:id/affiliations
+router.post('/leads/:id/affiliations', checkRole('admin'), async (req, res) => {
+  try {
+    const { user_id } = req.body
+    if (!user_id) return res.status(400).json({ error: 'user_id requis' })
+
+    const { data, error } = await req.supabaseAdmin
+      .from('lead_affiliations')
+      .upsert({
+        lead_id: parseInt(req.params.id),
+        user_id: parseInt(user_id),
+        source: 'manual',
+      }, { onConflict: 'lead_id,user_id' })
+      .select('id, user_id, source, created_at')
+      .single()
+
+    if (error) throw error
+    res.status(201).json({ affiliation: data })
+  } catch (err) {
+    console.error('[lead-affiliations]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// DELETE /api/leads/:id/affiliations/:userId
+router.delete('/leads/:id/affiliations/:userId', checkRole('admin'), async (req, res) => {
+  try {
+    const { error } = await req.supabaseAdmin
+      .from('lead_affiliations')
+      .delete()
+      .eq('lead_id', req.params.id)
+      .eq('user_id', req.params.userId)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[lead-affiliations]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
 
 export { dispatchLead }
 export default router

@@ -17,7 +17,7 @@ export async function checkAuth(req, res, next) {
     // Lookup public.users by auth_id to get BIGINT user_id + role
     const { data: users, error: dbError } = await req.supabaseAdmin
       .from('users')
-      .select('id, email, role')
+      .select('id, email, role, capture_token')
       .eq('auth_id', authUser.id)
       .limit(1)
 
@@ -30,6 +30,7 @@ export async function checkAuth(req, res, next) {
       user_id: users[0].id,
       email: users[0].email,
       role: users[0].role,
+      capture_token: users[0].capture_token || null,
     }
     next()
   } catch (err) {
@@ -40,9 +41,9 @@ export async function checkAuth(req, res, next) {
 export function checkRole(...roles) {
   return (req, res, next) => {
     if (!req.user) return res.status(403).json({ error: 'Acces interdit' })
-    // super_admin inherits all admin permissions
+    // super_admin inherits all permissions
     const hasAccess = roles.includes(req.user.role) ||
-      (req.user.role === 'super_admin' && roles.includes('admin'))
+      (req.user.role === 'super_admin')
     if (!hasAccess) return res.status(403).json({ error: 'Acces interdit' })
     next()
   }

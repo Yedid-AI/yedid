@@ -273,7 +273,7 @@ export default function Inboxes() {
         )
       ) : (
         <Card>
-          <Table className="[&_th:first-child]:pl-3 [&_td:first-child]:pl-3">
+          <Table className="[&_th:first-child]:ps-3 [&_td:first-child]:ps-3">
             <TableHeader>
               <TableRow>
                 <TableHead>{t('common.name')}</TableHead>

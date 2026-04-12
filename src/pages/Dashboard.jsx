@@ -177,7 +177,7 @@ export default function Dashboard() {
       {selectedSession && (
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/30" onClick={closeSession} />
-          <div className="absolute right-0 top-0 h-full w-full max-w-lg bg-background border-l shadow-soft-xl overflow-hidden flex flex-col">
+          <div className="absolute end-0 top-0 h-full w-full max-w-lg bg-background border-s shadow-soft-xl overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
               <div>
                 <h2 className="text-lg font-semibold">{t('sessions.detail')}</h2>
@@ -301,7 +301,7 @@ export default function Dashboard() {
       {user?.role === 'admin' && (
         <div className="mt-10">
           <div className="flex gap-3 mb-4 flex-wrap items-center">
-            <h2 className="text-lg font-semibold tracking-tight mr-auto">{t('sessions.title')}</h2>
+            <h2 className="text-lg font-semibold tracking-tight me-auto">{t('sessions.title')}</h2>
 
             <Select value={filterStatus} onValueChange={setFilterStatus}>
               <SelectTrigger className="w-[160px]">
@@ -342,7 +342,7 @@ export default function Dashboard() {
                       <button
                         key={preset}
                         onClick={() => selectDatePreset(preset)}
-                        className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
+                        className={`text-start text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
                       >
                         {t(`sessions.${preset}`)}
                       </button>
@@ -389,7 +389,7 @@ export default function Dashboard() {
 
           {chartData.length > 0 && (
             <div className="mb-6">
-              <div className="pt-2 pr-2">
+              <div className="pt-2 pe-2">
                 <ResponsiveContainer width="100%" height={240}>
                   <AreaChart data={chartData}>
                     <defs>
@@ -436,7 +436,7 @@ export default function Dashboard() {
           )}
 
           <Card>
-            <Table className="[&_th:first-child]:pl-3 [&_td:first-child]:pl-3">
+            <Table className="[&_th:first-child]:ps-3 [&_td:first-child]:ps-3">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('sessions.inbox')}</TableHead>
@@ -502,10 +502,10 @@ export default function Dashboard() {
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <span>{safePage * pageSize + 1}–{Math.min((safePage + 1) * pageSize, sessions.length)} / {sessions.length}</span>
                   <Button variant="ghost" size="icon" className="h-8 w-8" disabled={safePage === 0} onClick={() => setCurrentPage(safePage - 1)}>
-                    <ChevronLeft size={14} />
+                    <ChevronLeft size={14} className="icon-directional" />
                   </Button>
                   <Button variant="ghost" size="icon" className="h-8 w-8" disabled={safePage >= totalPages - 1} onClick={() => setCurrentPage(safePage + 1)}>
-                    <ChevronRight size={14} />
+                    <ChevronRight size={14} className="icon-directional" />
                   </Button>
                 </div>
               </div>

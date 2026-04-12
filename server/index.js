@@ -26,8 +26,10 @@ import branchesRoutes from './routes/branches.js'
 import dispatchConfigRoutes from './routes/dispatch-config.js'
 import callsRoutes from './routes/calls.js'
 import publicLeadsRoutes from './routes/public-leads.js'
+import leadCaptureRoutes from './routes/lead-capture.js'
 import followupConfigRoutes from './routes/followup-config.js'
 import maskyooLinesRoutes from './routes/maskyoo-lines.js'
+import realtimeRoutes, { initRealtime } from './routes/realtime.js'
 import { loadSettings } from './settings.js'
 import { startClosingCron } from './engine/closing-cron.js'
 import { startCallsCron } from './engine/calls-cron.js'
@@ -111,6 +113,7 @@ app.use('/api/public', publicLeadsLimiter)
 
 // Public routes (no auth required)
 app.use('/api', publicLeadsRoutes)
+app.use('/api', leadCaptureRoutes)
 
 // API routes
 app.use('/api', authRoutes)
@@ -133,6 +136,7 @@ app.use('/api', checkAuth, dispatchConfigRoutes)
 app.use('/api', checkAuth, callsRoutes)
 app.use('/api', checkAuth, followupConfigRoutes)
 app.use('/api', checkAuth, maskyooLinesRoutes)
+app.use('/api', realtimeRoutes)
 
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
@@ -204,6 +208,7 @@ app.listen(PORT, async () => {
   }
   await loadSettings(supabase)
   await seedAdmin()
+  initRealtime(supabaseAdmin)
   startClosingCron(supabaseAdmin)
   startCallsCron(supabaseAdmin)
   startFollowupCron(supabaseAdmin)

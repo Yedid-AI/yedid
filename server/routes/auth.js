@@ -50,7 +50,7 @@ router.post('/login', async (req, res) => {
     }
 
     const { password_hash, auth_id, ...safeUser } = users[0]
-    await attachChatwootData(req.supabase, safeUser)
+    await attachChatwootData(req.supabaseAdmin, safeUser)
 
     res.json({
       token: authData.session.access_token,
@@ -96,7 +96,7 @@ router.post('/register', checkAuth, checkRole('super_admin'), async (req, res) =
       return res.status(400).json({ error: 'Email et mot de passe requis' })
     }
 
-    const validRoles = ['super_admin', 'admin', 'agent']
+    const validRoles = ['super_admin', 'admin', 'agent', 'marketeur']
     if (role && !validRoles.includes(role)) {
       return res.status(400).json({ error: 'Role invalide' })
     }
@@ -352,6 +352,13 @@ router.post('/heartbeat', checkAuth, async (req, res) => {
     console.error('[heartbeat]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
   }
+})
+
+// POST /api/logout — clear server-side state (no-op for now, frontend handles token cleanup)
+router.post('/logout', async (req, res) => {
+  // Don't call supabase.auth.signOut() — it's a shared singleton and would
+  // invalidate sessions for all users. Frontend clears localStorage which is sufficient.
+  res.json({ success: true })
 })
 
 // POST /api/auth/refresh — refresh access token

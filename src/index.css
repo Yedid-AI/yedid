@@ -133,7 +133,7 @@ body {
 }
 [dir="rtl"] th,
 [dir="rtl"] td {
-  text-align: right;
+  text-align: start;
 }
 
 /* Softer focus rings */

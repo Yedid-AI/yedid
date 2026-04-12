@@ -153,7 +153,7 @@ export default function ToolsLibrary() {
               ) : (
                 tools.map((tool) => (
                   <TableRow key={tool.id} className={editItem?.id === tool.id ? 'bg-primary/5' : ''}>
-                    <TableCell className="font-medium">{tool.emoji && <span className="mr-1.5">{tool.emoji}</span>}{tool.name}</TableCell>
+                    <TableCell className="font-medium">{tool.emoji && <span className="me-1.5">{tool.emoji}</span>}{tool.name}</TableCell>
                     <TableCell><Badge variant="outline" className="font-mono">{tool.method}</Badge></TableCell>
                     <TableCell className="text-muted-foreground truncate max-w-[200px]">{tool.url}</TableCell>
                     <TableCell className="truncate max-w-[250px]">{tool.description}</TableCell>

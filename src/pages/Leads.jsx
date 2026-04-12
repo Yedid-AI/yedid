@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls, useLeadActivities, useAddLeadComment } from '../hooks/queries'
+import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls, useLeadActivities, useAddLeadComment, useLeadDocuments, useUploadLeadDocument, useDeleteLeadDocument, useLeadAffiliations, useAddLeadAffiliation, useRemoveLeadAffiliation, useUsers, useCityIndex } from '../hooks/queries'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
@@ -21,7 +21,7 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, PhoneIncoming, PhoneMissed, Phone as PhoneIcon, Send, Settings, Plus, Trash2, History, Bot, ArrowRight, MessageSquare, Mail, MapPin, Building2, Briefcase, User, Hash, Globe } from 'lucide-react'
+import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, PhoneIncoming, PhoneMissed, Phone as PhoneIcon, Send, Settings, Plus, Trash2, History, Bot, ArrowRight, MessageSquare, Mail, MapPin, Building2, Briefcase, User, Hash, Globe, Paperclip, FileText, Link2, Copy, Check, Users } from 'lucide-react'
 import babaitLogo from '@/assets/babaitlogo.png'
 import aviezerLogo from '@/assets/aviezer logo.png'
 
@@ -43,7 +43,7 @@ const STATUS_CONFIG = {
 
 const emptyForm = {
   company: 'babait', type: 'patient', name: '', phone: '', email: '', city: '',
-  branch: '', source: '', service_requested: '', details: '', status: 'new',
+  branch: '', source: '', lead_channel: '', service_requested: '', details: '', status: 'new',
   position_type: '', custom_fields: {},
 }
 
@@ -59,9 +59,11 @@ export default function Leads() {
   const [filterStatus, setFilterStatus] = useState('')
   const [filterBranch, setFilterBranch] = useState('')
   const [filterSearch, setFilterSearch] = useState('')
+  const [filterAffiliatedUser, setFilterAffiliatedUser] = useState('')
   const [filterDateRange, setFilterDateRange] = useState('last30')
   const [customRange, setCustomRange] = useState({ from: undefined, to: undefined })
   const [datePopoverOpen, setDatePopoverOpen] = useState(false)
+  const [captureLinked, setCaptureLinked] = useState(false)
 
   // Pagination
   const [pageSize, setPageSize] = useState(50)
@@ -72,6 +74,7 @@ export default function Leads() {
   const [editMode, setEditMode] = useState(false)
   const [form, setForm] = useState(emptyForm)
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
+  const [createStep, setCreateStep] = useState(1)
   const [importDialogOpen, setImportDialogOpen] = useState(false)
   const [fieldsDialogOpen, setFieldsDialogOpen] = useState(false)
   const [error, setError] = useState('')
@@ -122,9 +125,14 @@ export default function Leads() {
     date_to: dateTo,
     page: currentPage,
     page_size: pageSize,
+    affiliated_user_id: filterAffiliatedUser || undefined,
   }
+  const isSuperAdmin = user?.role === 'super_admin'
+  const isAdminOrAbove = isSuperAdmin || user?.role === 'admin'
+  const { data: allUsers } = useUsers({ enabled: isAdminOrAbove })
   const { data: leadsData, isLoading } = useLeads(filters)
   const { data: branches = [] } = useBranches()
+  const { data: cities = [] } = useCityIndex()
   const { data: leadFields = [] } = useLeadFields()
   const createLead = useCreateLead()
   const updateLead = useUpdateLead()
@@ -199,6 +207,7 @@ export default function Leads() {
       city: lead.city || '',
       branch: lead.branch || '',
       source: lead.source || '',
+      lead_channel: lead.lead_channel || '',
       service_requested: lead.service_requested || '',
       details: lead.details || '',
       status: lead.status || 'new',
@@ -383,7 +392,7 @@ export default function Leads() {
                         <button
                           key={preset}
                           onClick={() => selectDatePreset(preset)}
-                          className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
+                          className={`text-start text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
                         >
                           {preset === 'all' ? t('leads.allTime') : t(`sessions.${preset}`)}
                         </button>
@@ -405,9 +414,9 @@ export default function Leads() {
               </Popover>
             </div>
             <div className="relative">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search size={14} className="absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-8 w-full h-8 text-sm"
+                className="ps-8 w-full h-8 text-sm"
                 placeholder={t('leads.search')}
                 value={filterSearch}
                 onChange={(e) => setFilterSearch(e.target.value)}
@@ -416,10 +425,10 @@ export default function Leads() {
           </>
         ) : (
           <>
-            <div className="relative mr-auto">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative me-auto">
+              <Search size={14} className="absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-8 w-[220px] h-9"
+                className="ps-8 w-[220px] h-9"
                 placeholder={t('leads.search')}
                 value={filterSearch}
                 onChange={(e) => setFilterSearch(e.target.value)}
@@ -484,7 +493,7 @@ export default function Leads() {
                       <button
                         key={preset}
                         onClick={() => selectDatePreset(preset)}
-                        className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
+                        className={`text-start text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
                       >
                         {preset === 'all' ? t('leads.allTime') : t(`sessions.${preset}`)}
                       </button>
@@ -534,7 +543,7 @@ export default function Leads() {
       {panelOpen ? (
         /* Table without Card wrapper when panel is open — no border, no margin, edge-to-edge */
         <div className="flex-1 min-h-0 overflow-auto">
-          <Table className="[&_th:first-child]:pl-3 [&_td:first-child]:pl-3">
+          <Table className="[&_th:first-child]:ps-3 [&_td:first-child]:ps-3">
             <TableHeader>
               <TableRow>
                 <TableHead>{t('common.name')}</TableHead>
@@ -606,10 +615,10 @@ export default function Leads() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>{currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, totalFiltered)} / {totalFiltered}</span>
                 <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>
-                  <ChevronLeft size={14} />
+                  <ChevronLeft size={14} className="icon-directional" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage(currentPage + 1)}>
-                  <ChevronRight size={14} />
+                  <ChevronRight size={14} className="icon-directional" />
                 </Button>
               </div>
             </div>
@@ -618,7 +627,7 @@ export default function Leads() {
       ) : (
         /* Full table with Card when no panel */
         <Card>
-          <Table className="[&_th:first-child]:pl-3 [&_td:first-child]:pl-3">
+          <Table className="[&_th:first-child]:ps-3 [&_td:first-child]:ps-3">
             <TableHeader>
               <TableRow>
                 <TableHead>{t('common.name')}</TableHead>
@@ -690,10 +699,10 @@ export default function Leads() {
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <span>{currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, totalFiltered)} / {totalFiltered}</span>
                 <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage === 0} onClick={() => setCurrentPage(currentPage - 1)}>
-                  <ChevronLeft size={14} />
+                  <ChevronLeft size={14} className="icon-directional" />
                 </Button>
                 <Button variant="ghost" size="icon" className="h-8 w-8" disabled={currentPage >= totalPages - 1} onClick={() => setCurrentPage(currentPage + 1)}>
-                  <ChevronRight size={14} />
+                  <ChevronRight size={14} className="icon-directional" />
                 </Button>
               </div>
             </div>
@@ -762,10 +771,10 @@ export default function Leads() {
           <div className="flex-1 overflow-y-auto px-6 py-4">
             {editMode ? (
               <form id="lead-edit-form" onSubmit={handleUpdate} className="space-y-4">
-                <LeadFormFields form={form} setForm={setForm} t={t} branches={branches} leadFields={leadFields} showCompany={user?.role === 'super_admin'} />
+                <LeadFormFields form={form} setForm={setForm} t={t} branches={branches} cities={cities} leadFields={leadFields} showCompany={user?.role === 'super_admin'} />
               </form>
             ) : (
-              <LeadDetail lead={selectedLead} t={t} leadFields={leadFields} isSuperAdmin={user?.role === 'super_admin'} />
+              <LeadDetail lead={selectedLead} t={t} leadFields={leadFields} isSuperAdmin={user?.role === 'super_admin'} userRole={user?.role} />
             )}
           </div>
           {!editMode && <LeadCommentInput leadId={selectedLead.id} t={t} />}
@@ -774,18 +783,103 @@ export default function Leads() {
       )}
 
       {/* Create dialog */}
-      <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) setForm(emptyForm) }}>
+      <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) { setForm(emptyForm); setCreateStep(1) } }}>
         <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{t('leads.dialogTitle')}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreate} className="space-y-4">
-            <LeadFormFields form={form} setForm={setForm} t={t} branches={branches} leadFields={leadFields} showCompany={user?.role === 'super_admin'} />
-            <div className="flex gap-2 justify-end">
-              <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)}>{t('common.cancel')}</Button>
-              <Button type="submit">{t('common.create')}</Button>
+            {/* Step indicator */}
+            <div className="flex items-center gap-2 pt-2">
+              {[{ step: 1, label: t('leads.company') }, { step: 2, label: t('leads.type') }, { step: 3, label: t('leads.sectionContact') }].map(({ step, label }, i) => (
+                <div key={step} className="flex items-center gap-2">
+                  {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50 icon-directional" />}
+                  <div className={`flex items-center gap-1.5 text-xs font-medium ${createStep === step ? 'text-primary' : createStep > step ? 'text-muted-foreground' : 'text-muted-foreground/50'}`}>
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${createStep === step ? 'bg-primary text-primary-foreground' : createStep > step ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>{step}</span>
+                    {label}
+                  </div>
+                </div>
+              ))}
             </div>
-          </form>
+          </DialogHeader>
+
+          {/* Step 1: Company / Org */}
+          {createStep === 1 && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-2 gap-3">
+                {Object.entries(COMPANY_LOGOS).map(([key, { src, label }]) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => { setForm({ ...form, company: key }); setCreateStep(2) }}
+                    className={`flex flex-col items-center gap-3 rounded-xl border-2 p-6 transition-all cursor-pointer
+                      ${form.company === key
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-muted hover:border-muted-foreground/30 hover:bg-muted/30'}`}
+                  >
+                    <img src={src} alt={label} className="h-12 w-auto object-contain" />
+                    <span className="text-sm font-medium">{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Type (patient vs employee) */}
+          {createStep === 2 && (
+            <div className="space-y-4 py-2">
+              {/* Company reminder */}
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                <img src={COMPANY_LOGOS[form.company]?.src} alt="" className="h-5 w-auto" />
+                <span className="text-sm font-medium">{COMPANY_LOGOS[form.company]?.label}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { type: 'patient', icon: '🧑‍🦳', labelKey: 'leads.typeNewPatient' },
+                  { type: 'caregiver', icon: '👩‍⚕️', labelKey: 'leads.typeNewEmployee' },
+                ].map(({ type, icon, labelKey }) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => { setForm({ ...form, type }); setCreateStep(3) }}
+                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-6 transition-all cursor-pointer
+                      ${form.type === type
+                        ? 'border-primary bg-primary/5 shadow-sm'
+                        : 'border-muted hover:border-muted-foreground/30 hover:bg-muted/30'}`}
+                  >
+                    <span className="text-3xl">{icon}</span>
+                    <span className="text-sm font-medium">{t(labelKey)}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex justify-start">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateStep(1)} className="gap-1.5">
+                  <ChevronLeft className="w-4 h-4 icon-directional" /> {t('common.back')}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: Form fields */}
+          {createStep === 3 && (
+            <form onSubmit={handleCreate} className="space-y-4">
+              {/* Summary of selections */}
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                <img src={COMPANY_LOGOS[form.company]?.src} alt="" className="h-5 w-auto" />
+                <span className="text-sm font-medium">{COMPANY_LOGOS[form.company]?.label}</span>
+                <span className="text-muted-foreground">·</span>
+                <span className="text-sm">{TYPE_ICONS[form.type]} {t(`leads.type_${form.type}`)}</span>
+              </div>
+              <LeadFormFields form={form} setForm={setForm} t={t} branches={branches} cities={cities} leadFields={leadFields} hideTypeSelector />
+              <div className="flex gap-2 justify-between">
+                <Button type="button" variant="ghost" onClick={() => setCreateStep(2)} className="gap-1.5">
+                  <ChevronLeft className="w-4 h-4 icon-directional" /> {t('common.back')}
+                </Button>
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit" disabled={createLead.isPending}>{createLead.isPending ? t('common.saving') : t('common.create')}</Button>
+                </div>
+              </div>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -900,11 +994,44 @@ export default function Leads() {
 
       {/* Header actions */}
       {actionsContainer && createPortal(
-        <div className="flex gap-2">
-          <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setFieldsDialogOpen(true)}>
-            <Settings size={14} />
-            {t('leads.manageFields')}
-          </Button>
+        <div className="flex gap-2 items-center">
+          {/* Capture link */}
+          {user?.capture_token && (
+            <Button
+              variant="ghost" size="sm" className="gap-1.5"
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/lead/${user.capture_token}`)
+                setCaptureLinked(true)
+                setTimeout(() => setCaptureLinked(false), 2000)
+              }}
+            >
+              {captureLinked ? <Check size={14} className="text-emerald-500" /> : <Link2 size={14} />}
+              {captureLinked ? t('leads.linkCopied') : t('leads.captureLink')}
+            </Button>
+          )}
+          {/* Super admin: filter by user */}
+          {user?.role === 'super_admin' && allUsers?.length > 0 && (
+            <Select value={filterAffiliatedUser || 'all'} onValueChange={(v) => setFilterAffiliatedUser(v === 'all' ? '' : v)}>
+              <SelectTrigger className="h-8 w-[180px] text-xs">
+                <Users size={12} className="me-1" />
+                <SelectValue placeholder={t('leads.allUsers')} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">{t('leads.allUsers')}</SelectItem>
+                {allUsers.map((u) => (
+                  <SelectItem key={u.id} value={String(u.id)}>
+                    {u.first_name || u.email} {u.role === 'marketeur' ? '(M)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          {user?.role !== 'marketeur' && (
+            <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setFieldsDialogOpen(true)}>
+              <Settings size={14} />
+              {t('leads.manageFields')}
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setImportDialogOpen(true)}>
             <Upload size={14} />
             {t('leads.import')}
@@ -920,100 +1047,294 @@ export default function Leads() {
   )
 }
 
+// ─── Dropdown options ───────────────────────────────────
+const SERVICE_OPTIONS = [
+  'סיעוד וזכאות', 'עובד זר', 'מטפל/ת', 'יעוץ', 'שירות פרטי',
+  'השגחה בבית חולים', 'אחות פרטית', 'שירות אמבולנס', 'מחפש עבודה',
+]
+
+const SOURCE_OPTIONS = [
+  'manual', 'website', 'phone', 'whatsapp', 'chatbot', 'referral', 'facebook', 'google', 'csv_import',
+]
+
+const CHANNEL_OPTIONS = [
+  'phone', 'whatsapp', 'website', 'email', 'chat', 'walk-in', 'facebook', 'referral',
+]
+
+const POSITION_OPTIONS = [
+  'מטפל/ת', 'עובד/ת זר/ה', 'אחות', 'מנהל/ת בית', 'עובד/ת סוציאלי/ת', 'פיזיותרפיסט/ית',
+]
+
+function SelectWithOther({ value, onChange, options, placeholder, t }) {
+  const [isOther, setIsOther] = useState(false)
+
+  useEffect(() => {
+    if (value && !options.includes(value)) setIsOther(true)
+  }, [])
+
+  if (isOther) {
+    return (
+      <div className="flex gap-1.5">
+        <Input
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="flex-1"
+        />
+        <Button type="button" variant="ghost" size="sm" className="px-2 shrink-0" onClick={() => { onChange(''); setIsOther(false) }}>
+          <X size={14} />
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <Select value={value || '__empty__'} onValueChange={(v) => {
+      if (v === '__other__') { setIsOther(true); onChange('') }
+      else if (v === '__empty__') onChange('')
+      else onChange(v)
+    }}>
+      <SelectTrigger><SelectValue placeholder={placeholder || '-'} /></SelectTrigger>
+      <SelectContent>
+        <SelectItem value="__empty__">-</SelectItem>
+        {options.map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
+        <SelectItem value="__other__" className="text-muted-foreground italic">{t('common.other')}</SelectItem>
+      </SelectContent>
+    </Select>
+  )
+}
+
+function CityCombobox({ value, onChange, cities, placeholder }) {
+  const [search, setSearch] = useState('')
+  const [open, setOpen] = useState(false)
+  const uniqueCities = useMemo(() => [...new Set((cities || []).map((c) => c.city).filter(Boolean))].sort(), [cities])
+  const filtered = uniqueCities.filter((c) => c.includes(search))
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" role="combobox" className="w-full justify-between font-normal h-9 px-3">
+          <span className={value ? '' : 'text-muted-foreground'}>{value || placeholder || '-'}</span>
+          <ChevronRight className="w-3 h-3 rotate-90 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <div className="p-2 border-b">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="חיפוש..."
+            className="h-8 text-sm"
+            autoFocus
+          />
+        </div>
+        <div className="max-h-48 overflow-y-auto p-1">
+          {filtered.length === 0 ? (
+            <div className="p-2 text-xs text-muted-foreground text-center">
+              {search && <button type="button" className="text-primary underline" onClick={() => { onChange(search); setOpen(false); setSearch('') }}>"{search}"</button>}
+            </div>
+          ) : (
+            filtered.map((city) => (
+              <button
+                key={city}
+                type="button"
+                onClick={() => { onChange(city); setOpen(false); setSearch('') }}
+                className={`w-full text-start px-2 py-1.5 text-sm rounded-sm hover:bg-muted transition-colors ${value === city ? 'bg-primary/10 font-medium' : ''}`}
+              >
+                {city}
+              </button>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 // ─── Lead Form Fields (reusable) ────────────────────────
-function LeadFormFields({ form, setForm, t, branches, leadFields, showCompany }) {
+const TYPE_ICONS = { patient: '🧑‍🦳', caregiver: '👩‍⚕️', foreign_caregiver: '🌍' }
+
+function FormSection({ icon: Icon, title, children }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+        {Icon && <Icon size={13} />}
+        {title}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCompany, hideTypeSelector }) {
+  const isPatient = form.type === 'patient'
+  const isCaregiver = form.type === 'caregiver'
+  const isForeignCaregiver = form.type === 'foreign_caregiver'
+
   return (
     <>
-      {showCompany && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-2">
-            <Label>{t('leads.company')}</Label>
-            <Select value={form.company} onValueChange={(v) => setForm({ ...form, company: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="babait">Babait</SelectItem>
-                <SelectItem value="aviezer">Aviezer</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label>{t('leads.type')}</Label>
-            <Select value={form.type} onValueChange={(v) => setForm({ ...form, type: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="patient">{t('leads.typePatient')}</SelectItem>
-                <SelectItem value="caregiver">{t('leads.typeCaregiver')}</SelectItem>
-                <SelectItem value="foreign_caregiver">{t('leads.typeForeignCaregiver')}</SelectItem>
-              </SelectContent>
-            </Select>
+      {/* ── Type selector (hidden when using stepper) ── */}
+      {!hideTypeSelector && (
+        <div className="space-y-2">
+          <Label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('leads.type')}</Label>
+          <div className="grid grid-cols-3 gap-2">
+            {['patient', 'caregiver', 'foreign_caregiver'].map((typ) => (
+              <button
+                key={typ}
+                type="button"
+                onClick={() => setForm({ ...form, type: typ })}
+                className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 transition-all text-center
+                  ${form.type === typ
+                    ? 'border-primary bg-primary/5 shadow-sm'
+                    : 'border-muted hover:border-muted-foreground/30 hover:bg-muted/30'}`}
+              >
+                <span className="text-xl">{TYPE_ICONS[typ]}</span>
+                <span className="text-xs font-medium">{t(`leads.type_${typ}`)}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-3">
+
+      {showCompany && !hideTypeSelector && (
         <div className="space-y-2">
-          <Label>{t('common.name')} *</Label>
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-        </div>
-        <div className="space-y-2">
-          <Label>{t('leads.phone')} *</Label>
-          <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label>{t('common.email')}</Label>
-          <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-        </div>
-        <div className="space-y-2">
-          <Label>{t('leads.city')}</Label>
-          <Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} />
-        </div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label>{t('leads.branch')}</Label>
-          <Select value={form.branch || 'none'} onValueChange={(v) => setForm({ ...form, branch: v === 'none' ? '' : v })}>
+          <Label>{t('leads.company')}</Label>
+          <Select value={form.company} onValueChange={(v) => setForm({ ...form, company: v })}>
             <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="none">-</SelectItem>
-              {branches.map((b) => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
+              <SelectItem value="babait">Babait</SelectItem>
+              <SelectItem value="aviezer">Aviezer</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <div className="space-y-2">
-          <Label>{t('leads.source')}</Label>
-          <Input value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} />
+      )}
+
+      {/* ── Contact info (all types) ── */}
+      <FormSection icon={User} title={t('leads.sectionContact')}>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t('common.name')} *</Label>
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder={isPatient ? t('leads.placeholderPatientName') : t('leads.placeholderName')} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t('leads.phone')} *</Label>
+            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required placeholder="05x-xxx-xxxx" />
+          </div>
         </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t('common.email')}</Label>
+            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t('leads.city')}</Label>
+            <CityCombobox value={form.city} onChange={(v) => setForm({ ...form, city: v })} cities={cities} placeholder={t('leads.city')} />
+          </div>
+        </div>
+      </FormSection>
+
+      {/* ── Patient-specific fields ── */}
+      {isPatient && (
+        <FormSection icon={Building2} title={t('leads.sectionService')}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('leads.serviceRequested')}</Label>
+              <SelectWithOther value={form.service_requested} onChange={(v) => setForm({ ...form, service_requested: v })} options={SERVICE_OPTIONS} placeholder={t('leads.placeholderService')} t={t} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('leads.branch')}</Label>
+              <Select value={form.branch || 'none'} onValueChange={(v) => setForm({ ...form, branch: v === 'none' ? '' : v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-</SelectItem>
+                  {branches.map((b) => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </FormSection>
+      )}
+
+      {/* ── Caregiver-specific fields ── */}
+      {(isCaregiver || isForeignCaregiver) && (
+        <FormSection icon={Briefcase} title={t('leads.sectionProfessional')}>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('leads.positionType')}</Label>
+              <SelectWithOther value={form.position_type} onChange={(v) => setForm({ ...form, position_type: v })} options={POSITION_OPTIONS} placeholder={t('leads.placeholderPosition')} t={t} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('leads.serviceRequested')}</Label>
+              <SelectWithOther value={form.service_requested} onChange={(v) => setForm({ ...form, service_requested: v })} options={SERVICE_OPTIONS} t={t} />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t('leads.branch')}</Label>
+              <Select value={form.branch || 'none'} onValueChange={(v) => setForm({ ...form, branch: v === 'none' ? '' : v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">-</SelectItem>
+                  {branches.map((b) => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {isForeignCaregiver && (
+              <div className="space-y-1.5">
+                <Label className="text-xs">{t('leads.nationality')}</Label>
+                <Input
+                  value={form.custom_fields?.nationality || ''}
+                  onChange={(e) => setForm({ ...form, custom_fields: { ...form.custom_fields, nationality: e.target.value } })}
+                  placeholder={t('leads.placeholderNationality')}
+                />
+              </div>
+            )}
+          </div>
+        </FormSection>
+      )}
+
+      {/* ── Routing & tracking (all types) ── */}
+      <FormSection icon={MapPin} title={t('leads.sectionRouting')}>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t('leads.source')}</Label>
+            <SelectWithOther value={form.source} onChange={(v) => setForm({ ...form, source: v })} options={SOURCE_OPTIONS} t={t} />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t('leads.leadChannel')}</Label>
+            <SelectWithOther value={form.lead_channel || ''} onChange={(v) => setForm({ ...form, lead_channel: v })} options={CHANNEL_OPTIONS} t={t} />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs">{t('common.status')}</Label>
+            <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="new">{t('leads.statusNew')}</SelectItem>
+                <SelectItem value="sent_to_branch">{t('leads.statusSentToBranch')}</SelectItem>
+                <SelectItem value="in_progress">{t('leads.statusInProgress')}</SelectItem>
+                <SelectItem value="handled">{t('leads.statusHandled')}</SelectItem>
+                <SelectItem value="not_relevant">{t('leads.statusNotRelevant')}</SelectItem>
+                <SelectItem value="no_answer">{t('leads.statusNoAnswer')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </FormSection>
+
+      {/* ── Notes ── */}
+      <div className="space-y-1.5">
+        <Label className="text-xs">{t('common.details')}</Label>
+        <Textarea value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} rows={3} placeholder={t('leads.placeholderDetails')} />
       </div>
-      <div className="space-y-2">
-        <Label>{t('leads.serviceRequested')}</Label>
-        <Input value={form.service_requested} onChange={(e) => setForm({ ...form, service_requested: e.target.value })} />
-      </div>
-      <div className="space-y-2">
-        <Label>{t('common.status')}</Label>
-        <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
-          <SelectTrigger><SelectValue /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="new">{t('leads.statusNew')}</SelectItem>
-            <SelectItem value="sent_to_branch">{t('leads.statusSentToBranch')}</SelectItem>
-            <SelectItem value="in_progress">{t('leads.statusInProgress')}</SelectItem>
-            <SelectItem value="handled">{t('leads.statusHandled')}</SelectItem>
-            <SelectItem value="not_relevant">{t('leads.statusNotRelevant')}</SelectItem>
-            <SelectItem value="no_answer">{t('leads.statusNoAnswer')}</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="space-y-2">
-        <Label>{t('common.details')}</Label>
-        <Textarea value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} rows={3} />
-      </div>
-      {/* Custom fields */}
+
+      {/* ── Custom fields ── */}
       {leadFields.length > 0 && (
-        <div className="space-y-3 border-t pt-3">
-          <Label className="text-xs text-muted-foreground uppercase tracking-wider">{t('leads.customFields')}</Label>
+        <FormSection icon={Hash} title={t('leads.customFields')}>
           {leadFields.map((fd) => (
-            <div key={fd.id} className="space-y-1.5">
-              <Label className="text-xs">{fd.label}</Label>
+            <div key={fd.id} className="space-y-1">
+              <Label className="text-xs">{fd.label} {fd.required && '*'}</Label>
               {fd.field_type === 'select' ? (
                 <Select
                   value={form.custom_fields?.[fd.field_key] || ''}
@@ -1040,11 +1361,12 @@ function LeadFormFields({ form, setForm, t, branches, leadFields, showCompany })
                   type={fd.field_type === 'number' ? 'number' : fd.field_type === 'date' ? 'date' : 'text'}
                   value={form.custom_fields?.[fd.field_key] || ''}
                   onChange={(e) => setForm({ ...form, custom_fields: { ...form.custom_fields, [fd.field_key]: e.target.value } })}
+                  required={fd.required}
                 />
               )}
             </div>
           ))}
-        </div>
+        </FormSection>
       )}
     </>
   )
@@ -1102,7 +1424,7 @@ const ACTION_CONFIG = {
   bot_transcript: { icon: Bot, color: 'text-violet-500', bg: 'bg-violet-500', labelKey: 'leads.action_bot_transcript' },
 }
 
-function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
+function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
   const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
   const { data: maskyooCalls } = useLeadCalls(lead.id)
   const { data: activities } = useLeadActivities(lead.id)
@@ -1291,7 +1613,7 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
                     {item.type === 'status_changed' && item.changes?.status && (
                       <div className="flex items-center gap-1.5 mt-1.5">
                         <Badge variant="outline" className="text-[10px] py-0">{t(`leads.status_${item.changes.status.from}`) || item.changes.status.from || 'new'}</Badge>
-                        <ArrowRight size={10} className="text-muted-foreground" />
+                        <ArrowRight size={10} className="text-muted-foreground icon-directional" />
                         <Badge className={`${(STATUS_CONFIG[item.changes.status.to] || STATUS_CONFIG.new).color} border-0 text-[10px] py-0`}>
                           {t(`leads.status_${item.changes.status.to}`) || item.changes.status.to}
                         </Badge>
@@ -1307,7 +1629,7 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
                             {from ? (
                               <>
                                 <span className="text-muted-foreground line-through">{String(from)}</span>
-                                <ArrowRight size={8} className="text-muted-foreground shrink-0" />
+                                <ArrowRight size={8} className="text-muted-foreground shrink-0 icon-directional" />
                                 <span className="text-foreground">{String(to)}</span>
                               </>
                             ) : (
@@ -1321,7 +1643,7 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
                     {/* Dispatch details */}
                     {item.type === 'dispatched' && item.metadata?.branch && (
                       <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                        <ArrowRight size={10} />
+                        <ArrowRight size={10} className="icon-directional" />
                         <span className="font-medium">{item.metadata.branch}</span>
                       </div>
                     )}
@@ -1381,6 +1703,133 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin }) {
         </div>
       </div>
 
+      {/* Documents section */}
+      <LeadDocuments leadId={lead.id} t={t} />
+
+      {/* Affiliations section (admin/super_admin only) */}
+      {(userRole === 'super_admin' || userRole === 'admin') && (
+        <LeadAffiliationsSection leadId={lead.id} t={t} />
+      )}
+
+    </div>
+  )
+}
+
+function LeadDocuments({ leadId, t }) {
+  const { data: documents } = useLeadDocuments(leadId)
+  const uploadDoc = useUploadLeadDocument()
+  const deleteDoc = useDeleteLeadDocument()
+
+  const handleUpload = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    uploadDoc.mutate({ leadId, file })
+    e.target.value = ''
+  }
+
+  const formatSize = (bytes) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  return (
+    <div className="px-4 py-3 border-t">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+          <Paperclip size={12} />
+          {t('leads.documents')}
+          {documents?.length > 0 && <Badge variant="secondary" className="text-[10px] py-0 px-1">{documents.length}</Badge>}
+        </h4>
+        <label className="cursor-pointer">
+          <input type="file" className="hidden" onChange={handleUpload} disabled={uploadDoc.isPending} />
+          <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" asChild>
+            <span><Plus size={12} className="me-1" />{t('leads.uploadDoc')}</span>
+          </Button>
+        </label>
+      </div>
+      {documents?.length > 0 && (
+        <div className="space-y-1.5">
+          {documents.map(doc => (
+            <div key={doc.id} className="flex items-center gap-2 text-xs group rounded px-2 py-1.5 hover:bg-muted/50">
+              <FileText size={14} className="text-muted-foreground shrink-0" />
+              <a href={doc.url} target="_blank" rel="noopener noreferrer" className="flex-1 truncate text-foreground hover:underline">
+                {doc.name}
+              </a>
+              <span className="text-muted-foreground text-[10px] shrink-0">{formatSize(doc.size)}</span>
+              <button
+                onClick={() => deleteDoc.mutate({ leadId, docId: doc.id })}
+                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {uploadDoc.isPending && (
+        <p className="text-[11px] text-muted-foreground animate-pulse mt-1">{t('leads.uploading')}</p>
+      )}
+    </div>
+  )
+}
+
+function LeadAffiliationsSection({ leadId, t }) {
+  const { data: affiliations } = useLeadAffiliations(leadId)
+  const { data: allUsers } = useUsers()
+  const addAffiliation = useAddLeadAffiliation()
+  const removeAffiliation = useRemoveLeadAffiliation()
+  const [showAdd, setShowAdd] = useState(false)
+
+  const affiliatedUserIds = new Set((affiliations || []).map(a => a.user_id))
+  const availableUsers = (allUsers || []).filter(u => !affiliatedUserIds.has(u.id))
+
+  return (
+    <div className="px-4 py-3 border-t">
+      <div className="flex items-center justify-between mb-2">
+        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+          <Users size={12} />
+          {t('leads.affiliations')}
+          {affiliations?.length > 0 && <Badge variant="secondary" className="text-[10px] py-0 px-1">{affiliations.length}</Badge>}
+        </h4>
+        <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setShowAdd(!showAdd)}>
+          <Plus size={12} className="me-1" />{t('leads.addUser')}
+        </Button>
+      </div>
+
+      {showAdd && availableUsers.length > 0 && (
+        <div className="mb-2 max-h-32 overflow-y-auto border rounded p-1 space-y-0.5">
+          {availableUsers.map(u => (
+            <button
+              key={u.id}
+              onClick={() => { addAffiliation.mutate({ leadId, userId: u.id }); setShowAdd(false) }}
+              className="w-full text-start text-xs px-2 py-1 rounded hover:bg-muted/70 flex items-center gap-2"
+            >
+              <User size={12} className="text-muted-foreground" />
+              {u.first_name} {u.last_name || ''} <span className="text-muted-foreground">({u.role})</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {affiliations?.length > 0 && (
+        <div className="space-y-1">
+          {affiliations.map(a => (
+            <div key={a.user_id} className="flex items-center gap-2 text-xs group rounded px-2 py-1 hover:bg-muted/50">
+              <User size={12} className="text-muted-foreground" />
+              <span className="flex-1">{a.user_first_name} {a.user_last_name || ''}</span>
+              <Badge variant="outline" className="text-[10px] py-0">{a.source}</Badge>
+              <button
+                onClick={() => removeAffiliation.mutate({ leadId, userId: a.user_id })}
+                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

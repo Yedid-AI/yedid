@@ -69,7 +69,7 @@ function SlashCommandMenu({ items, selectedIndex, onSelect, onHover, position })
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-background">
               <Icon className="h-4 w-4" />
             </div>
-            <div className="text-left">
+            <div className="text-start">
               <div className="font-medium">{item.label}</div>
               <div className="text-xs text-muted-foreground">{item.description}</div>
             </div>
@@ -455,17 +455,17 @@ function RichEditor({
         "rich-editor relative rounded-md border bg-background transition-shadow",
         editable && "focus-within:ring-1 focus-within:ring-ring focus-within:border-ring",
         // Editor base
-        "[&_.tiptap]:pl-11 [&_.tiptap]:pr-3 [&_.tiptap]:py-2 [&_.tiptap]:outline-none [&_.tiptap]:overflow-y-auto",
+        "[&_.tiptap]:ps-11 [&_.tiptap]:pe-3 [&_.tiptap]:py-2 [&_.tiptap]:outline-none [&_.tiptap]:overflow-y-auto",
         // Headings
         "[&_.tiptap_h1]:text-2xl [&_.tiptap_h1]:font-bold [&_.tiptap_h1]:mt-4 [&_.tiptap_h1]:mb-1",
         "[&_.tiptap_h2]:text-xl [&_.tiptap_h2]:font-semibold [&_.tiptap_h2]:mt-3 [&_.tiptap_h2]:mb-1",
         "[&_.tiptap_h3]:text-lg [&_.tiptap_h3]:font-semibold [&_.tiptap_h3]:mt-2 [&_.tiptap_h3]:mb-1",
         // Lists
-        "[&_.tiptap_ul]:list-disc [&_.tiptap_ul]:pl-6 [&_.tiptap_ul]:my-1",
-        "[&_.tiptap_ol]:list-decimal [&_.tiptap_ol]:pl-6 [&_.tiptap_ol]:my-1",
+        "[&_.tiptap_ul]:list-disc [&_.tiptap_ul]:ps-6 [&_.tiptap_ul]:my-1",
+        "[&_.tiptap_ol]:list-decimal [&_.tiptap_ol]:ps-6 [&_.tiptap_ol]:my-1",
         "[&_.tiptap_li]:my-0.5",
         // Blockquote
-        "[&_.tiptap_blockquote]:border-l-4 [&_.tiptap_blockquote]:border-border [&_.tiptap_blockquote]:pl-4 [&_.tiptap_blockquote]:my-2 [&_.tiptap_blockquote]:text-muted-foreground [&_.tiptap_blockquote]:italic",
+        "[&_.tiptap_blockquote]:border-s-4 [&_.tiptap_blockquote]:border-border [&_.tiptap_blockquote]:ps-4 [&_.tiptap_blockquote]:my-2 [&_.tiptap_blockquote]:text-muted-foreground [&_.tiptap_blockquote]:italic",
         // Code block
         "[&_.tiptap_pre]:bg-muted [&_.tiptap_pre]:rounded-md [&_.tiptap_pre]:p-3 [&_.tiptap_pre]:my-2 [&_.tiptap_pre]:font-mono [&_.tiptap_pre]:text-sm [&_.tiptap_pre]:overflow-x-auto",
         // Inline code (override for code inside pre)
@@ -494,7 +494,7 @@ function RichEditor({
         <div
           ref={blockHandleRef}
           className={cn(
-            "absolute left-1 flex items-center gap-0 z-10 transition-opacity",
+            "absolute start-1 flex items-center gap-0 z-10 transition-opacity",
             isDragging && "opacity-0 pointer-events-none"
           )}
           style={{ top: blockHandle.top }}
@@ -519,7 +519,7 @@ function RichEditor({
       {/* ── Drop indicator ── */}
       {dropLine && (
         <div
-          className="absolute left-11 right-3 h-0.5 bg-primary rounded-full pointer-events-none z-50"
+          className="absolute start-11 end-3 h-0.5 bg-primary rounded-full pointer-events-none z-50"
           style={{ top: dropLine.top }}
         />
       )}

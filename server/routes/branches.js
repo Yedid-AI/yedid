@@ -4,7 +4,7 @@ import { checkRole } from '../middleware.js'
 const router = Router()
 
 // GET /api/branches
-router.get('/branches', checkRole('admin'), async (req, res) => {
+router.get('/branches', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     let query = req.supabase.from('branches').select('*')
     if (req.user.role !== 'super_admin') {
@@ -91,7 +91,7 @@ router.delete('/branches/:id', checkRole('admin'), async (req, res) => {
 // ─── City-Branch Index ────────────────────────────────────
 
 // GET /api/city-index
-router.get('/city-index', checkRole('admin'), async (req, res) => {
+router.get('/city-index', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
     let query = req.supabase.from('city_branch_index').select('*')
     if (req.user.role !== 'super_admin') {

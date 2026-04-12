@@ -136,7 +136,7 @@ export default function EscalationLibrary() {
               ) : (
                 rules.map((r) => (
                   <TableRow key={r.id} className={editItem?.id === r.id ? 'bg-primary/5' : ''}>
-                    <TableCell className="font-medium">{r.emoji && <span className="mr-1.5">{r.emoji}</span>}{r.title}</TableCell>
+                    <TableCell className="font-medium">{r.emoji && <span className="me-1.5">{r.emoji}</span>}{r.title}</TableCell>
                     <TableCell className="truncate max-w-[250px]">{r.trigger_description || '-'}</TableCell>
                     <TableCell>{r.audience || '-'}</TableCell>
                     <TableCell className="flex gap-2">

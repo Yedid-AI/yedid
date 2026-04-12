@@ -3,13 +3,14 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClient } from './lib/query'
 import { ThemeProvider } from './lib/theme'
 import { I18nProvider } from './lib/i18n'
-import { AuthProvider } from './lib/auth'
+import { AuthProvider, useAuth } from './lib/auth'
 import { ProtectedRoute } from './components/layout/ProtectedRoute'
 import { AppSidebar } from './components/layout/Sidebar'
 import { SidebarProvider, SidebarInset, SidebarTrigger } from './components/ui/sidebar'
 import { Separator } from './components/ui/separator'
 import { PageHeaderProvider, usePageHeader } from './lib/page-header'
 import { SidePanelProvider, useSidePanel } from './lib/side-panel'
+import { useRealtimeInvalidation } from './hooks/use-realtime'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Sources from './pages/Sources'
@@ -29,15 +30,16 @@ import EscalationLibrary from './pages/EscalationLibrary'
 import Leads from './pages/Leads'
 import Branches from './pages/Branches'
 import Calls from './pages/Calls'
+import PublicLeadCapture from './pages/PublicLeadCapture'
 
 function AppHeader() {
   const { title, setActionsContainer } = usePageHeader()
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
-      <SidebarTrigger className="-ml-1" />
-      <Separator orientation="vertical" className="mr-2 h-4" />
+      <SidebarTrigger className="-ms-1" />
+      <Separator orientation="vertical" className="me-2 h-4" />
       {title && <h1 className="text-sm font-medium">{title}</h1>}
-      <div className="ml-auto flex items-center gap-2" ref={setActionsContainer} />
+      <div className="ms-auto flex items-center gap-2" ref={setActionsContainer} />
     </header>
   )
 }
@@ -51,7 +53,7 @@ function ContentWithPanel({ children }) {
       </div>
       <div
         ref={setPanelContainer}
-        className={`shrink-0 border-l bg-background overflow-hidden transition-[width] duration-300 ease-in-out ${isOpen ? 'w-1/2' : 'w-0'}`}
+        className={`shrink-0 border-s bg-background overflow-hidden transition-[width] duration-300 ease-in-out ${isOpen ? 'w-1/2' : 'w-0'}`}
       />
     </div>
   )
@@ -75,6 +77,17 @@ function AppLayout({ children }) {
   )
 }
 
+function MarketeurRedirect({ children }) {
+  const { user } = useAuth()
+  if (user?.role === 'marketeur') return <Navigate to="/leads" replace />
+  return children
+}
+
+function RealtimeListener() {
+  useRealtimeInvalidation()
+  return null
+}
+
 export default function App() {
   return (
     <ThemeProvider>
@@ -82,11 +95,14 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
     <BrowserRouter>
       <AuthProvider>
+        <RealtimeListener />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={
             <ProtectedRoute>
-              <AppLayout><Dashboard /></AppLayout>
+              <MarketeurRedirect>
+                <AppLayout><Dashboard /></AppLayout>
+              </MarketeurRedirect>
             </ProtectedRoute>
           } />
           <Route path="/agents" element={
@@ -160,7 +176,7 @@ export default function App() {
             </ProtectedRoute>
           } />
           <Route path="/leads" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin', 'marketeur']}>
               <AppLayout><Leads /></AppLayout>
             </ProtectedRoute>
           } />
@@ -174,6 +190,7 @@ export default function App() {
               <AppLayout><Calls /></AppLayout>
             </ProtectedRoute>
           } />
+          <Route path="/lead/:token" element={<PublicLeadCapture />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

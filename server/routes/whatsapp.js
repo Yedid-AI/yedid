@@ -32,8 +32,15 @@ router.post('/webhook/unipile/account', async (req, res) => {
 
   try {
     const { status, account_id, name } = req.body
-    if (status !== 'CREATION_SUCCESS' || !account_id || !name) {
+    const validStatuses = ['CREATION_SUCCESS', 'RECONNECTED', 'SYNC_SUCCESS']
+    if (!validStatuses.includes(status) || !account_id || !name) {
       console.log('[unipile/account] Ignored event:', status, account_id)
+      return
+    }
+
+    // For reconnections, just log — inbox already exists, no new creation needed
+    if (status === 'RECONNECTED' || status === 'SYNC_SUCCESS') {
+      console.log(`[unipile/account] Account reconnected: account=${account_id}, name=${name}`)
       return
     }
 

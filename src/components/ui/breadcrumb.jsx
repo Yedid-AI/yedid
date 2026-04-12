@@ -79,7 +79,7 @@ function BreadcrumbSeparator({
       aria-hidden="true"
       className={cn("[&>svg]:size-3.5", className)}
       {...props}>
-      {children ?? <ChevronRight />}
+      {children ?? <ChevronRight className="icon-directional" />}
     </li>
   );
 }

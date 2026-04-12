@@ -88,4 +88,37 @@ router.post('/dispatch-config/connect-whatsapp', checkRole('admin'), async (req,
   }
 })
 
+// POST /api/dispatch-config/reconnect-whatsapp — reconnect existing dispatch WhatsApp
+router.post('/dispatch-config/reconnect-whatsapp', checkRole('admin'), async (req, res) => {
+  try {
+    const userId = req.user.user_id
+    const supabase = req.supabaseAdmin || req.supabase
+
+    // Get dispatch config + linked inbox
+    const { data: config } = await supabase
+      .from('dispatch_config')
+      .select('dispatch_inbox_id, inboxes:dispatch_inbox_id(unipile_account_id)')
+      .eq('user_id', userId)
+      .maybeSingle()
+
+    const unipileAccountId = config?.inboxes?.unipile_account_id
+    if (!unipileAccountId) return res.status(400).json({ error: 'Pas de compte dispatch WhatsApp a reconnecter' })
+
+    const appBaseUrl = getSetting('APP_BASE_URL')
+    if (!appBaseUrl) return res.status(400).json({ error: 'APP_BASE_URL non configure' })
+
+    const result = await createHostedAuthLink({
+      callbackUrl: `${appBaseUrl}/branches?dispatch=reconnected`,
+      notifyUrl: `${appBaseUrl}/api/webhook/unipile/account`,
+      name: `dispatch-${userId}`,
+      reconnectAccountId: unipileAccountId,
+    })
+
+    res.json({ url: result.url })
+  } catch (err) {
+    console.error('[dispatch-config/reconnect-whatsapp]', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 export default router

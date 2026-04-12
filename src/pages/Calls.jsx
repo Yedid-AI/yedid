@@ -190,10 +190,10 @@ export default function Calls() {
         <TabsContent value="calls">
           {/* Filters */}
           <div className="flex gap-3 mb-4 flex-wrap items-center">
-            <div className="relative mr-auto">
-              <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <div className="relative me-auto">
+              <Search size={14} className="absolute start-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
-                className="pl-8 w-[220px] h-9"
+                className="ps-8 w-[220px] h-9"
                 placeholder={t('calls.search')}
                 value={filterSearch}
                 onChange={(e) => setFilterSearch(e.target.value)}
@@ -214,7 +214,7 @@ export default function Calls() {
                       <button
                         key={preset}
                         onClick={() => selectDatePreset(preset)}
-                        className={`text-left text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
+                        className={`text-start text-sm px-3 py-1.5 rounded-md transition-colors hover:bg-accent ${filterDateRange === preset ? 'bg-accent font-medium' : ''}`}
                       >
                         {preset === 'all' ? t('leads.allTime') : t(`sessions.${preset}`)}
                       </button>
@@ -262,7 +262,7 @@ export default function Calls() {
 
           {/* Table */}
           <Card>
-            <Table className="[&_th:first-child]:pl-3 [&_td:first-child]:pl-3">
+            <Table className="[&_th:first-child]:ps-3 [&_td:first-child]:ps-3">
               <TableHeader>
                 <TableRow>
                   <TableHead>{t('calls.caller')}</TableHead>
@@ -1076,7 +1076,7 @@ function CallDetailPanel({ call, onClose, t }) {
           {allFields.map(([key, value]) => (
             <div key={key} className="flex items-center justify-between py-1 text-sm">
               <span className="text-muted-foreground">{key}</span>
-              <span className="font-medium text-right max-w-[60%] truncate" title={String(value ?? '')}>
+              <span className="font-medium text-end max-w-[60%] truncate" title={String(value ?? '')}>
                 {value != null ? String(value) : '-'}
               </span>
             </div>
@@ -1090,7 +1090,7 @@ function CallDetailPanel({ call, onClose, t }) {
             {Object.entries(metadata).map(([key, value]) => (
               <div key={key} className="flex items-center justify-between py-1 text-sm">
                 <span className="text-muted-foreground">{key}</span>
-                <span className="font-medium text-right max-w-[60%] truncate" title={String(value ?? '')}>
+                <span className="font-medium text-end max-w-[60%] truncate" title={String(value ?? '')}>
                   {value != null ? String(value) : '-'}
                 </span>
               </div>

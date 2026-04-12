@@ -38,6 +38,8 @@ export const queryKeys = {
   leads: (filters) => ['leads', filters || {}],
   lead: (id) => ['leads', 'detail', id],
   leadFields: ['lead-fields'],
+  leadDocuments: (leadId) => ['leads', 'documents', leadId],
+  leadAffiliations: (leadId) => ['leads', 'affiliations', leadId],
   branches: ['branches'],
   cityIndex: ['city-index'],
   dispatchConfig: ['dispatch-config'],

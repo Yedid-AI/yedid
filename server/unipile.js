@@ -37,13 +37,17 @@ async function unipileApi(path, method = 'GET', body = null) {
 // Generate a hosted auth link for WhatsApp QR code connection
 export async function createHostedAuthLink({ callbackUrl, notifyUrl, name, expiresOn, reconnectAccountId }) {
   const { dsnUrl } = getConfig()
+  const isReconnect = !!reconnectAccountId
   const body = {
-    type: reconnectAccountId ? 'reconnect' : 'create',
-    providers: ['WHATSAPP'],
+    type: isReconnect ? 'reconnect' : 'create',
     api_url: dsnUrl,
     expiresOn: expiresOn || new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(),
   }
-  if (reconnectAccountId) body.reconnect_account_id = reconnectAccountId
+  if (isReconnect) {
+    body.reconnect_account = reconnectAccountId
+  } else {
+    body.providers = ['WHATSAPP']
+  }
   if (callbackUrl) body.callback_url = callbackUrl
   if (notifyUrl) body.notify_url = notifyUrl
   if (name) body.name = String(name)

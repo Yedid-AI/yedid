@@ -153,7 +153,7 @@ export default function PlaybooksLibrary() {
               ) : (
                 playbooks.map((pb) => (
                   <TableRow key={pb.id} className={editItem?.id === pb.id ? 'bg-primary/5' : ''}>
-                    <TableCell className="font-medium">{pb.emoji && <span className="mr-1.5">{pb.emoji}</span>}{pb.title}</TableCell>
+                    <TableCell className="font-medium">{pb.emoji && <span className="me-1.5">{pb.emoji}</span>}{pb.title}</TableCell>
                     <TableCell>{pb.audience || '-'}</TableCell>
                     <TableCell>{pb.tools?.name || '-'}</TableCell>
                     <TableCell className="flex gap-2">

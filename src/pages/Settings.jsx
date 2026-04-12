@@ -93,7 +93,7 @@ export default function Settings() {
           <CardTitle className="text-base flex items-center gap-2">
             <Monitor size={16} />
             {t('settings.activeSessions')}
-            <Badge variant="outline" className="ml-auto">{sessions.length}</Badge>
+            <Badge variant="outline" className="ms-auto">{sessions.length}</Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>

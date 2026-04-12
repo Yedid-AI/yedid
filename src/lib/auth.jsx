@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react'
 import { api } from './api'
+import { queryClient } from './query'
 
 const AuthContext = createContext(null)
 
@@ -40,10 +41,23 @@ export function AuthProvider({ children }) {
   }
 
   const logout = () => {
+    // Call server to invalidate Supabase session (fire-and-forget)
+    const token = localStorage.getItem('token')
+    if (token) {
+      fetch('/api/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      }).catch(() => {})
+    }
+    // Clear all client state
     localStorage.removeItem('token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('user')
+    sessionStorage.clear()
+    queryClient.clear()
     setUser(null)
+    // Hard redirect to force full page reload
+    window.location.replace('/login')
   }
 
   const isAuthenticated = !!user
