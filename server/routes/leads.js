@@ -347,7 +347,7 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
         .maybeSingle()
         .then(({ data: config }) => {
           if (config?.auto_dispatch) {
-            return dispatchLead(req.supabase, data)
+            return dispatchLead(req.supabaseAdmin || req.supabase, data)
           }
         })
         .then(() => {})
@@ -542,7 +542,7 @@ router.post('/leads/:id/dispatch', checkRole('admin', 'marketeur'), async (req, 
     const { data: lead, error: leadErr } = await leadQuery.single()
     if (leadErr || !lead) return res.status(404).json({ error: 'Lead introuvable' })
 
-    const result = await dispatchLead(req.supabase, lead, { skipScheduleCheck: true })
+    const result = await dispatchLead(req.supabaseAdmin || req.supabase, lead, { skipScheduleCheck: true })
     if (result.error) return res.status(400).json({ error: result.error })
 
     // Log dispatch activity
