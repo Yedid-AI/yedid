@@ -6,10 +6,12 @@ const router = Router()
 // GET /api/branches
 router.get('/branches', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
-    let query = req.supabase.from('branches').select('*')
-    if (req.user.role !== 'super_admin') {
+    const supabase = req.supabaseAdmin || req.supabase
+    let query = supabase.from('branches').select('*')
+    if (req.user.role === 'admin') {
       query = query.eq('user_id', req.user.user_id)
     }
+    // marketeur + super_admin see all branches
     const { data, error } = await query.order('name', { ascending: true })
 
     if (error) throw error

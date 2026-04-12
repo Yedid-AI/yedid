@@ -5,7 +5,6 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { CheckCircle, Loader2, AlertTriangle } from 'lucide-react'
 
 const API_URL = import.meta.env.VITE_API_URL || ''
@@ -25,7 +24,7 @@ export default function PublicLeadCapture() {
   useEffect(() => {
     fetch(`${API_URL}/api/public/capture/${token}`)
       .then(r => {
-        if (!r.ok) throw new Error('Lien invalide')
+        if (!r.ok) throw new Error('קישור לא תקין')
         return r.json()
       })
       .then(data => { setConfig(data); setLoading(false) })
@@ -39,7 +38,6 @@ export default function PublicLeadCapture() {
 
     try {
       const body = { ...form }
-      // Merge custom_fields
       if (Object.keys(body.custom_fields).length === 0) delete body.custom_fields
 
       const res = await fetch(`${API_URL}/api/public/capture/${token}`, {
@@ -50,7 +48,7 @@ export default function PublicLeadCapture() {
 
       if (!res.ok) {
         const data = await res.json()
-        throw new Error(data.error || 'Erreur')
+        throw new Error(data.error || 'שגיאה')
       }
       setSubmitted(true)
     } catch (err) {
@@ -62,158 +60,175 @@ export default function PublicLeadCapture() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-stone-50 to-stone-100" dir="rtl">
+        <Loader2 className="h-8 w-8 animate-spin text-stone-400" />
       </div>
     )
   }
 
   if (error && !config) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <AlertTriangle className="h-12 w-12 text-red-400 mx-auto mb-4" />
-            <p className="text-lg font-medium text-gray-900">Lien invalide</p>
-            <p className="text-sm text-gray-500 mt-2">Ce lien de capture n'existe pas ou a expire.</p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-stone-50 to-stone-100 p-4" dir="rtl">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 text-center">
+          <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+          <p className="text-lg font-semibold text-stone-900">קישור לא תקין</p>
+          <p className="text-sm text-stone-500 mt-2">קישור הלכידה אינו קיים או שפג תוקפו.</p>
+        </div>
       </div>
     )
   }
 
   if (submitted) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-        <Card className="w-full max-w-md">
-          <CardContent className="pt-6 text-center">
-            <CheckCircle className="h-12 w-12 text-emerald-500 mx-auto mb-4" />
-            <p className="text-lg font-medium text-gray-900">Merci !</p>
-            <p className="text-sm text-gray-500 mt-2">Vos informations ont bien ete envoyees.</p>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-stone-50 to-stone-100 p-4" dir="rtl">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-lg p-8 text-center">
+          <CheckCircle className="h-14 w-14 text-emerald-500 mx-auto mb-4" />
+          <p className="text-xl font-semibold text-stone-900">תודה רבה!</p>
+          <p className="text-sm text-stone-500 mt-2">הפרטים נשלחו בהצלחה.</p>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <Card className="w-full max-w-lg">
-        <CardHeader>
-          <CardTitle className="text-xl">
-            {config?.enterprise || 'Nouveau contact'}
-          </CardTitle>
-          <CardDescription>
-            {config?.user_name && `Formulaire de ${config.user_name}`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <p className="text-sm text-red-600 bg-red-50 p-2 rounded">{error}</p>
-            )}
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-stone-50 to-stone-100 p-4" dir="rtl">
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-lg overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent px-6 py-5 border-b">
+          <h1 className="text-lg font-bold text-stone-900">
+            {config?.enterprise || 'יצירת קשר'}
+          </h1>
+          {config?.user_name && (
+            <p className="text-sm text-stone-500 mt-0.5">טופס של {config.user_name}</p>
+          )}
+        </div>
 
+        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+          {error && (
+            <p className="text-sm text-red-700 bg-red-50 border border-red-200 p-3 rounded-lg">{error}</p>
+          )}
+
+          {/* Contact fields */}
+          <div className="space-y-3">
+            <span className="text-xs font-semibold text-stone-500 uppercase tracking-wide">פרטי קשר</span>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="name">Nom *</Label>
+                <Label className="text-[13px] text-stone-600">שם מלא <span className="text-red-500">*</span></Label>
                 <Input
-                  id="name"
+                  className="h-10 w-full"
                   value={form.name}
                   onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                   required
+                  placeholder="הכנס שם מלא"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="phone">Telephone *</Label>
+                <Label className="text-[13px] text-stone-600">טלפון <span className="text-red-500">*</span></Label>
                 <Input
-                  id="phone"
+                  className="h-10 w-full"
                   type="tel"
+                  dir="ltr"
                   value={form.phone}
                   onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
                   required
+                  placeholder="05x-xxx-xxxx"
                 />
               </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="email">Email</Label>
+                <Label className="text-[13px] text-stone-600">אימייל</Label>
                 <Input
-                  id="email"
+                  className="h-10 w-full"
                   type="email"
+                  dir="ltr"
                   value={form.email}
                   onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  placeholder="email@example.com"
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="city">Ville</Label>
+                <Label className="text-[13px] text-stone-600">עיר</Label>
                 <Input
-                  id="city"
+                  className="h-10 w-full"
                   value={form.city}
                   onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                  placeholder="עיר מגורים"
                 />
               </div>
             </div>
+          </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="service">Service demande</Label>
-              <Input
-                id="service"
-                value={form.service_requested}
-                onChange={e => setForm(f => ({ ...f, service_requested: e.target.value }))}
-              />
+          {/* Service */}
+          <div className="space-y-1.5">
+            <Label className="text-[13px] text-stone-600">שירות מבוקש</Label>
+            <Select value={form.service_requested || '__empty__'} onValueChange={v => setForm(f => ({ ...f, service_requested: v === '__empty__' ? '' : v }))}>
+              <SelectTrigger className="h-10 w-full"><SelectValue placeholder="בחר שירות" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__empty__">-</SelectItem>
+                <SelectItem value="סיעוד וזכאות">סיעוד וזכאות</SelectItem>
+                <SelectItem value="עובד זר">עובד זר</SelectItem>
+                <SelectItem value="מטפל/ת">מטפל/ת</SelectItem>
+                <SelectItem value="יעוץ">יעוץ</SelectItem>
+                <SelectItem value="שירות פרטי">שירות פרטי</SelectItem>
+                <SelectItem value="השגחה בבית חולים">השגחה בבית חולים</SelectItem>
+                <SelectItem value="אחות פרטית">אחות פרטית</SelectItem>
+                <SelectItem value="שירות אמבולנס">שירות אמבולנס</SelectItem>
+                <SelectItem value="מחפש עבודה">מחפש עבודה</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Details */}
+          <div className="space-y-1.5">
+            <Label className="text-[13px] text-stone-600">פרטים נוספים</Label>
+            <Textarea
+              className="min-h-[80px] resize-none w-full"
+              value={form.details}
+              onChange={e => setForm(f => ({ ...f, details: e.target.value }))}
+              rows={3}
+              placeholder="הערות, הנחיות..."
+            />
+          </div>
+
+          {/* Custom fields */}
+          {config?.fields?.map(field => (
+            <div key={field.field_key} className="space-y-1.5">
+              <Label className="text-[13px] text-stone-600">{field.label} {field.required && <span className="text-red-500">*</span>}</Label>
+              {field.field_type === 'select' ? (
+                <Select
+                  value={form.custom_fields[field.field_key] || ''}
+                  onValueChange={v => setForm(f => ({
+                    ...f,
+                    custom_fields: { ...f.custom_fields, [field.field_key]: v }
+                  }))}
+                >
+                  <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(field.options || []).map(opt => (
+                      <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  className="h-10 w-full"
+                  type={field.field_type === 'number' ? 'number' : 'text'}
+                  value={form.custom_fields[field.field_key] || ''}
+                  onChange={e => setForm(f => ({
+                    ...f,
+                    custom_fields: { ...f.custom_fields, [field.field_key]: e.target.value }
+                  }))}
+                  required={field.required}
+                />
+              )}
             </div>
+          ))}
 
-            <div className="space-y-1.5">
-              <Label htmlFor="details">Details</Label>
-              <Textarea
-                id="details"
-                value={form.details}
-                onChange={e => setForm(f => ({ ...f, details: e.target.value }))}
-                rows={3}
-              />
-            </div>
-
-            {/* Custom fields from lead_field_definitions */}
-            {config?.fields?.map(field => (
-              <div key={field.field_key} className="space-y-1.5">
-                <Label>{field.label} {field.required && '*'}</Label>
-                {field.field_type === 'select' ? (
-                  <Select
-                    value={form.custom_fields[field.field_key] || ''}
-                    onValueChange={v => setForm(f => ({
-                      ...f,
-                      custom_fields: { ...f.custom_fields, [field.field_key]: v }
-                    }))}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {(field.options || []).map(opt => (
-                        <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    type={field.field_type === 'number' ? 'number' : 'text'}
-                    value={form.custom_fields[field.field_key] || ''}
-                    onChange={e => setForm(f => ({
-                      ...f,
-                      custom_fields: { ...f.custom_fields, [field.field_key]: e.target.value }
-                    }))}
-                    required={field.required}
-                  />
-                )}
-              </div>
-            ))}
-
-            <Button type="submit" className="w-full" disabled={submitting || !form.name || !form.phone}>
-              {submitting ? <Loader2 className="h-4 w-4 animate-spin me-2" /> : null}
-              Envoyer
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+          <Button type="submit" className="w-full h-11 text-sm font-medium" disabled={submitting || !form.name || !form.phone}>
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin me-2" /> : null}
+            שליחה
+          </Button>
+        </form>
+      </div>
     </div>
   )
 }

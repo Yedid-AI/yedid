@@ -378,6 +378,22 @@ export default function Leads() {
                   </SelectContent>
                 </Select>
               )}
+              {user?.role === 'super_admin' && allUsers?.length > 0 && (
+                <Select value={filterAffiliatedUser || 'all'} onValueChange={(v) => setFilterAffiliatedUser(v === 'all' ? '' : v)}>
+                  <SelectTrigger className="w-[120px] h-8 text-xs">
+                    <Users size={12} className="me-1" />
+                    <SelectValue placeholder={t('leads.allUsers')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{t('leads.allUsers')}</SelectItem>
+                    {allUsers.map((u) => (
+                      <SelectItem key={u.id} value={String(u.id)}>
+                        {u.first_name || u.email} {u.role === 'marketeur' ? '(M)' : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="gap-2 h-8 px-3 text-xs">
@@ -475,6 +491,23 @@ export default function Leads() {
                 <SelectContent>
                   <SelectItem value="all">{t('leads.allBranches')}</SelectItem>
                   {branchNames.map((b) => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+
+            {user?.role === 'super_admin' && allUsers?.length > 0 && (
+              <Select value={filterAffiliatedUser || 'all'} onValueChange={(v) => setFilterAffiliatedUser(v === 'all' ? '' : v)}>
+                <SelectTrigger className="w-[180px] h-9">
+                  <Users size={14} className="me-1" />
+                  <SelectValue placeholder={t('leads.allUsers')} />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t('leads.allUsers')}</SelectItem>
+                  {allUsers.map((u) => (
+                    <SelectItem key={u.id} value={String(u.id)}>
+                      {u.first_name || u.email} {u.role === 'marketeur' ? '(M)' : ''}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             )}
@@ -784,38 +817,49 @@ export default function Leads() {
 
       {/* Create dialog */}
       <Dialog open={createDialogOpen} onOpenChange={(open) => { setCreateDialogOpen(open); if (!open) { setForm(emptyForm); setCreateStep(1) } }}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t('leads.dialogTitle')}</DialogTitle>
-            {/* Step indicator */}
-            <div className="flex items-center gap-2 pt-2">
-              {[{ step: 1, label: t('leads.company') }, { step: 2, label: t('leads.type') }, { step: 3, label: t('leads.sectionContact') }].map(({ step, label }, i) => (
-                <div key={step} className="flex items-center gap-2">
-                  {i > 0 && <ChevronRight className="w-3 h-3 text-muted-foreground/50 icon-directional" />}
-                  <div className={`flex items-center gap-1.5 text-xs font-medium ${createStep === step ? 'text-primary' : createStep > step ? 'text-muted-foreground' : 'text-muted-foreground/50'}`}>
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${createStep === step ? 'bg-primary text-primary-foreground' : createStep > step ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>{step}</span>
-                    {label}
-                  </div>
-                </div>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto p-0 gap-0">
+          {/* Colored header band */}
+          <div className="bg-gradient-to-l from-primary/10 via-primary/5 to-transparent px-6 pt-5 pb-4 border-b">
+            <DialogHeader>
+              <DialogTitle className="text-base font-semibold">{t('leads.dialogTitle')}</DialogTitle>
+            </DialogHeader>
+            {/* Step pills */}
+            <div className="flex items-center gap-2 mt-3">
+              {[{ s: 1, l: t('leads.company') }, { s: 2, l: t('leads.type') }, { s: 3, l: t('leads.sectionContact') }].map(({ s, l }, i) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => { if (s < createStep) setCreateStep(s) }}
+                  disabled={s > createStep}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                    createStep === s
+                      ? 'bg-primary text-primary-foreground shadow-sm'
+                      : createStep > s
+                        ? 'bg-primary/15 text-primary cursor-pointer hover:bg-primary/25'
+                        : 'bg-muted/60 text-muted-foreground/50'
+                  }`}
+                >
+                  {l}
+                </button>
               ))}
             </div>
-          </DialogHeader>
+          </div>
 
           {/* Step 1: Company / Org */}
           {createStep === 1 && (
-            <div className="space-y-4 py-2">
+            <div className="p-6">
               <div className="grid grid-cols-2 gap-3">
                 {Object.entries(COMPANY_LOGOS).map(([key, { src, label }]) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => { setForm({ ...form, company: key }); setCreateStep(2) }}
-                    className={`flex flex-col items-center gap-3 rounded-xl border-2 p-6 transition-all cursor-pointer
+                    className={`flex flex-col items-center gap-3 rounded-xl p-6 transition-all cursor-pointer border
                       ${form.company === key
-                        ? 'border-primary bg-primary/5 shadow-sm'
-                        : 'border-muted hover:border-muted-foreground/30 hover:bg-muted/30'}`}
+                        ? 'border-primary bg-primary/8 shadow-sm'
+                        : 'border-border/50 bg-muted/20 hover:bg-muted/50 hover:border-border'}`}
                   >
-                    <img src={src} alt={label} className="h-12 w-auto object-contain" />
+                    <img src={src} alt={label} className="h-10 w-auto object-contain" />
                     <span className="text-sm font-medium">{label}</span>
                   </button>
                 ))}
@@ -825,34 +869,30 @@ export default function Leads() {
 
           {/* Step 2: Type (patient vs employee) */}
           {createStep === 2 && (
-            <div className="space-y-4 py-2">
-              {/* Company reminder */}
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                <img src={COMPANY_LOGOS[form.company]?.src} alt="" className="h-5 w-auto" />
-                <span className="text-sm font-medium">{COMPANY_LOGOS[form.company]?.label}</span>
-              </div>
+            <div className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 {[
-                  { type: 'patient', icon: '🧑‍🦳', labelKey: 'leads.typeNewPatient' },
-                  { type: 'caregiver', icon: '👩‍⚕️', labelKey: 'leads.typeNewEmployee' },
-                ].map(({ type, icon, labelKey }) => (
+                  { type: 'patient', icon: '🧑‍🦳', labelKey: 'leads.typeNewPatient', desc: 'מטופל חדש למערכת' },
+                  { type: 'caregiver', icon: '👩‍⚕️', labelKey: 'leads.typeNewEmployee', desc: 'עובד מחפש עבודה' },
+                ].map(({ type, icon, labelKey, desc }) => (
                   <button
                     key={type}
                     type="button"
-                    onClick={() => { setForm({ ...form, type }); setCreateStep(3) }}
-                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-6 transition-all cursor-pointer
+                    onClick={() => { setForm({ ...form, type, ...(type === 'caregiver' || type === 'foreign_caregiver' ? { service_requested: 'מחפש עבודה' } : {}) }); setCreateStep(3) }}
+                    className={`flex flex-col items-center gap-2 rounded-xl p-6 transition-all cursor-pointer border text-center
                       ${form.type === type
-                        ? 'border-primary bg-primary/5 shadow-sm'
-                        : 'border-muted hover:border-muted-foreground/30 hover:bg-muted/30'}`}
+                        ? 'border-primary bg-primary/8 shadow-sm'
+                        : 'border-border/50 bg-muted/20 hover:bg-muted/50 hover:border-border'}`}
                   >
-                    <span className="text-3xl">{icon}</span>
-                    <span className="text-sm font-medium">{t(labelKey)}</span>
+                    <span className="text-3xl mb-1">{icon}</span>
+                    <span className="text-sm font-semibold">{t(labelKey)}</span>
+                    <span className="text-[11px] text-muted-foreground leading-tight">{desc}</span>
                   </button>
                 ))}
               </div>
-              <div className="flex justify-start">
-                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateStep(1)} className="gap-1.5">
-                  <ChevronLeft className="w-4 h-4 icon-directional" /> {t('common.back')}
+              <div className="flex justify-center">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateStep(1)} className="text-xs text-muted-foreground gap-1">
+                  <ChevronLeft className="w-3.5 h-3.5 icon-directional" /> {t('common.back')}
                 </Button>
               </div>
             </div>
@@ -860,22 +900,27 @@ export default function Leads() {
 
           {/* Step 3: Form fields */}
           {createStep === 3 && (
-            <form onSubmit={handleCreate} className="space-y-4">
-              {/* Summary of selections */}
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
-                <img src={COMPANY_LOGOS[form.company]?.src} alt="" className="h-5 w-auto" />
-                <span className="text-sm font-medium">{COMPANY_LOGOS[form.company]?.label}</span>
-                <span className="text-muted-foreground">·</span>
-                <span className="text-sm">{TYPE_ICONS[form.type]} {t(`leads.type_${form.type}`)}</span>
+            <form onSubmit={handleCreate} className="flex flex-col">
+              {/* Context chip */}
+              <div className="px-6 pt-4 pb-1 flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 text-xs bg-muted/60 text-muted-foreground rounded-full px-2.5 py-1">
+                  <img src={COMPANY_LOGOS[form.company]?.src} alt="" className="h-3.5 w-auto" />
+                  {COMPANY_LOGOS[form.company]?.label}
+                </span>
+                <span className="inline-flex items-center gap-1 text-xs bg-muted/60 text-muted-foreground rounded-full px-2.5 py-1">
+                  {TYPE_ICONS[form.type]} {t(`leads.type_${form.type}`)}
+                </span>
               </div>
-              <LeadFormFields form={form} setForm={setForm} t={t} branches={branches} cities={cities} leadFields={leadFields} hideTypeSelector />
-              <div className="flex gap-2 justify-between">
-                <Button type="button" variant="ghost" onClick={() => setCreateStep(2)} className="gap-1.5">
-                  <ChevronLeft className="w-4 h-4 icon-directional" /> {t('common.back')}
+              <div className="px-6 py-4 space-y-4">
+                <LeadFormFields form={form} setForm={setForm} t={t} branches={branches} cities={cities} leadFields={leadFields} hideTypeSelector />
+              </div>
+              <div className="flex items-center justify-between px-6 py-3 border-t">
+                <Button type="button" variant="ghost" size="sm" onClick={() => setCreateStep(2)} className="text-xs text-muted-foreground gap-1">
+                  <ChevronLeft className="w-3.5 h-3.5 icon-directional" /> {t('common.back')}
                 </Button>
                 <div className="flex gap-2">
-                  <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)}>{t('common.cancel')}</Button>
-                  <Button type="submit" disabled={createLead.isPending}>{createLead.isPending ? t('common.saving') : t('common.create')}</Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => setCreateDialogOpen(false)}>{t('common.cancel')}</Button>
+                  <Button type="submit" size="sm" disabled={createLead.isPending}>{createLead.isPending ? t('common.saving') : t('common.create')}</Button>
                 </div>
               </div>
             </form>
@@ -1009,23 +1054,6 @@ export default function Leads() {
               {captureLinked ? t('leads.linkCopied') : t('leads.captureLink')}
             </Button>
           )}
-          {/* Super admin: filter by user */}
-          {user?.role === 'super_admin' && allUsers?.length > 0 && (
-            <Select value={filterAffiliatedUser || 'all'} onValueChange={(v) => setFilterAffiliatedUser(v === 'all' ? '' : v)}>
-              <SelectTrigger className="h-8 w-[180px] text-xs">
-                <Users size={12} className="me-1" />
-                <SelectValue placeholder={t('leads.allUsers')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('leads.allUsers')}</SelectItem>
-                {allUsers.map((u) => (
-                  <SelectItem key={u.id} value={String(u.id)}>
-                    {u.first_name || u.email} {u.role === 'marketeur' ? '(M)' : ''}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
           {user?.role !== 'marketeur' && (
             <Button variant="ghost" size="sm" className="gap-1.5" onClick={() => setFieldsDialogOpen(true)}>
               <Settings size={14} />
@@ -1062,7 +1090,11 @@ const CHANNEL_OPTIONS = [
 ]
 
 const POSITION_OPTIONS = [
-  'מטפל/ת', 'עובד/ת זר/ה', 'אחות', 'מנהל/ת בית', 'עובד/ת סוציאלי/ת', 'פיזיותרפיסט/ית',
+  'מלאה', 'חלקית', 'חצי', 'שליש',
+]
+
+const WORKER_TYPE_OPTIONS = [
+  'מטפל', 'עובד סוציאלי', 'רכזת השמה', 'עובד מקצועי',
 ]
 
 function SelectWithOther({ value, onChange, options, placeholder, t }) {
@@ -1079,9 +1111,9 @@ function SelectWithOther({ value, onChange, options, placeholder, t }) {
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
-          className="flex-1"
+          className="h-10 flex-1 bg-background/80 border-border/50"
         />
-        <Button type="button" variant="ghost" size="sm" className="px-2 shrink-0" onClick={() => { onChange(''); setIsOther(false) }}>
+        <Button type="button" variant="ghost" size="sm" className="px-2 shrink-0 h-10" onClick={() => { onChange(''); setIsOther(false) }}>
           <X size={14} />
         </Button>
       </div>
@@ -1094,7 +1126,7 @@ function SelectWithOther({ value, onChange, options, placeholder, t }) {
       else if (v === '__empty__') onChange('')
       else onChange(v)
     }}>
-      <SelectTrigger><SelectValue placeholder={placeholder || '-'} /></SelectTrigger>
+      <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue placeholder={placeholder || '-'} /></SelectTrigger>
       <SelectContent>
         <SelectItem value="__empty__">-</SelectItem>
         {options.map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
@@ -1154,13 +1186,10 @@ function CityCombobox({ value, onChange, cities, placeholder }) {
 // ─── Lead Form Fields (reusable) ────────────────────────
 const TYPE_ICONS = { patient: '🧑‍🦳', caregiver: '👩‍⚕️', foreign_caregiver: '🌍' }
 
-function FormSection({ icon: Icon, title, children }) {
+function FormSection({ title, children, accent }) {
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-        {Icon && <Icon size={13} />}
-        {title}
-      </div>
+    <div className={`rounded-xl p-4 space-y-3 ${accent || 'bg-muted/40'}`}>
+      <span className="text-xs font-semibold text-foreground/60 uppercase tracking-wide">{title}</span>
       {children}
     </div>
   )
@@ -1182,7 +1211,7 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
               <button
                 key={typ}
                 type="button"
-                onClick={() => setForm({ ...form, type: typ })}
+                onClick={() => setForm({ ...form, type: typ, ...((typ === 'caregiver' || typ === 'foreign_caregiver') && !form.service_requested ? { service_requested: 'מחפש עבודה' } : {}) })}
                 className={`flex flex-col items-center gap-1 rounded-lg border-2 p-3 transition-all text-center
                   ${form.type === typ
                     ? 'border-primary bg-primary/5 shadow-sm'
@@ -1200,7 +1229,7 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
         <div className="space-y-2">
           <Label>{t('leads.company')}</Label>
           <Select value={form.company} onValueChange={(v) => setForm({ ...form, company: v })}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="babait">Babait</SelectItem>
               <SelectItem value="aviezer">Aviezer</SelectItem>
@@ -1210,41 +1239,39 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
       )}
 
       {/* ── Contact info (all types) ── */}
-      <FormSection icon={User} title={t('leads.sectionContact')}>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t('common.name')} *</Label>
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder={isPatient ? t('leads.placeholderPatientName') : t('leads.placeholderName')} />
+      <FormSection title={t('leads.sectionContact')}>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-4">
+          <div className="space-y-1.5 col-span-2 sm:col-span-1">
+            <Label className="text-[13px] text-muted-foreground">{t('common.name')} <span className="text-destructive">*</span></Label>
+            <Input className="h-10 w-full bg-background/80 border-border/50" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required placeholder={isPatient ? t('leads.placeholderPatientName') : t('leads.placeholderName')} />
+          </div>
+          <div className="space-y-1.5 col-span-2 sm:col-span-1">
+            <Label className="text-[13px] text-muted-foreground">{t('leads.phone')} <span className="text-destructive">*</span></Label>
+            <Input className="h-10 w-full bg-background/80 border-border/50" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required placeholder="05x-xxx-xxxx" dir="ltr" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">{t('leads.phone')} *</Label>
-            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required placeholder="05x-xxx-xxxx" />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t('common.email')}</Label>
-            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            <Label className="text-[13px] text-muted-foreground">{t('common.email')}</Label>
+            <Input className="h-10 w-full bg-background/80 border-border/50" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} dir="ltr" />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">{t('leads.city')}</Label>
-            <CityCombobox value={form.city} onChange={(v) => setForm({ ...form, city: v })} cities={cities} placeholder={t('leads.city')} />
+            <Label className="text-[13px] text-muted-foreground">{t('leads.city')}</Label>
+            <Input className="h-10 w-full bg-background/80 border-border/50" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder={t('leads.city')} />
           </div>
         </div>
       </FormSection>
 
       {/* ── Patient-specific fields ── */}
       {isPatient && (
-        <FormSection icon={Building2} title={t('leads.sectionService')}>
-          <div className="grid grid-cols-2 gap-3">
+        <FormSection title={t('leads.sectionService')}>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">{t('leads.serviceRequested')}</Label>
-              <SelectWithOther value={form.service_requested} onChange={(v) => setForm({ ...form, service_requested: v })} options={SERVICE_OPTIONS} placeholder={t('leads.placeholderService')} t={t} />
+              <Label className="text-[13px] text-muted-foreground">{t('leads.serviceRequested')}</Label>
+              <SelectWithOther value={form.service_requested} onChange={(v) => setForm({ ...form, service_requested: v })} options={SERVICE_OPTIONS.filter(o => o !== 'מחפש עבודה')} placeholder={t('leads.placeholderService')} t={t} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">{t('leads.branch')}</Label>
+              <Label className="text-[13px] text-muted-foreground">{t('leads.branch')}</Label>
               <Select value={form.branch || 'none'} onValueChange={(v) => setForm({ ...form, branch: v === 'none' ? '' : v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">-</SelectItem>
                   {branches.map((b) => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
@@ -1257,22 +1284,20 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
 
       {/* ── Caregiver-specific fields ── */}
       {(isCaregiver || isForeignCaregiver) && (
-        <FormSection icon={Briefcase} title={t('leads.sectionProfessional')}>
-          <div className="grid grid-cols-2 gap-3">
+        <FormSection title={t('leads.sectionProfessional')}>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-4">
             <div className="space-y-1.5">
-              <Label className="text-xs">{t('leads.positionType')}</Label>
+              <Label className="text-[13px] text-muted-foreground">סוג עובד</Label>
+              <SelectWithOther value={form.custom_fields?.worker_type || ''} onChange={(v) => setForm({ ...form, custom_fields: { ...form.custom_fields, worker_type: v } })} options={WORKER_TYPE_OPTIONS} placeholder="בחר סוג עובד" t={t} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-[13px] text-muted-foreground">{t('leads.positionType')}</Label>
               <SelectWithOther value={form.position_type} onChange={(v) => setForm({ ...form, position_type: v })} options={POSITION_OPTIONS} placeholder={t('leads.placeholderPosition')} t={t} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs">{t('leads.serviceRequested')}</Label>
-              <SelectWithOther value={form.service_requested} onChange={(v) => setForm({ ...form, service_requested: v })} options={SERVICE_OPTIONS} t={t} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label className="text-xs">{t('leads.branch')}</Label>
+              <Label className="text-[13px] text-muted-foreground">{t('leads.branch')}</Label>
               <Select value={form.branch || 'none'} onValueChange={(v) => setForm({ ...form, branch: v === 'none' ? '' : v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">-</SelectItem>
                   {branches.map((b) => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
@@ -1281,12 +1306,8 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
             </div>
             {isForeignCaregiver && (
               <div className="space-y-1.5">
-                <Label className="text-xs">{t('leads.nationality')}</Label>
-                <Input
-                  value={form.custom_fields?.nationality || ''}
-                  onChange={(e) => setForm({ ...form, custom_fields: { ...form.custom_fields, nationality: e.target.value } })}
-                  placeholder={t('leads.placeholderNationality')}
-                />
+                <Label className="text-[13px] text-muted-foreground">{t('leads.nationality')}</Label>
+                <Input className="h-10 w-full bg-background/80 border-border/50" value={form.custom_fields?.nationality || ''} onChange={(e) => setForm({ ...form, custom_fields: { ...form.custom_fields, nationality: e.target.value } })} placeholder={t('leads.placeholderNationality')} />
               </div>
             )}
           </div>
@@ -1294,22 +1315,16 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
       )}
 
       {/* ── Routing & tracking (all types) ── */}
-      <FormSection icon={MapPin} title={t('leads.sectionRouting')}>
-        <div className="grid grid-cols-2 gap-3">
+      <FormSection title={t('leads.sectionRouting')}>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs">{t('leads.source')}</Label>
+            <Label className="text-[13px] text-muted-foreground">{t('leads.source')}</Label>
             <SelectWithOther value={form.source} onChange={(v) => setForm({ ...form, source: v })} options={SOURCE_OPTIONS} t={t} />
           </div>
           <div className="space-y-1.5">
-            <Label className="text-xs">{t('leads.leadChannel')}</Label>
-            <SelectWithOther value={form.lead_channel || ''} onChange={(v) => setForm({ ...form, lead_channel: v })} options={CHANNEL_OPTIONS} t={t} />
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5">
-            <Label className="text-xs">{t('common.status')}</Label>
+            <Label className="text-[13px] text-muted-foreground">{t('common.status')}</Label>
             <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="new">{t('leads.statusNew')}</SelectItem>
                 <SelectItem value="sent_to_branch">{t('leads.statusSentToBranch')}</SelectItem>
@@ -1325,22 +1340,22 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
 
       {/* ── Notes ── */}
       <div className="space-y-1.5">
-        <Label className="text-xs">{t('common.details')}</Label>
-        <Textarea value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} rows={3} placeholder={t('leads.placeholderDetails')} />
+        <Label className="text-xs font-semibold text-foreground/60 uppercase tracking-wide">{t('common.details')}</Label>
+        <Textarea className="min-h-[90px] resize-none bg-muted/30 border-border/50 focus:bg-background transition-colors" value={form.details} onChange={(e) => setForm({ ...form, details: e.target.value })} rows={3} placeholder={t('leads.placeholderDetails')} />
       </div>
 
       {/* ── Custom fields ── */}
       {leadFields.length > 0 && (
-        <FormSection icon={Hash} title={t('leads.customFields')}>
+        <FormSection title={t('leads.customFields')}>
           {leadFields.map((fd) => (
             <div key={fd.id} className="space-y-1">
-              <Label className="text-xs">{fd.label} {fd.required && '*'}</Label>
+              <Label className="text-sm font-medium">{fd.label} {fd.required && <span className="text-destructive">*</span>}</Label>
               {fd.field_type === 'select' ? (
                 <Select
                   value={form.custom_fields?.[fd.field_key] || ''}
                   onValueChange={(v) => setForm({ ...form, custom_fields: { ...form.custom_fields, [fd.field_key]: v } })}
                 >
-                  <SelectTrigger><SelectValue placeholder="-" /></SelectTrigger>
+                  <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue placeholder="-" /></SelectTrigger>
                   <SelectContent>
                     {(fd.options || []).map((opt) => <SelectItem key={opt} value={opt}>{opt}</SelectItem>)}
                   </SelectContent>
@@ -1350,7 +1365,7 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
                   value={form.custom_fields?.[fd.field_key] ?? ''}
                   onValueChange={(v) => setForm({ ...form, custom_fields: { ...form.custom_fields, [fd.field_key]: v } })}
                 >
-                  <SelectTrigger><SelectValue placeholder="-" /></SelectTrigger>
+                  <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue placeholder="-" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="true">{t('common.yes')}</SelectItem>
                     <SelectItem value="false">{t('common.no')}</SelectItem>
