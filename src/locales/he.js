@@ -58,6 +58,8 @@ export default {
   'login.emailPlaceholder': 'name@company.com',
   'login.submit': 'התחבר',
   'login.submitting': '...מתחבר',
+  'login.showPassword': 'הצג סיסמה',
+  'login.hidePassword': 'הסתר סיסמה',
 
   // dashboard
   'dashboard.title': 'לוח בקרה',

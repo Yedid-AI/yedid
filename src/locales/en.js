@@ -58,6 +58,8 @@ export default {
   'login.emailPlaceholder': 'name@company.com',
   'login.submit': 'Sign in',
   'login.submitting': 'Signing in...',
+  'login.showPassword': 'Show password',
+  'login.hidePassword': 'Hide password',
 
   // dashboard
   'dashboard.title': 'Dashboard',

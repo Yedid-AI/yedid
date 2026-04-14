@@ -58,6 +58,8 @@ export default {
   'login.emailPlaceholder': 'nom@entreprise.com',
   'login.submit': 'Se connecter',
   'login.submitting': 'Connexion...',
+  'login.showPassword': 'Afficher le mot de passe',
+  'login.hidePassword': 'Masquer le mot de passe',
 
   // dashboard
   'dashboard.title': 'Tableau de bord',

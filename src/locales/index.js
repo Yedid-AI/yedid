@@ -10,4 +10,4 @@ export const localeConfig = {
   he: { label: 'עברית', dir: 'rtl', dateLocale: 'he-IL' },
 }
 
-export const defaultLocale = 'en'
+export const defaultLocale = 'he'
