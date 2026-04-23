@@ -96,13 +96,18 @@ router.post('/register', checkAuth, checkRole('admin'), async (req, res) => {
       return res.status(400).json({ error: 'Email et mot de passe requis' })
     }
 
-    const validRoles = ['super_admin', 'admin', 'agent', 'marketeur']
+    const validRoles = ['super_admin', 'admin', 'agent', 'marketeur', 'branch']
     if (role && !validRoles.includes(role)) {
       return res.status(400).json({ error: 'Role invalide' })
     }
     // Admin cannot create super_admin users
     if (req.user.role === 'admin' && role === 'super_admin') {
       return res.status(403).json({ error: 'Impossible de creer un super_admin' })
+    }
+    // Company admin can only create users for their own enterprise
+    const finalEnterprise = enterprise ? String(enterprise).toLowerCase() : null
+    if (req.user.enterprise && finalEnterprise !== req.user.enterprise) {
+      return res.status(403).json({ error: `Vous ne pouvez creer que des users ${req.user.enterprise}` })
     }
 
     // Create user in Supabase Auth (GoTrue)
@@ -129,7 +134,7 @@ router.post('/register', checkAuth, checkRole('admin'), async (req, res) => {
         first_name: first_name || null,
         last_name: last_name || null,
         role: role || 'agent',
-        enterprise: enterprise || null,
+        enterprise: finalEnterprise,
       })
       .select()
       .single()
@@ -155,11 +160,14 @@ router.post('/register', checkAuth, checkRole('admin'), async (req, res) => {
 router.get('/users', checkAuth, checkRole('admin'), async (req, res) => {
   try {
     const sb = req.supabaseAdmin || req.supabase
-    const { data, error } = await sb
+    let query = sb
       .from('users')
       .select('id, email, first_name, last_name, role, enterprise, created_at, chatwoot_accounts(account_id)')
       .order('created_at', { ascending: false })
+    // Company admin only sees users of their own enterprise
+    if (req.user.enterprise) query = query.eq('enterprise', req.user.enterprise)
 
+    const { data, error } = await query
     if (error) throw error
     res.json({ users: data })
   } catch (err) {
@@ -186,6 +194,9 @@ router.get('/users/:id', checkAuth, checkRole('admin'), async (req, res) => {
     }
 
     const user = users[0]
+    if (req.user.enterprise && user.enterprise !== req.user.enterprise) {
+      return res.status(404).json({ error: 'Utilisateur introuvable' })
+    }
 
     // Fetch chatwoot_account
     const { data: chatwootAccounts } = await req.supabase
@@ -244,6 +255,20 @@ router.put('/users/:id', checkAuth, checkRole('admin'), async (req, res) => {
     if (req.user.role === 'admin' && role === 'super_admin') {
       return res.status(403).json({ error: 'Impossible de definir le role super_admin' })
     }
+    // Company admin scoping
+    const finalEnterprise = enterprise !== undefined
+      ? (enterprise ? String(enterprise).toLowerCase() : null)
+      : undefined
+    if (req.user.enterprise) {
+      // Cannot edit user from another enterprise
+      const { data: target } = await req.supabaseAdmin.from('users').select('enterprise').eq('id', id).maybeSingle()
+      if (!target || target.enterprise !== req.user.enterprise) {
+        return res.status(403).json({ error: 'Acces interdit' })
+      }
+      if (finalEnterprise !== undefined && finalEnterprise !== req.user.enterprise) {
+        return res.status(403).json({ error: `Impossible de changer la societe` })
+      }
+    }
 
     // If password is being changed, update in Supabase Auth
     if (password) {
@@ -266,7 +291,7 @@ router.put('/users/:id', checkAuth, checkRole('admin'), async (req, res) => {
     if (first_name !== undefined) updates.first_name = first_name
     if (last_name !== undefined) updates.last_name = last_name
     if (role !== undefined) updates.role = role
-    if (enterprise !== undefined) updates.enterprise = enterprise
+    if (finalEnterprise !== undefined) updates.enterprise = finalEnterprise
 
     const { data, error } = await req.supabaseAdmin
       .from('users')
@@ -294,12 +319,16 @@ router.delete('/users/:id', checkAuth, checkRole('admin'), async (req, res) => {
     // Check if target is super_admin — block deletion
     const { data: targetUsers } = await req.supabaseAdmin
       .from('users')
-      .select('role, auth_id')
+      .select('role, auth_id, enterprise')
       .eq('id', id)
       .limit(1)
 
     if (targetUsers?.[0]?.role === 'super_admin') {
       return res.status(403).json({ error: 'Impossible de supprimer un super_admin' })
+    }
+    // Company admin can only delete users from their own enterprise
+    if (req.user.enterprise && targetUsers?.[0]?.enterprise !== req.user.enterprise) {
+      return res.status(403).json({ error: 'Acces interdit' })
     }
 
     // Delete from Supabase Auth first
@@ -317,6 +346,100 @@ router.delete('/users/:id', checkAuth, checkRole('admin'), async (req, res) => {
     res.json({ success: true })
   } catch (err) {
     console.error('[auth]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// ─── User ↔ Branches (M:N for branch role) ───────────────
+
+// GET /api/user-branches — all assignments (scoped by enterprise for company admins)
+router.get('/user-branches', checkAuth, checkRole('admin'), async (req, res) => {
+  try {
+    let query = req.supabaseAdmin
+      .from('user_branches')
+      .select('id, user_id, branch_id, branches(id, name, user_id), users(id, email, first_name, last_name, enterprise)')
+    const { data, error } = await query
+    if (error) throw error
+    // Filter to caller's enterprise when scoped
+    const filtered = req.user.enterprise
+      ? (data || []).filter(r => r.users?.enterprise === req.user.enterprise)
+      : (data || [])
+    res.json({ assignments: filtered })
+  } catch (err) {
+    console.error('[user-branches]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// GET /api/users/:id/branches — list branches assigned to a branch user
+router.get('/users/:id/branches', checkAuth, checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { data, error } = await req.supabaseAdmin
+      .from('user_branches')
+      .select('id, branch_id, created_at, branches(id, name, user_id)')
+      .eq('user_id', id)
+      .order('created_at', { ascending: true })
+    if (error) throw error
+    res.json({ branches: data || [] })
+  } catch (err) {
+    console.error('[user-branches]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// POST /api/users/:id/branches — assign a branch to a user
+router.post('/users/:id/branches', checkAuth, checkRole('admin'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { branch_id } = req.body
+    if (!branch_id) return res.status(400).json({ error: 'branch_id requis' })
+
+    // Company admin can only assign branches that belong to their enterprise
+    if (req.user.enterprise) {
+      const { data: target } = await req.supabaseAdmin.from('users').select('enterprise').eq('id', id).maybeSingle()
+      if (!target || target.enterprise !== req.user.enterprise) {
+        return res.status(403).json({ error: 'Acces interdit' })
+      }
+      const { data: branch } = await req.supabaseAdmin.from('branches').select('user_id').eq('id', branch_id).maybeSingle()
+      const { data: ownerRow } = await req.supabaseAdmin.from('users').select('id').eq('enterprise', req.user.enterprise).eq('role', 'admin').limit(1).maybeSingle()
+      if (!branch || !ownerRow || branch.user_id !== ownerRow.id) {
+        return res.status(403).json({ error: 'Branche hors de votre societe' })
+      }
+    }
+
+    const { data, error } = await req.supabaseAdmin
+      .from('user_branches')
+      .upsert({ user_id: parseInt(id), branch_id: parseInt(branch_id) }, { onConflict: 'user_id,branch_id' })
+      .select('id, branch_id, created_at')
+      .single()
+    if (error) throw error
+    res.status(201).json({ assignment: data })
+  } catch (err) {
+    console.error('[user-branches]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// DELETE /api/users/:id/branches/:branchId — unassign
+router.delete('/users/:id/branches/:branchId', checkAuth, checkRole('admin'), async (req, res) => {
+  try {
+    const { id, branchId } = req.params
+    if (req.user.enterprise) {
+      const { data: target } = await req.supabaseAdmin.from('users').select('enterprise').eq('id', id).maybeSingle()
+      if (!target || target.enterprise !== req.user.enterprise) {
+        return res.status(403).json({ error: 'Acces interdit' })
+      }
+    }
+    const { error } = await req.supabaseAdmin
+      .from('user_branches')
+      .delete()
+      .eq('user_id', id)
+      .eq('branch_id', branchId)
+    if (error) throw error
+    res.json({ success: true })
+  } catch (err) {
+    console.error('[user-branches]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
   }
 })

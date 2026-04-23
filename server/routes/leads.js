@@ -2,57 +2,42 @@ import { Router } from 'express'
 import { checkRole } from '../middleware.js'
 import { sendMessage } from '../unipile.js'
 import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
+import { getLeadScope, applyLeadScope, canAccessLead, resolveCompanyOwnerId, resolveBranchId } from '../lead-scope.js'
 import multer from 'multer'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
 
 const router = Router()
 
-// Helper: verify marketeur has affiliation to a lead (returns true if allowed)
-async function verifyMarketeurAccess(req, leadId) {
-  if (req.user.role !== 'marketeur') return true
-  const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
-    .select('id').eq('lead_id', leadId).eq('user_id', req.user.user_id).limit(1)
-  return aff?.length > 0
-}
-
 // ─── Leads CRUD ──────────────────────────────────────────
 
 // GET /api/leads — list with filters + stats (server-side filtering & pagination)
-router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
+router.get('/leads', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
-    // Admin sees all leads — use supabaseAdmin to bypass RLS
-    const supabase = ['super_admin', 'admin'].includes(req.user.role)
-      ? (req.supabaseAdmin || req.supabase)
-      : req.supabase
+    const supabase = req.supabaseAdmin || req.supabase
     const page = Math.max(0, parseInt(req.query.page) || 0)
     const pageSize = Math.min(100, Math.max(1, parseInt(req.query.page_size) || 50))
     const emptyResult = { leads: [], stats: { total: 0 }, total: 0, page, page_size: pageSize }
 
-    // ── Resolve access scope (affiliation IDs for marketeur / affiliated_user filter) ──
-    let scopeIds = null
-    if (req.user.role === 'marketeur') {
-      const { data: affiliations, error: affErr } = await req.supabaseAdmin
-        .from('lead_affiliations').select('lead_id').eq('user_id', req.user.user_id)
-      if (affErr) console.error('[leads/GET] affiliation query error:', affErr.message)
-      scopeIds = (affiliations || []).map(a => a.lead_id)
-      if (scopeIds.length === 0) return res.json(emptyResult)
+    const scope = await getLeadScope(req)
+    if (scope.scope === 'none') return res.json(emptyResult)
+    if ((scope.scope === 'branches' || scope.scope === 'affiliations') && scope.value.length === 0) {
+      return res.json(emptyResult)
     }
+
+    // Optional admin filter: leads affiliated to a specific user
     let affiliatedFilterIds = null
-    if (req.query.affiliated_user_id && ['super_admin', 'admin'].includes(req.user.role)) {
+    const canFilterByAffiliation = scope.scope === 'all' || scope.scope === 'company'
+    if (req.query.affiliated_user_id && canFilterByAffiliation) {
       const { data: affiliations } = await req.supabaseAdmin
         .from('lead_affiliations').select('lead_id').eq('user_id', parseInt(req.query.affiliated_user_id))
       affiliatedFilterIds = (affiliations || []).map(a => a.lead_id)
       if (affiliatedFilterIds.length === 0) return res.json(emptyResult)
     }
 
-    // ── Helper: apply shared filters to a query ──
     const applyBaseFilters = (q) => {
-      // Access scope
-      if (scopeIds) q = q.in('id', scopeIds)
-      else if (!['super_admin', 'admin'].includes(req.user.role)) q = q.eq('user_id', req.user.user_id)
+      q = applyLeadScope(q, scope)
       if (affiliatedFilterIds) q = q.in('id', affiliatedFilterIds)
-      // Date range
       if (req.query.date_from) q = q.gte('created_at', req.query.date_from)
       if (req.query.date_to) q = q.lte('created_at', req.query.date_to)
       return q
@@ -119,7 +104,7 @@ router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
     }
 
     // ── Enrich with creator name per user_id (admin/super_admin only) ──
-    if (['super_admin', 'admin'].includes(req.user.role) && leads?.length) {
+    if (canFilterByAffiliation && leads?.length) {
       const userIds = [...new Set(leads.map(l => l.user_id).filter(Boolean))]
       if (userIds.length > 0) {
         const { data: userRows } = await req.supabaseAdmin
@@ -144,19 +129,10 @@ router.get('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
 })
 
 // GET /api/leads/:id
-router.get('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
+router.get('/leads/:id', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
-    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
-    let query = sb.from('leads').select('*').eq('id', req.params.id)
-    if (req.user.role === 'marketeur') {
-      // Verify affiliation
-      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
-        .select('id').eq('lead_id', req.params.id).eq('user_id', req.user.user_id).limit(1)
-      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
-    } else if (!['super_admin', 'admin'].includes(req.user.role)) {
-      query = query.eq('user_id', req.user.user_id)
-    }
-    const { data, error } = await query.single()
+    if (!await canAccessLead(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+    const { data, error } = await req.supabaseAdmin.from('leads').select('*').eq('id', req.params.id).single()
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Lead introuvable' })
     res.json({ lead: data })
@@ -167,19 +143,11 @@ router.get('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
 })
 
 // GET /api/leads/:id/calls — Maskyoo calls for a lead (matched by phone)
-router.get('/leads/:id/calls', checkRole('admin', 'marketeur'), async (req, res) => {
+router.get('/leads/:id/calls', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
-    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
-    let query = sb.from('leads').select('phone').eq('id', req.params.id)
-    if (req.user.role === 'marketeur') {
-      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
-        .select('id').eq('lead_id', req.params.id).eq('user_id', req.user.user_id).limit(1)
-      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
-    } else if (!['super_admin', 'admin'].includes(req.user.role)) {
-      query = query.eq('user_id', req.user.user_id)
-    }
-    const { data: lead, error } = await query.single()
-    if (error || !lead) return res.status(404).json({ error: 'Lead introuvable' })
+    if (!await canAccessLead(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+    const { data: lead } = await req.supabaseAdmin.from('leads').select('phone').eq('id', req.params.id).single()
+    if (!lead) return res.status(404).json({ error: 'Lead introuvable' })
 
     const { data: calls, error: callsErr } = await req.supabaseAdmin
       .from('calls')
@@ -197,19 +165,9 @@ router.get('/leads/:id/calls', checkRole('admin', 'marketeur'), async (req, res)
 })
 
 // GET /api/leads/:id/activities — activity timeline for a lead
-router.get('/leads/:id/activities', checkRole('admin', 'marketeur'), async (req, res) => {
+router.get('/leads/:id/activities', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
-    // Verify lead ownership or affiliation
-    if (req.user.role === 'marketeur') {
-      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
-        .select('id').eq('lead_id', req.params.id).eq('user_id', req.user.user_id).limit(1)
-      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
-    }
-    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
-    let leadQuery = sb.from('leads').select('id').eq('id', req.params.id)
-    if (!['super_admin', 'admin', 'marketeur'].includes(req.user.role)) leadQuery = leadQuery.eq('user_id', req.user.user_id)
-    const { data: lead } = await leadQuery.single()
-    if (!lead) return res.status(404).json({ error: 'Lead introuvable' })
+    if (!await canAccessLead(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
 
     const { data, error } = await req.supabaseAdmin
       .from('lead_activities')
@@ -236,6 +194,11 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
     const serviceNormalized = normalizeService(req.body.service_requested)
     const company = req.body.company || resolveCompany(serviceNormalized)
 
+    // Company admin cannot create leads for another company
+    if (req.user.enterprise && company !== req.user.enterprise) {
+      return res.status(403).json({ error: `Impossible de creer un lead ${company} (vous etes ${req.user.enterprise})` })
+    }
+
     // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index
     let branch = req.body.branch || resolveFixedBranch(serviceNormalized) || null
     if (!branch && req.body.city && company === 'babait') {
@@ -246,6 +209,10 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
         .limit(1)
       if (idx && idx.length > 0) branch = idx[0].branch_name
     }
+
+    // Resolve branch_id from (company owner, branch name) — keep branch text for legacy compat
+    const companyOwnerId = await resolveCompanyOwnerId(req.supabaseAdmin, company)
+    const branchId = branch ? await resolveBranchId(req.supabaseAdmin, companyOwnerId, branch) : null
 
     // Check for existing lead by normalized phone + user_id
     const { data: existing } = await req.supabase
@@ -264,6 +231,7 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
       if (req.body.email && !lead.email) updates.email = req.body.email
       if (req.body.city && !lead.city) updates.city = req.body.city
       if (branch && !lead.branch) updates.branch = branch
+      if (branchId && !lead.branch_id) updates.branch_id = branchId
       if (serviceNormalized && !lead.service_requested) updates.service_requested = serviceNormalized
       if (req.body.service_type && !lead.service_type) updates.service_type = req.body.service_type
       if (company && !lead.company) updates.company = company
@@ -319,6 +287,7 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
       email: req.body.email || null,
       city: req.body.city || null,
       branch,
+      branch_id: branchId,
       coordinator: req.body.coordinator || null,
       source: req.body.source || null,
       lead_channel: req.body.lead_channel || null,
@@ -385,7 +354,7 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
 })
 
 // PUT /api/leads/:id
-router.put('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
+router.put('/leads/:id', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
     const { id } = req.params
     const allowed = [
@@ -395,17 +364,10 @@ router.put('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
       'custom_fields', 'metadata',
     ]
 
-    // Fetch current lead to compute diff
-    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
-    let fetchQuery = sb.from('leads').select('*').eq('id', id)
-    if (req.user.role === 'marketeur') {
-      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
-        .select('id').eq('lead_id', id).eq('user_id', req.user.user_id).limit(1)
-      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
-    } else if (!['super_admin', 'admin'].includes(req.user.role)) {
-      fetchQuery = fetchQuery.eq('user_id', req.user.user_id)
-    }
-    const { data: before } = await fetchQuery.single()
+    if (!await canAccessLead(req, id)) return res.status(404).json({ error: 'Lead introuvable' })
+
+    const sb = req.supabaseAdmin || req.supabase
+    const { data: before } = await sb.from('leads').select('*').eq('id', id).single()
     if (!before) return res.status(404).json({ error: 'Lead introuvable' })
 
     const updates = { updated_at: new Date().toISOString() }
@@ -413,11 +375,14 @@ router.put('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key]
     }
 
-    let query = sb.from('leads').update(updates).eq('id', id)
-    if (!['super_admin', 'admin', 'marketeur'].includes(req.user.role)) {
-      query = query.eq('user_id', req.user.user_id)
+    // If branch text changed, recompute branch_id from (company, branch)
+    if (updates.branch !== undefined && updates.branch !== before.branch) {
+      const company = updates.company || before.company
+      const ownerId = await resolveCompanyOwnerId(req.supabaseAdmin, company)
+      updates.branch_id = updates.branch ? await resolveBranchId(req.supabaseAdmin, ownerId, updates.branch) : null
     }
-    const { data, error } = await query.select().single()
+
+    const { data, error } = await sb.from('leads').update(updates).eq('id', id).select().single()
 
     if (error) throw error
     if (!data) return res.status(404).json({ error: 'Lead introuvable' })
@@ -433,11 +398,16 @@ router.put('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
     }
     if (Object.keys(changes).length > 0) {
       const action = changes.status ? 'status_changed' : 'updated'
+      const metadata = {}
+      if (changes.status && typeof req.body.status_comment === 'string' && req.body.status_comment.trim()) {
+        metadata.comment = req.body.status_comment.trim()
+      }
       await req.supabaseAdmin.from('lead_activities').insert({
         lead_id: id,
         user_id: req.user.user_id,
         action,
         changes,
+        metadata: Object.keys(metadata).length ? metadata : null,
         actor: req.user.email || 'admin',
       }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
     }
@@ -449,16 +419,12 @@ router.put('/leads/:id', checkRole('admin', 'marketeur'), async (req, res) => {
   }
 })
 
-// DELETE /api/leads/:id
+// DELETE /api/leads/:id (admin only — company admin scoped to their company)
 router.delete('/leads/:id', checkRole('admin'), async (req, res) => {
   try {
     const { id } = req.params
-    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
-    let query = sb.from('leads').delete().eq('id', id)
-    if (!['super_admin', 'admin'].includes(req.user.role)) {
-      query = query.eq('user_id', req.user.user_id)
-    }
-    const { error } = await query
+    if (!await canAccessLead(req, id)) return res.status(404).json({ error: 'Lead introuvable' })
+    const { error } = await req.supabaseAdmin.from('leads').delete().eq('id', id)
     if (error) throw error
     res.json({ success: true })
   } catch (err) {
@@ -506,19 +472,22 @@ function isWithinSchedule(config) {
 }
 
 async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) {
-  if (!lead.branch) return { error: 'Aucune branche assignee a ce lead' }
+  if (!lead.branch_id && !lead.branch) return { error: 'Aucune branche assignee a ce lead' }
 
-  const { data: branch } = await supabase
-    .from('branches').select('*')
-    .eq('name', lead.branch)
-    .limit(1).maybeSingle()
+  // Prefer branch_id (avoids cross-company name collisions), fallback to (user_id, name) lookup
+  let branchQuery = supabase.from('branches').select('*')
+  if (lead.branch_id) branchQuery = branchQuery.eq('id', lead.branch_id)
+  else branchQuery = branchQuery.eq('user_id', lead.user_id).eq('name', lead.branch)
+  const { data: branch } = await branchQuery.limit(1).maybeSingle()
 
   if (!branch) return { error: `Branche "${lead.branch}" introuvable` }
-  if (!branch.dispatch_enabled) return { error: `Dispatch desactive pour "${lead.branch}"` }
-  if (!branch.whatsapp_phone) return { error: `Pas de numero WhatsApp pour "${lead.branch}"` }
+  if (!branch.dispatch_enabled) return { error: `Dispatch desactive pour "${branch.name}"` }
+  if (!branch.whatsapp_phone) return { error: `Pas de numero WhatsApp pour "${branch.name}"` }
 
+  // Scope dispatch_config to the lead owner (= company admin)
   const { data: config } = await supabase
     .from('dispatch_config').select('*')
+    .eq('user_id', lead.user_id)
     .limit(1).maybeSingle()
 
   if (!skipScheduleCheck && !isWithinSchedule(config)) {
@@ -555,19 +524,12 @@ async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) 
 }
 
 // POST /api/leads/:id/dispatch — send lead to branch via WhatsApp
-router.post('/leads/:id/dispatch', checkRole('admin', 'marketeur'), async (req, res) => {
+router.post('/leads/:id/dispatch', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
     const { id } = req.params
-    const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
-    let leadQuery = sb.from('leads').select('*').eq('id', id)
-    if (req.user.role === 'marketeur') {
-      const { data: aff } = await req.supabaseAdmin.from('lead_affiliations')
-        .select('id').eq('lead_id', id).eq('user_id', req.user.user_id).limit(1)
-      if (!aff?.length) return res.status(404).json({ error: 'Lead introuvable' })
-    } else if (!['super_admin', 'admin'].includes(req.user.role)) {
-      leadQuery = leadQuery.eq('user_id', req.user.user_id)
-    }
-    const { data: lead, error: leadErr } = await leadQuery.single()
+    if (!await canAccessLead(req, id)) return res.status(404).json({ error: 'Lead introuvable' })
+    const sb = req.supabaseAdmin || req.supabase
+    const { data: lead, error: leadErr } = await sb.from('leads').select('*').eq('id', id).single()
     if (leadErr || !lead) return res.status(404).json({ error: 'Lead introuvable' })
 
     const result = await dispatchLead(req.supabaseAdmin || req.supabase, lead, { skipScheduleCheck: true })
@@ -591,11 +553,12 @@ router.post('/leads/:id/dispatch', checkRole('admin', 'marketeur'), async (req, 
 })
 
 // POST /api/leads/:id/comment — add a comment to lead timeline
-router.post('/leads/:id/comment', checkRole('admin', 'marketeur'), async (req, res) => {
+router.post('/leads/:id/comment', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
     const { id } = req.params
     const { comment } = req.body
     if (!comment?.trim()) return res.status(400).json({ error: 'Comment vide' })
+    if (!await canAccessLead(req, id)) return res.status(404).json({ error: 'Lead introuvable' })
 
     const { error } = await req.supabaseAdmin.from('lead_activities').insert({
       lead_id: id,
@@ -615,7 +578,7 @@ router.post('/leads/:id/comment', checkRole('admin', 'marketeur'), async (req, r
 // ─── Lead Field Definitions ─────────────────────────────
 
 // GET /api/lead-fields
-router.get('/lead-fields', checkRole('admin', 'marketeur'), async (req, res) => {
+router.get('/lead-fields', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
     const sb = ['super_admin', 'admin'].includes(req.user.role) ? (req.supabaseAdmin || req.supabase) : req.supabase
     let query = sb.from('lead_field_definitions').select('*')
@@ -858,9 +821,9 @@ const docUpload = multer({
 })
 
 // GET /api/leads/:id/documents
-router.get('/leads/:id/documents', checkRole('admin', 'marketeur'), async (req, res) => {
+router.get('/leads/:id/documents', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
-    if (!await verifyMarketeurAccess(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+    if (!await canAccessLead(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
     const { data, error } = await req.supabaseAdmin
       .from('lead_documents')
       .select('*')
@@ -875,10 +838,10 @@ router.get('/leads/:id/documents', checkRole('admin', 'marketeur'), async (req, 
 })
 
 // POST /api/leads/:id/documents
-router.post('/leads/:id/documents', checkRole('admin', 'marketeur'), docUpload.single('file'), async (req, res) => {
+router.post('/leads/:id/documents', checkRole('admin', 'marketeur', 'branch'), docUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Fichier requis' })
-    if (!await verifyMarketeurAccess(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+    if (!await canAccessLead(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
 
     const ext = req.file.originalname.split('.').pop()
     const filename = `lead-docs/${req.params.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
@@ -932,9 +895,9 @@ router.delete('/leads/:id/documents/:docId', checkRole('admin'), async (req, res
 // ─── Lead Affiliations ─────────────────────────────────
 
 // GET /api/leads/:id/affiliations
-router.get('/leads/:id/affiliations', checkRole('admin', 'marketeur'), async (req, res) => {
+router.get('/leads/:id/affiliations', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
   try {
-    if (!await verifyMarketeurAccess(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+    if (!await canAccessLead(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
     const { data, error } = await req.supabaseAdmin
       .from('lead_affiliations')
       .select('id, user_id, source, created_at, users(id, email, first_name, last_name, role)')

@@ -1,8 +1,15 @@
 import { Router } from 'express'
 import { getSetting } from '../settings.js'
 import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
+import { resolveCompanyOwnerId, resolveBranchId } from '../lead-scope.js'
 
 const router = Router()
+
+// Map udi → babait (udi is a sub-brand of babait, see normalize-service.js)
+function resolveOwnerEnterprise(company) {
+  if (company === 'udi') return 'babait'
+  return company
+}
 
 // POST /api/public/leads — public endpoint for external lead intake
 router.post('/public/leads', async (req, res) => {
@@ -18,27 +25,25 @@ router.post('/public/leads', async (req, res) => {
     const phone = normalizePhone(req.body.phone)
     if (!name || !phone) return res.status(400).json({ error: 'name et phone requis' })
 
-    // Resolve user_id: from body, setting, or first admin
-    let userId = req.body.user_id || null
-    if (!userId) {
-      const defaultId = getSetting('LEAD_DEFAULT_USER_ID')
-      if (defaultId) {
-        userId = parseInt(defaultId)
-      } else {
-        // Fallback: first admin user
-        const { data: admins } = await req.supabaseAdmin
-          .from('users')
-          .select('id')
-          .in('role', ['admin', 'super_admin'])
-          .order('id', { ascending: true })
-          .limit(1)
-        if (admins?.length) userId = admins[0].id
-      }
-    }
-    if (!userId) return res.status(400).json({ error: 'Impossible de determiner le user_id' })
-
     const serviceNormalized = normalizeService(req.body.service_requested)
     const company = req.body.company || resolveCompany(serviceNormalized)
+
+    // Resolve user_id: explicit body > company owner > setting > first admin
+    let userId = req.body.user_id || null
+    if (!userId) {
+      userId = await resolveCompanyOwnerId(req.supabaseAdmin, resolveOwnerEnterprise(company))
+    }
+    if (!userId) {
+      const defaultId = getSetting('LEAD_DEFAULT_USER_ID')
+      if (defaultId) userId = parseInt(defaultId)
+    }
+    if (!userId) {
+      const { data: admins } = await req.supabaseAdmin
+        .from('users').select('id').in('role', ['admin', 'super_admin'])
+        .order('id', { ascending: true }).limit(1)
+      if (admins?.length) userId = admins[0].id
+    }
+    if (!userId) return res.status(400).json({ error: 'Impossible de determiner le user_id' })
 
     // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index
     let branch = req.body.branch || resolveFixedBranch(serviceNormalized) || null
@@ -50,6 +55,8 @@ router.post('/public/leads', async (req, res) => {
         .limit(1)
       if (idx?.length) branch = idx[0].branch_name
     }
+
+    const branchId = branch ? await resolveBranchId(req.supabaseAdmin, userId, branch) : null
 
     // Check for existing lead by normalized phone + user_id
     const { data: existing } = await req.supabaseAdmin
@@ -68,6 +75,7 @@ router.post('/public/leads', async (req, res) => {
       if (req.body.email && !lead.email) updates.email = req.body.email
       if (req.body.city && !lead.city) updates.city = req.body.city
       if (branch && !lead.branch) updates.branch = branch
+      if (branchId && !lead.branch_id) updates.branch_id = branchId
       if (serviceNormalized && !lead.service_requested) updates.service_requested = serviceNormalized
       if (req.body.service_type && !lead.service_type) updates.service_type = req.body.service_type
       if (company && !lead.company) updates.company = company
@@ -106,6 +114,7 @@ router.post('/public/leads', async (req, res) => {
       email: req.body.email || null,
       city: req.body.city || null,
       branch,
+      branch_id: branchId,
       coordinator: req.body.coordinator || null,
       source: req.body.source || null,
       lead_channel: req.body.lead_channel || null,

@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { Loader2 } from 'lucide-react'
 
-export function ProtectedRoute({ children, roles }) {
+export function ProtectedRoute({ children, roles, noEnterprise }) {
   const { isAuthenticated, loading, user } = useAuth()
 
   if (loading) {
@@ -15,6 +15,11 @@ export function ProtectedRoute({ children, roles }) {
 
   if (!isAuthenticated) {
     return <Navigate to="/login" replace />
+  }
+
+  // Routes flagged noEnterprise (AI features) are only for yedid-side users
+  if (noEnterprise && user?.role !== 'super_admin' && user?.enterprise) {
+    return <Navigate to="/" replace />
   }
 
   // super_admin inherits admin access

@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
+import { resolveBranchId } from '../lead-scope.js'
 
 const router = Router()
 
@@ -68,6 +69,8 @@ router.post('/public/capture/:token', async (req, res) => {
       if (idx?.length) branch = idx[0].branch_name
     }
 
+    const branchId = branch ? await resolveBranchId(req.supabaseAdmin, user.id, branch) : null
+
     // Check for existing lead by phone + user_id
     const { data: existing } = await req.supabaseAdmin
       .from('leads')
@@ -83,6 +86,7 @@ router.post('/public/capture/:token', async (req, res) => {
       if (req.body.email) updates.email = req.body.email
       if (req.body.city) updates.city = req.body.city
       if (branch) updates.branch = branch
+      if (branchId) updates.branch_id = branchId
 
       await req.supabaseAdmin.from('leads').update(updates).eq('id', existing[0].id)
       leadId = existing[0].id
@@ -96,6 +100,7 @@ router.post('/public/capture/:token', async (req, res) => {
         email: req.body.email || null,
         city: req.body.city || null,
         branch,
+        branch_id: branchId,
         source: req.body.source || 'capture_link',
         lead_channel: 'capture_link',
         service_requested: serviceNormalized,

@@ -141,6 +141,7 @@ export default function Users() {
                   <SelectContent>
                     <SelectItem value="admin">מנהל</SelectItem>
                     <SelectItem value="marketeur">משווק</SelectItem>
+                    <SelectItem value="branch">סניף</SelectItem>
                     <SelectItem value="agent">סוכן</SelectItem>
                     {currentUser?.role === 'super_admin' && <SelectItem value="super_admin">סופר אדמין</SelectItem>}
                   </SelectContent>
@@ -151,7 +152,7 @@ export default function Users() {
                 <Select value={form.enterprise || '__empty__'} onValueChange={(v) => setForm({ ...form, enterprise: v === '__empty__' ? '' : v })}>
                   <SelectTrigger className="h-10 w-full"><SelectValue placeholder="-" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__empty__">-</SelectItem>
+                    {!currentUser?.enterprise && <SelectItem value="__empty__">-</SelectItem>}
                     <SelectItem value="babait">Babait</SelectItem>
                     <SelectItem value="aviezer">Aviezer</SelectItem>
                   </SelectContent>

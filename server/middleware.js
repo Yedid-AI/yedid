@@ -17,7 +17,7 @@ export async function checkAuth(req, res, next) {
     // Lookup public.users by auth_id to get BIGINT user_id + role
     const { data: users, error: dbError } = await req.supabaseAdmin
       .from('users')
-      .select('id, email, role, capture_token')
+      .select('id, email, role, enterprise, capture_token')
       .eq('auth_id', authUser.id)
       .limit(1)
 
@@ -25,11 +25,11 @@ export async function checkAuth(req, res, next) {
       return res.status(401).json({ error: 'Utilisateur introuvable' })
     }
 
-    // Same shape as before: { user_id, email, role }
     req.user = {
       user_id: users[0].id,
       email: users[0].email,
       role: users[0].role,
+      enterprise: users[0].enterprise || null,
       capture_token: users[0].capture_token || null,
     }
     next()

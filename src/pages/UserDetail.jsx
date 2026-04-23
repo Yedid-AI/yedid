@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom'
-import { useUser } from '../hooks/queries'
+import { useUser, useBranches, useUserBranches, useAssignBranch, useUnassignBranch } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
@@ -7,7 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { ArrowLeft, User, MessageSquare, BarChart3, FileText, Bot, Inbox, MessageCircle } from 'lucide-react'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { ArrowLeft, User, MessageSquare, BarChart3, FileText, Bot, Inbox, MessageCircle, Building2, X } from 'lucide-react'
+import { useState } from 'react'
 
 function maskToken(token) {
   if (!token) return '-'
@@ -21,6 +23,8 @@ export default function UserDetail() {
   const navigate = useNavigate()
 
   const { data, isLoading, error } = useUser(id)
+  const user = data?.user
+  usePageTitle([user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || '')
 
   if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
   if (error) return (
@@ -34,8 +38,7 @@ export default function UserDetail() {
     </div>
   )
 
-  const { user, chatwoot_account, inboxes, agent_bots, stats } = data
-  usePageTitle([user?.first_name, user?.last_name].filter(Boolean).join(' ') || user?.email || '')
+  const { chatwoot_account, inboxes, agent_bots, stats } = data
 
 
   return (
@@ -53,9 +56,18 @@ export default function UserDetail() {
       <Tabs defaultValue="profil">
         <TabsList>
           <TabsTrigger value="profil"><User className="me-1.5 h-4 w-4" />{t('users.profile')}</TabsTrigger>
+          {user.role === 'branch' && (
+            <TabsTrigger value="branches"><Building2 className="me-1.5 h-4 w-4" />Branches</TabsTrigger>
+          )}
           <TabsTrigger value="chatwoot"><MessageSquare className="me-1.5 h-4 w-4" />{t('users.chatwootTab')}</TabsTrigger>
           <TabsTrigger value="stats"><BarChart3 className="me-1.5 h-4 w-4" />{t('users.statsTab')}</TabsTrigger>
         </TabsList>
+
+        {user.role === 'branch' && (
+          <TabsContent value="branches" className="mt-6">
+            <BranchAssignment userId={user.id} userEnterprise={user.enterprise} />
+          </TabsContent>
+        )}
 
         {/* Onglet Profil */}
         <TabsContent value="profil" className="mt-6">
@@ -239,5 +251,71 @@ export default function UserDetail() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+function BranchAssignment({ userId, userEnterprise }) {
+  const { data: allBranches = [] } = useBranches()
+  const { data: assigned = [] } = useUserBranches(userId)
+  const assign = useAssignBranch()
+  const unassign = useUnassignBranch()
+  const [picked, setPicked] = useState('')
+
+  const assignedIds = new Set(assigned.map(a => a.branch_id))
+  // Filter available branches: exclude already assigned + match user's enterprise (if any)
+  const candidates = allBranches.filter(b => !assignedIds.has(b.id))
+
+  const handleAssign = () => {
+    if (!picked) return
+    assign.mutate({ userId, branchId: parseInt(picked) }, { onSuccess: () => setPicked('') })
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          Branches assignees
+          {userEnterprise && <span className="text-xs text-muted-foreground ms-2">({userEnterprise})</span>}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex gap-2">
+          <Select value={picked} onValueChange={setPicked}>
+            <SelectTrigger className="h-9 max-w-xs"><SelectValue placeholder="Choisir une branche" /></SelectTrigger>
+            <SelectContent>
+              {candidates.map(b => (
+                <SelectItem key={b.id} value={String(b.id)}>{b.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button size="sm" onClick={handleAssign} disabled={!picked || assign.isPending}>Ajouter</Button>
+        </div>
+
+        {assigned.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Aucune branche assignee — ce user ne verra aucun lead.</p>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Branche</TableHead>
+                <TableHead className="w-20"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {assigned.map(a => (
+                <TableRow key={a.id}>
+                  <TableCell>{a.branches?.name || `#${a.branch_id}`}</TableCell>
+                  <TableCell>
+                    <Button size="sm" variant="ghost" onClick={() => unassign.mutate({ userId, branchId: a.branch_id })}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
   )
 }

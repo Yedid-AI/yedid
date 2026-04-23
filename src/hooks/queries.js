@@ -560,6 +560,47 @@ export function useProvisionChat() {
   })
 }
 
+// ─── User ↔ Branches (M:N) ───────────────────────────────
+export function useAllUserBranches() {
+  return useQuery({
+    queryKey: ['user-branches', 'all'],
+    queryFn: () => api.get('/user-branches'),
+    select: (data) => data.assignments,
+    staleTime: 30_000,
+  })
+}
+
+export function useUserBranches(userId) {
+  return useQuery({
+    queryKey: ['users', userId, 'branches'],
+    queryFn: () => api.get(`/users/${userId}/branches`),
+    select: (data) => data.branches,
+    enabled: !!userId,
+  })
+}
+
+export function useAssignBranch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, branchId }) => api.post(`/users/${userId}/branches`, { branch_id: branchId }),
+    onSuccess: (_, { userId }) => {
+      qc.invalidateQueries({ queryKey: ['users', userId, 'branches'] })
+      qc.invalidateQueries({ queryKey: ['user-branches', 'all'] })
+    },
+  })
+}
+
+export function useUnassignBranch() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ userId, branchId }) => api.delete(`/users/${userId}/branches/${branchId}`),
+    onSuccess: (_, { userId }) => {
+      qc.invalidateQueries({ queryKey: ['users', userId, 'branches'] })
+      qc.invalidateQueries({ queryKey: ['user-branches', 'all'] })
+    },
+  })
+}
+
 // ─── Leads ──────────────────────────────────────────────
 export function useLeads(filters) {
   return useQuery({

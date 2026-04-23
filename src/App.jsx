@@ -20,6 +20,7 @@ import Inboxes from './pages/Inboxes'
 import InboxDetail from './pages/InboxDetail'
 import Users from './pages/Users'
 import UserDetail from './pages/UserDetail'
+import Organisation from './pages/Organisation'
 import Settings from './pages/Settings'
 import Environment from './pages/Environment'
 import Closing from './pages/Closing'
@@ -79,7 +80,7 @@ function AppLayout({ children }) {
 
 function MarketeurRedirect({ children }) {
   const { user } = useAuth()
-  if (user?.role === 'marketeur') return <Navigate to="/leads" replace />
+  if (user?.role === 'marketeur' || user?.role === 'branch') return <Navigate to="/leads" replace />
   return children
 }
 
@@ -106,48 +107,53 @@ export default function App() {
             </ProtectedRoute>
           } />
           <Route path="/agents" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} noEnterprise>
               <AppLayout><Agents /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/agents/:id" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} noEnterprise>
               <AppLayout><AgentDetail /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/inboxes" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} noEnterprise>
               <AppLayout><Inboxes /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/inboxes/:id" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} noEnterprise>
               <AppLayout><InboxDetail /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/sessions/:id" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} noEnterprise>
               <AppLayout><SessionDetail /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/playbooks" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} noEnterprise>
               <AppLayout><PlaybooksLibrary /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/tools" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} noEnterprise>
               <AppLayout><ToolsLibrary /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/escalation" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} noEnterprise>
               <AppLayout><EscalationLibrary /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/sources" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin']} noEnterprise>
               <AppLayout><Sources /></AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/organisation" element={
+            <ProtectedRoute roles={['admin']}>
+              <AppLayout><Organisation /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/users" element={
@@ -176,12 +182,12 @@ export default function App() {
             </ProtectedRoute>
           } />
           <Route path="/leads" element={
-            <ProtectedRoute roles={['admin', 'marketeur']}>
+            <ProtectedRoute roles={['admin', 'marketeur', 'branch']}>
               <AppLayout><Leads /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/branches" element={
-            <ProtectedRoute roles={['admin']}>
+            <ProtectedRoute roles={['admin', 'branch']}>
               <AppLayout><Branches /></AppLayout>
             </ProtectedRoute>
           } />

@@ -4,7 +4,7 @@ import { useI18n } from '../../lib/i18n'
 import {
   LayoutDashboard, Brain, Sparkles, Radio, Route, Plug, ArrowRightLeft,
   Users, Settings, LogOut, KeyRound, UserPlus, Building2, Phone,
-  Moon, Sun, Globe, CalendarClock, ChevronsUpDown,
+  Moon, Sun, Globe, CalendarClock, ChevronsUpDown, Network,
 } from 'lucide-react'
 import { useTheme } from '../../lib/theme'
 import {
@@ -51,8 +51,8 @@ const navGroups = [
   {
     labelKey: 'nav.leads',
     items: [
-      { path: '/leads', labelKey: 'nav.leadsPage', icon: UserPlus, roles: ['admin', 'marketeur'] },
-      { path: '/branches', labelKey: 'nav.branches', icon: Building2, roles: ['admin'] },
+      { path: '/leads', labelKey: 'nav.leadsPage', icon: UserPlus, roles: ['admin', 'marketeur', 'branch'] },
+      { path: '/branches', labelKey: 'nav.branches', icon: Building2, roles: ['admin', 'branch'] },
       { path: '/calls', labelKey: 'nav.calls', icon: Phone, roles: ['admin'] },
     ],
   },
@@ -68,8 +68,8 @@ const navGroups = [
   {
     labelKey: 'nav.settings',
     items: [
+      { path: '/organisation', labelKey: 'Organisation', icon: Network, roles: ['admin'] },
       { path: '/settings', labelKey: 'nav.settings', icon: Settings, roles: ['admin'] },
-      { path: '/users', labelKey: 'nav.users', icon: Users, roles: ['admin'] },
     ],
   },
   {
@@ -105,6 +105,9 @@ export function AppSidebar() {
   const hasAccess = (item) =>
     item.roles.includes(user?.role) || (user?.role === 'super_admin' && item.roles.includes('admin'))
 
+  // Hide AI groups for company admins (enterprise scoped) — only super_admin / yedid admin keep them
+  const isCompanyScoped = !!user?.enterprise && user?.role !== 'super_admin'
+
   return (
     <SidebarRoot variant="floating" collapsible="icon" side={dir === 'rtl' ? 'right' : 'left'}>
       {/* Header — Logo */}
@@ -127,6 +130,7 @@ export function AppSidebar() {
       {/* Navigation — grouped */}
       <SidebarContent>
         {navGroups.map((group, gi) => {
+          if (group.ai && isCompanyScoped) return null
           const visibleItems = group.items.filter(hasAccess)
           if (visibleItems.length === 0) return null
           return (

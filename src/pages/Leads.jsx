@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useLeads, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls, useLeadActivities, useAddLeadComment, useLeadDocuments, useUploadLeadDocument, useDeleteLeadDocument, useLeadAffiliations, useAddLeadAffiliation, useRemoveLeadAffiliation, useUsers, useCityIndex } from '../hooks/queries'
+import { useLeads, useLead, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls, useLeadActivities, useAddLeadComment, useLeadDocuments, useUploadLeadDocument, useDeleteLeadDocument, useLeadAffiliations, useAddLeadAffiliation, useRemoveLeadAffiliation, useUsers, useCityIndex } from '../hooks/queries'
+import { useSearchParams } from 'react-router-dom'
+import { RecordingPlayer } from '@/components/RecordingPlayer'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
@@ -21,7 +23,7 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, PhoneIncoming, PhoneMissed, Phone as PhoneIcon, Send, Settings, Plus, Trash2, History, Bot, ArrowRight, MessageSquare, Mail, MapPin, Building2, Briefcase, User, Hash, Globe, Paperclip, FileText, Link2, Copy, Check, Users } from 'lucide-react'
+import { UserPlus, Search, CalendarDays, ChevronLeft, ChevronRight, X, Upload, CircleDot, CheckCircle, Clock, AlertTriangle, Ban, PhoneOff, PhoneIncoming, PhoneMissed, Phone as PhoneIcon, Send, Settings, Plus, Trash2, History, Bot, ArrowRight, MessageSquare, Mail, MapPin, Building2, Briefcase, User, Hash, Globe, Paperclip, FileText, Link2, Copy, Check, Users, LayoutGrid, Rows3, UserCheck, CalendarCheck, UserRoundCheck, Hourglass } from 'lucide-react'
 import babaitLogo from '@/assets/babaitlogo.png'
 import aviezerLogo from '@/assets/aviezer logo.png'
 
@@ -36,9 +38,24 @@ const STATUS_CONFIG = {
   new: { color: 'bg-blue-500/10 text-blue-600 dark:text-blue-400', icon: CircleDot },
   sent_to_branch: { color: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400', icon: Clock },
   in_progress: { color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400', icon: Clock },
+  interview_scheduled: { color: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400', icon: Clock },
+  interview_passed: { color: 'bg-cyan-500/10 text-cyan-600 dark:text-cyan-400', icon: CheckCircle },
+  awaiting_placement: { color: 'bg-orange-500/10 text-orange-600 dark:text-orange-400', icon: Clock },
   handled: { color: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400', icon: CheckCircle },
   not_relevant: { color: 'bg-gray-500/10 text-gray-500', icon: Ban },
   no_answer: { color: 'bg-red-500/10 text-red-600 dark:text-red-400', icon: PhoneOff },
+}
+
+const PATIENT_STATUS_FLOW = ['new', 'sent_to_branch', 'in_progress', 'handled']
+const CAREGIVER_STATUS_FLOW = ['new', 'interview_scheduled', 'interview_passed', 'awaiting_placement', 'handled']
+const SIDE_STATUSES = ['not_relevant', 'no_answer']
+const KANBAN_STATUSES = ['new', 'sent_to_branch', 'in_progress', 'interview_scheduled', 'interview_passed', 'awaiting_placement', 'handled', 'no_answer', 'not_relevant']
+
+function getStatusFlow(type) {
+  return type === 'caregiver' || type === 'foreign_caregiver' ? CAREGIVER_STATUS_FLOW : PATIENT_STATUS_FLOW
+}
+function getStatusesForType(type) {
+  return [...getStatusFlow(type), ...SIDE_STATUSES]
 }
 
 const emptyForm = {
@@ -68,6 +85,10 @@ export default function Leads() {
   // Pagination
   const [pageSize, setPageSize] = useState(50)
   const [currentPage, setCurrentPage] = useState(0)
+
+  // View mode (table | kanban), persisted
+  const [viewMode, setViewMode] = useState(() => localStorage.getItem('leads.viewMode') === 'kanban' ? 'kanban' : 'table')
+  useEffect(() => { localStorage.setItem('leads.viewMode', viewMode) }, [viewMode])
 
   // Side panel / dialogs
   const [selectedLead, setSelectedLead] = useState(null)
@@ -115,6 +136,8 @@ export default function Leads() {
   }
 
   // Data
+  const effectivePageSize = viewMode === 'kanban' ? 200 : pageSize
+  const effectivePage = viewMode === 'kanban' ? 0 : currentPage
   const filters = {
     company: filterCompany || undefined,
     type: filterType || undefined,
@@ -123,12 +146,13 @@ export default function Leads() {
     search: filterSearch || undefined,
     date_from: dateFrom,
     date_to: dateTo,
-    page: currentPage,
-    page_size: pageSize,
+    page: effectivePage,
+    page_size: effectivePageSize,
     affiliated_user_id: filterAffiliatedUser || undefined,
   }
   const isSuperAdmin = user?.role === 'super_admin'
   const isAdminOrAbove = isSuperAdmin || user?.role === 'admin'
+  const showCompanyCol = isAdminOrAbove || user?.role === 'marketeur'
   const { data: allUsers } = useUsers({ enabled: isAdminOrAbove })
   const { data: leadsData, isLoading } = useLeads(filters)
   const { data: branches = [] } = useBranches()
@@ -151,12 +175,12 @@ export default function Leads() {
 
   // Stat cards
   const statCards = [
-    { labelKey: 'leads.total', value: stats.total, icon: CircleDot, color: '#2383E2' },
-    { labelKey: 'leads.statusNew', value: stats.new, icon: CircleDot, color: '#3b82f6' },
-    { labelKey: 'leads.statusInProgress', value: stats.in_progress, icon: Clock, color: '#f97316' },
-    { labelKey: 'leads.statusHandled', value: stats.handled, icon: CheckCircle, color: '#10b981' },
-    { labelKey: 'leads.statusNotRelevant', value: stats.not_relevant, icon: Ban, color: '#6b7280' },
-    { labelKey: 'leads.statusNoAnswer', value: stats.no_answer, icon: PhoneOff, color: '#ef4444' },
+    { labelKey: 'leads.total', value: stats.total, icon: CircleDot, color: '#2383E2', status: null },
+    { labelKey: 'leads.statusNew', value: stats.new, icon: CircleDot, color: '#3b82f6', status: 'new' },
+    { labelKey: 'leads.statusInProgress', value: stats.in_progress, icon: Clock, color: '#f97316', status: 'in_progress' },
+    { labelKey: 'leads.statusHandled', value: stats.handled, icon: CheckCircle, color: '#10b981', status: 'handled' },
+    { labelKey: 'leads.statusNotRelevant', value: stats.not_relevant, icon: Ban, color: '#6b7280', status: 'not_relevant' },
+    { labelKey: 'leads.statusNoAnswer', value: stats.no_answer, icon: PhoneOff, color: '#ef4444', status: 'no_answer' },
   ]
 
   // Handlers
@@ -217,6 +241,18 @@ export default function Leads() {
   }
 
   const closePanel = () => { setSelectedLead(null); setEditMode(false) }
+
+  // Deep-link: open lead from ?lead=<id> (e.g. coming from Calls page)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const paramLeadId = searchParams.get('lead')
+  const { data: paramLead } = useLead(paramLeadId)
+  useEffect(() => {
+    if (!paramLead) return
+    openLeadPanel(paramLead)
+    const next = new URLSearchParams(searchParams)
+    next.delete('lead')
+    setSearchParams(next, { replace: true })
+  }, [paramLead])
 
   // Import
   const [importFile, setImportFile] = useState(null)
@@ -364,6 +400,9 @@ export default function Leads() {
                   <SelectItem value="new">{t('leads.statusNew')}</SelectItem>
                   <SelectItem value="sent_to_branch">{t('leads.statusSentToBranch')}</SelectItem>
                   <SelectItem value="in_progress">{t('leads.statusInProgress')}</SelectItem>
+                  <SelectItem value="interview_scheduled">{t('leads.statusInterviewScheduled')}</SelectItem>
+                  <SelectItem value="interview_passed">{t('leads.statusInterviewPassed')}</SelectItem>
+                  <SelectItem value="awaiting_placement">{t('leads.statusAwaitingPlacement')}</SelectItem>
                   <SelectItem value="handled">{t('leads.statusHandled')}</SelectItem>
                   <SelectItem value="not_relevant">{t('leads.statusNotRelevant')}</SelectItem>
                   <SelectItem value="no_answer">{t('leads.statusNoAnswer')}</SelectItem>
@@ -451,6 +490,29 @@ export default function Leads() {
               />
             </div>
 
+            <div className="inline-flex items-center rounded-md border bg-card p-0.5 shadow-soft-sm">
+              <Button
+                variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 px-2 gap-1.5"
+                onClick={() => setViewMode('table')}
+                title={t('leads.viewTable') || 'Table'}
+              >
+                <Rows3 size={14} />
+                <span className="text-xs">{t('leads.viewTable') || 'Table'}</span>
+              </Button>
+              <Button
+                variant={viewMode === 'kanban' ? 'secondary' : 'ghost'}
+                size="sm"
+                className="h-8 px-2 gap-1.5"
+                onClick={() => setViewMode('kanban')}
+                title={t('leads.viewKanban') || 'Kanban'}
+              >
+                <LayoutGrid size={14} />
+                <span className="text-xs">{t('leads.viewKanban') || 'Kanban'}</span>
+              </Button>
+            </div>
+
             {isAdminOrAbove && (
               <Select value={filterCompany || 'all'} onValueChange={(v) => setFilterCompany(v === 'all' ? '' : v)}>
                 <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
@@ -479,6 +541,9 @@ export default function Leads() {
                 <SelectItem value="new">{t('leads.statusNew')}</SelectItem>
                 <SelectItem value="sent_to_branch">{t('leads.statusSentToBranch')}</SelectItem>
                 <SelectItem value="in_progress">{t('leads.statusInProgress')}</SelectItem>
+                <SelectItem value="interview_scheduled">{t('leads.statusInterviewScheduled')}</SelectItem>
+                <SelectItem value="interview_passed">{t('leads.statusInterviewPassed')}</SelectItem>
+                <SelectItem value="awaiting_placement">{t('leads.statusAwaitingPlacement')}</SelectItem>
                 <SelectItem value="handled">{t('leads.statusHandled')}</SelectItem>
                 <SelectItem value="not_relevant">{t('leads.statusNotRelevant')}</SelectItem>
                 <SelectItem value="no_answer">{t('leads.statusNoAnswer')}</SelectItem>
@@ -558,22 +623,42 @@ export default function Leads() {
       {!panelOpen && <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 mb-6">
         {statCards.map((card) => {
           const Icon = card.icon
+          const isActive = card.status === null ? !filterStatus : filterStatus === card.status
           return (
-            <Card key={card.labelKey} className="hover:shadow-soft-md transition-all">
+            <Card
+              key={card.labelKey}
+              role="button"
+              tabIndex={0}
+              onClick={() => setFilterStatus(card.status || '')}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setFilterStatus(card.status || '') } }}
+              className={`cursor-pointer hover:shadow-soft-md transition-all ${isActive ? 'ring-2 ring-primary/60 shadow-soft-md' : ''}`}
+              style={isActive ? { borderColor: card.color } : undefined}
+            >
               <CardHeader className="flex flex-row items-start justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground leading-tight min-h-[2rem]">{t(card.labelKey)}</CardTitle>
                 <Icon size={16} className="shrink-0 mt-0.5 text-muted-foreground" style={{ color: card.color }} />
               </CardHeader>
               <CardContent>
-                <div className="text-3xl font-semibold tracking-tight">{card.value ?? 0}</div>
+                <div className="text-3xl font-semibold tracking-tight" style={isActive ? { color: card.color } : undefined}>{card.value ?? 0}</div>
               </CardContent>
             </Card>
           )
         })}
       </div>}
 
-      {/* Table */}
-      {panelOpen ? (
+      {/* Table / Kanban */}
+      {viewMode === 'kanban' ? (
+        <LeadKanban
+          leads={leads}
+          isLoading={isLoading}
+          selectedLead={selectedLead}
+          onOpen={openLeadPanel}
+          onStatusChange={(leadId, newStatus) => updateLead.mutate({ id: leadId, body: { status: newStatus } })}
+          showCompanyCol={showCompanyCol}
+          filterStatus={filterStatus}
+          t={t}
+        />
+      ) : panelOpen ? (
         /* Table without Card wrapper when panel is open — no border, no margin, edge-to-edge */
         <div className="flex-1 min-h-0 overflow-auto">
           <Table className="[&_th:first-child]:ps-3 [&_td:first-child]:ps-3">
@@ -587,16 +672,16 @@ export default function Leads() {
                 <TableHead>{t('leads.serviceRequested')}</TableHead>
                 <TableHead>{t('common.status')}</TableHead>
                 <TableHead>Maskyoo</TableHead>
-                {isAdminOrAbove && <TableHead>{t('leads.company')}</TableHead>}
+                {showCompanyCol && <TableHead>{t('leads.company')}</TableHead>}
                 {isAdminOrAbove && <TableHead>{t('leads.creator')}</TableHead>}
                 <TableHead>{t('common.date')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={isAdminOrAbove ? 12 : 10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10 + (showCompanyCol ? 1 : 0) + (isAdminOrAbove ? 1 : 0)} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
               ) : leads.length === 0 ? (
-                <TableRow><TableCell colSpan={isAdminOrAbove ? 12 : 10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10 + (showCompanyCol ? 1 : 0) + (isAdminOrAbove ? 1 : 0)} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
               ) : leads.map((lead) => {
                 const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
                 return (
@@ -619,7 +704,7 @@ export default function Leads() {
                       <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">{lead.maskyoo_user || '-'}</TableCell>
-                    {isAdminOrAbove && <TableCell>
+                    {showCompanyCol && <TableCell>
                       {COMPANY_LOGOS[lead.company] ? (
                         <div className="flex items-center gap-1.5">
                           <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-5 w-5 rounded-sm object-contain" />
@@ -673,16 +758,16 @@ export default function Leads() {
                 <TableHead>{t('leads.serviceRequested')}</TableHead>
                 <TableHead>{t('common.status')}</TableHead>
                 <TableHead>Maskyoo</TableHead>
-                {isAdminOrAbove && <TableHead>{t('leads.company')}</TableHead>}
+                {showCompanyCol && <TableHead>{t('leads.company')}</TableHead>}
                 {isAdminOrAbove && <TableHead>{t('leads.creator')}</TableHead>}
                 <TableHead>{t('common.date')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
-                <TableRow><TableCell colSpan={isAdminOrAbove ? 12 : 10} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10 + (showCompanyCol ? 1 : 0) + (isAdminOrAbove ? 1 : 0)} className="text-center text-muted-foreground py-6">{t('common.loading')}</TableCell></TableRow>
               ) : leads.length === 0 ? (
-                <TableRow><TableCell colSpan={isAdminOrAbove ? 12 : 10} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10 + (showCompanyCol ? 1 : 0) + (isAdminOrAbove ? 1 : 0)} className="text-center text-muted-foreground py-6">{t('leads.empty')}</TableCell></TableRow>
               ) : leads.map((lead) => {
                 const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
                 return (
@@ -705,7 +790,7 @@ export default function Leads() {
                       <Badge className={`${sc.color} border-0`}>{t(`leads.status_${lead.status}`)}</Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">{lead.maskyoo_user || '-'}</TableCell>
-                    {isAdminOrAbove && <TableCell>
+                    {showCompanyCol && <TableCell>
                       {COMPANY_LOGOS[lead.company] ? (
                         <div className="flex items-center gap-1.5">
                           <img src={COMPANY_LOGOS[lead.company].src} alt={lead.company} className="h-5 w-5 rounded-sm object-contain" />
@@ -1278,7 +1363,7 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
                 <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">-</SelectItem>
-                  {branches.map((b) => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
+                  {[...new Map(branches.map(b => [b.name, b])).values()].map((b) => <SelectItem key={b.name} value={b.name}>{b.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1304,7 +1389,7 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
                 <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">-</SelectItem>
-                  {branches.map((b) => <SelectItem key={b.id} value={b.name}>{b.name}</SelectItem>)}
+                  {[...new Map(branches.map(b => [b.name, b])).values()].map((b) => <SelectItem key={b.name} value={b.name}>{b.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -1330,12 +1415,9 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
             <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
               <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="new">{t('leads.statusNew')}</SelectItem>
-                <SelectItem value="sent_to_branch">{t('leads.statusSentToBranch')}</SelectItem>
-                <SelectItem value="in_progress">{t('leads.statusInProgress')}</SelectItem>
-                <SelectItem value="handled">{t('leads.statusHandled')}</SelectItem>
-                <SelectItem value="not_relevant">{t('leads.statusNotRelevant')}</SelectItem>
-                <SelectItem value="no_answer">{t('leads.statusNoAnswer')}</SelectItem>
+                {getStatusesForType(form.type).map((s) => (
+                  <SelectItem key={s} value={s}>{t(`leads.status_${s}`)}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1443,10 +1525,261 @@ const ACTION_CONFIG = {
   bot_transcript: { icon: Bot, color: 'text-violet-500', bg: 'bg-violet-500', labelKey: 'leads.action_bot_transcript' },
 }
 
+function StatusFlowStepper({ lead, t, onStepClick }) {
+  const flow = getStatusFlow(lead.type)
+  const currentIdx = flow.indexOf(lead.status)
+  const isSideStatus = SIDE_STATUSES.includes(lead.status)
+
+  return (
+    <div className="px-4 py-3 border-b bg-muted/20">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">{t('leads.statusFlow')}</span>
+        {isSideStatus && (
+          <Badge className={`${(STATUS_CONFIG[lead.status] || STATUS_CONFIG.new).color} border-0 text-[10px] py-0`}>
+            {t(`leads.status_${lead.status}`)}
+          </Badge>
+        )}
+      </div>
+      <div className="flex items-center w-full">
+        {flow.map((step, i) => {
+          const done = !isSideStatus && i < currentIdx
+          const current = !isSideStatus && i === currentIdx
+          const clickable = typeof onStepClick === 'function' && step !== lead.status
+          return (
+            <div key={step} className="flex items-center flex-1 min-w-0 last:flex-none">
+              <button
+                type="button"
+                disabled={!clickable}
+                onClick={() => clickable && onStepClick(step)}
+                className={`flex flex-col items-center gap-1 ${clickable ? 'cursor-pointer hover:opacity-80' : 'cursor-default'}`}
+              >
+                <div className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-semibold border-2 transition-all ${
+                  current ? 'bg-primary text-primary-foreground border-primary ring-4 ring-primary/20 shadow-sm'
+                  : done ? 'bg-emerald-500 text-white border-emerald-500'
+                  : 'bg-background text-muted-foreground border-border'
+                }`}>
+                  {done ? <Check size={11} strokeWidth={3} /> : i + 1}
+                </div>
+                <span className={`text-[9px] text-center leading-tight max-w-[72px] truncate ${
+                  current ? 'font-semibold text-foreground' : done ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'
+                }`}>
+                  {t(`leads.status_${step}`)}
+                </span>
+              </button>
+              {i < flow.length - 1 && (
+                <div className={`flex-1 h-[2px] mx-1 mb-5 rounded-full ${done ? 'bg-emerald-500' : 'bg-border'}`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function StatusChangeDialog({ open, onOpenChange, lead, nextStatus, t }) {
+  const updateLead = useUpdateLead()
+  const [status, setStatus] = useState(nextStatus || lead.status)
+  const [comment, setComment] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setStatus(nextStatus || lead.status)
+      setComment('')
+    }
+  }, [open, nextStatus, lead.status])
+
+  const submit = async () => {
+    if (status === lead.status) { onOpenChange(false); return }
+    setSaving(true)
+    try {
+      await updateLead.mutateAsync({ id: lead.id, body: { status, status_comment: comment.trim() || undefined } })
+      onOpenChange(false)
+    } finally { setSaving(false) }
+  }
+
+  const options = getStatusesForType(lead.type)
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>{t('leads.changeStatus')}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t('common.status')}</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="h-10 w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {options.map(s => <SelectItem key={s} value={s}>{t(`leads.status_${s}`)}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">{t('leads.statusComment')}</Label>
+            <Textarea
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              placeholder={t('leads.statusCommentPlaceholder')}
+              rows={3}
+              className="resize-none text-sm"
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>{t('common.cancel')}</Button>
+            <Button size="sm" onClick={submit} disabled={saving || status === lead.status}>
+              {saving ? '...' : t('common.save')}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Lead Kanban (grouped by status, with HTML5 drag-and-drop) ─────
+function LeadKanban({ leads, isLoading, selectedLead, onOpen, onStatusChange, showCompanyCol, filterStatus, t }) {
+  const [dragId, setDragId] = useState(null)
+  const [dragOver, setDragOver] = useState(null)
+
+  const columns = useMemo(() => {
+    const grouped = Object.fromEntries(KANBAN_STATUSES.map(s => [s, []]))
+    for (const lead of leads) {
+      const key = grouped[lead.status] ? lead.status : 'new'
+      grouped[key].push(lead)
+    }
+    return grouped
+  }, [leads])
+
+  const visibleStatuses = filterStatus && KANBAN_STATUSES.includes(filterStatus)
+    ? [filterStatus]
+    : KANBAN_STATUSES
+
+  const handleDrop = (e, status) => {
+    e.preventDefault()
+    setDragOver(null)
+    const id = e.dataTransfer.getData('text/plain') || dragId
+    if (!id) return
+    const lead = leads.find(l => String(l.id) === String(id))
+    if (!lead || lead.status === status) return
+    onStatusChange(Number(id), status)
+    setDragId(null)
+  }
+
+  if (isLoading) {
+    return <div className="text-center text-muted-foreground py-10 text-sm">{t('common.loading')}</div>
+  }
+
+  return (
+    <div className="flex-1 min-h-0 overflow-x-auto">
+      <div className="flex gap-3 pb-4 min-w-max">
+        {visibleStatuses.map((status) => {
+          const sc = STATUS_CONFIG[status] || STATUS_CONFIG.new
+          const StatusIcon = sc.icon
+          const items = columns[status] || []
+          const isDropTarget = dragOver === status
+          return (
+            <div
+              key={status}
+              className={`w-[280px] shrink-0 rounded-lg border bg-muted/30 flex flex-col transition-colors ${isDropTarget ? 'ring-2 ring-primary/60 bg-primary/5' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOver(status) }}
+              onDragLeave={() => setDragOver((prev) => prev === status ? null : prev)}
+              onDrop={(e) => handleDrop(e, status)}
+            >
+              <div className={`px-3 py-2 border-b flex items-center justify-between ${sc.color} rounded-t-lg`}>
+                <div className="flex items-center gap-1.5">
+                  <StatusIcon size={13} />
+                  <span className="text-xs font-semibold">{t(`leads.status_${status}`)}</span>
+                </div>
+                <Badge variant="outline" className="bg-background/50 text-[10px] py-0 h-5 border-0">
+                  {items.length}
+                </Badge>
+              </div>
+
+              <div className="flex-1 p-2 space-y-2 min-h-[120px]">
+                {items.length === 0 ? (
+                  <div className="text-center text-xs text-muted-foreground/60 py-6">—</div>
+                ) : items.map((lead) => (
+                  <div
+                    key={lead.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData('text/plain', String(lead.id))
+                      e.dataTransfer.effectAllowed = 'move'
+                      setDragId(lead.id)
+                    }}
+                    onDragEnd={() => { setDragId(null); setDragOver(null) }}
+                    onClick={() => onOpen(lead)}
+                    className={`rounded-md border bg-card p-2.5 cursor-pointer hover:shadow-soft-md transition-all ${selectedLead?.id === lead.id ? 'ring-2 ring-primary/60' : ''} ${dragId === lead.id ? 'opacity-40' : ''}`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1 text-sm font-medium truncate">
+                          {lead.source === 'chatbot' && <Bot size={11} className="text-violet-500 shrink-0" />}
+                          <span className="truncate">{lead.name}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-[11px] text-muted-foreground mt-0.5">
+                          <PhoneIcon size={10} />
+                          <span className="truncate">{lead.phone}</span>
+                        </div>
+                      </div>
+                      {showCompanyCol && COMPANY_LOGOS[lead.company] && (
+                        <img src={COMPANY_LOGOS[lead.company].src} alt="" className="h-5 w-5 rounded-sm object-contain shrink-0" />
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1 mt-2">
+                      <Badge variant="outline" className="text-[10px] py-0 h-4">
+                        {lead.type === 'patient' ? '🧑‍🦳' : lead.type === 'caregiver' ? '👩‍⚕️' : '🌍'} {t(`leads.type_${lead.type}`)}
+                      </Badge>
+                      {lead.branch && (
+                        <Badge variant="outline" className="text-[10px] py-0 h-4 gap-0.5">
+                          <Building2 size={9} />
+                          <span className="truncate max-w-[80px]">{lead.branch}</span>
+                        </Badge>
+                      )}
+                      {lead.maskyoo_user && (
+                        <Badge variant="outline" className="text-[10px] py-0 h-4 gap-0.5 text-emerald-600 border-emerald-600/30">
+                          <UserCheck size={9} />
+                          <span className="truncate max-w-[70px]">{lead.maskyoo_user}</span>
+                        </Badge>
+                      )}
+                    </div>
+
+                    {lead.service_requested && (
+                      <div className="text-[11px] text-muted-foreground mt-1.5 truncate">{lead.service_requested}</div>
+                    )}
+
+                    <div className="flex items-center justify-between mt-1.5 text-[10px] text-muted-foreground">
+                      <span>{new Date(lead.created_at).toLocaleDateString()}</span>
+                      {lead.metadata?.history?.length > 0 && (
+                        <Badge className="bg-orange-500/10 text-orange-600 border-0 text-[9px] py-0 px-1.5 h-4">{t('leads.recurring')}</Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
   const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
   const { data: maskyooCalls } = useLeadCalls(lead.id)
   const { data: activities } = useLeadActivities(lead.id)
+  const [statusDialogOpen, setStatusDialogOpen] = useState(false)
+  const [statusDialogNext, setStatusDialogNext] = useState(null)
+
+  const openStatusDialog = (nextStatus = null) => {
+    setStatusDialogNext(nextStatus)
+    setStatusDialogOpen(true)
+  }
 
   const isBot = (actor) => actor === 'chatbot' || actor === 'bot'
 
@@ -1468,7 +1801,7 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
         items.push({
           type: 'call', date: call.start_call, id: `call-${call.cdr_uniqueid}`,
           actor: call.user_name || 'Maskyoo',
-          metadata: { call_status: call.call_status, duration: call.call_duration, ddi: call.cdr_ddi, user_phone: call.user_phone },
+          metadata: { call_status: call.call_status, duration: call.call_duration, ddi: call.cdr_ddi, user_phone: call.user_phone, call_uuid: call.cdr_uniqueid },
         })
       }
     }
@@ -1527,7 +1860,15 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
             <div className="flex-1 min-w-0">
               <h3 className="font-semibold text-base leading-tight truncate">{lead.name}</h3>
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                <Badge className={`${sc.color} border-0 text-[10px] py-0`}>{t(`leads.status_${lead.status}`)}</Badge>
+                <button
+                  type="button"
+                  onClick={() => openStatusDialog()}
+                  className="group inline-flex items-center gap-1 hover:opacity-80 transition-opacity"
+                  title={t('leads.changeStatus')}
+                >
+                  <Badge className={`${sc.color} border-0 text-[10px] py-0 cursor-pointer`}>{t(`leads.status_${lead.status}`)}</Badge>
+                  <Settings size={10} className="text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
                 <Badge variant="outline" className="text-[10px] py-0">{t(`leads.type_${lead.type}`)}</Badge>
                 {lead.source === 'chatbot' && (
                   <Badge className="bg-violet-500/10 text-violet-600 dark:text-violet-400 border-0 gap-0.5 text-[10px] py-0">
@@ -1546,6 +1887,9 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
             )}
           </div>
         </div>
+
+        {/* Status flow stepper */}
+        <StatusFlowStepper lead={lead} t={t} onStepClick={(step) => openStatusDialog(step)} />
 
         {/* Contact info */}
         <div className="px-4 py-3 space-y-1.5 border-b">
@@ -1630,13 +1974,20 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
 
                     {/* Status change details */}
                     {item.type === 'status_changed' && item.changes?.status && (
-                      <div className="flex items-center gap-1.5 mt-1.5">
-                        <Badge variant="outline" className="text-[10px] py-0">{t(`leads.status_${item.changes.status.from}`) || item.changes.status.from || 'new'}</Badge>
-                        <ArrowRight size={10} className="text-muted-foreground icon-directional" />
-                        <Badge className={`${(STATUS_CONFIG[item.changes.status.to] || STATUS_CONFIG.new).color} border-0 text-[10px] py-0`}>
-                          {t(`leads.status_${item.changes.status.to}`) || item.changes.status.to}
-                        </Badge>
-                      </div>
+                      <>
+                        <div className="flex items-center gap-1.5 mt-1.5">
+                          <Badge variant="outline" className="text-[10px] py-0">{t(`leads.status_${item.changes.status.from}`) || item.changes.status.from || 'new'}</Badge>
+                          <ArrowRight size={10} className="text-muted-foreground icon-directional" />
+                          <Badge className={`${(STATUS_CONFIG[item.changes.status.to] || STATUS_CONFIG.new).color} border-0 text-[10px] py-0`}>
+                            {t(`leads.status_${item.changes.status.to}`) || item.changes.status.to}
+                          </Badge>
+                        </div>
+                        {item.metadata?.comment && (
+                          <p className="text-[12px] text-muted-foreground mt-1.5 whitespace-pre-wrap bg-muted/40 rounded px-2 py-1.5">
+                            {item.metadata.comment}
+                          </p>
+                        )}
+                      </>
                     )}
 
                     {/* Field changes */}
@@ -1669,13 +2020,20 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
 
                     {/* Call details */}
                     {item.type === 'call' && item.metadata && (
-                      <div className="mt-1.5 flex items-center gap-2 text-[11px]">
-                        <Badge className={`${getMaskyooStatus(item.metadata.call_status).color} border-0 text-[10px] py-0 gap-0.5`}>
-                          {item.metadata.call_status || '-'}
-                        </Badge>
-                        <span className="text-muted-foreground">{formatCallDuration(item.metadata.duration)}</span>
-                        {item.metadata.ddi && <span className="text-muted-foreground">{item.metadata.ddi}</span>}
-                      </div>
+                      <>
+                        <div className="mt-1.5 flex items-center gap-2 text-[11px]">
+                          <Badge className={`${getMaskyooStatus(item.metadata.call_status).color} border-0 text-[10px] py-0 gap-0.5`}>
+                            {item.metadata.call_status || '-'}
+                          </Badge>
+                          <span className="text-muted-foreground">{formatCallDuration(item.metadata.duration)}</span>
+                          {item.metadata.ddi && <span className="text-muted-foreground">{item.metadata.ddi}</span>}
+                        </div>
+                        {item.metadata.call_uuid && item.metadata.call_status?.toUpperCase().includes('ANSWER') && (
+                          <div className="mt-2">
+                            <RecordingPlayer uuid={item.metadata.call_uuid} t={t} />
+                          </div>
+                        )}
+                      </>
                     )}
 
                     {/* Legacy history details */}
@@ -1730,6 +2088,13 @@ function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
         <LeadAffiliationsSection leadId={lead.id} t={t} />
       )}
 
+      <StatusChangeDialog
+        open={statusDialogOpen}
+        onOpenChange={setStatusDialogOpen}
+        lead={lead}
+        nextStatus={statusDialogNext}
+        t={t}
+      />
     </div>
   )
 }
