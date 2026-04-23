@@ -21,8 +21,10 @@ import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Download, Clock, Timer, RefreshCw, Loader2, UserCheck, MessageCircle, Bot, CheckCircle, Send, XCircle, SkipForward, Activity, AlertTriangle, Building2, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Clock, Timer, RefreshCw, Loader2, UserCheck, MessageCircle, Bot, CheckCircle, Send, XCircle, SkipForward, Activity, AlertTriangle, Building2, Plus, Pencil, Trash2 } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { useNavigate } from 'react-router-dom'
+import { RecordingPlayer } from '@/components/RecordingPlayer'
 
 const calendarLocales = { fr: frLocale, en: enUS, he: heLocale }
 
@@ -63,6 +65,7 @@ function formatDateTime(dt) {
 
 export default function Calls() {
   const { t, locale } = useI18n()
+  const navigate = useNavigate()
   usePageTitle(t('calls.title'))
   const { actionsContainer } = usePageHeader()
 
@@ -291,11 +294,16 @@ export default function Calls() {
                     >
                       <TableCell className="font-medium">{call.cdr_ani || '-'}</TableCell>
                       <TableCell>
-                        {call.lead_name ? (
-                          <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
+                        {call.lead_name && call.lead_id ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); navigate(`/leads?lead=${call.lead_id}`) }}
+                            className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 hover:underline"
+                            title={t('calls.openLead') || 'Ouvrir le lead'}
+                          >
                             <UserCheck size={12} />
                             {call.lead_name}
-                          </span>
+                          </button>
                         ) : <span className="text-muted-foreground text-xs">-</span>}
                       </TableCell>
                       <TableCell>{call.cdr_ddi || '-'}</TableCell>
@@ -378,63 +386,6 @@ export default function Calls() {
         </div>,
         actionsContainer
       )}
-    </div>
-  )
-}
-
-// ─── Recording Player (fetch blob via auth'd proxy) ─────
-function RecordingPlayer({ uuid, t }) {
-  const [blobUrl, setBlobUrl] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-
-  useEffect(() => {
-    if (!uuid) return
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    setBlobUrl(null)
-
-    const token = localStorage.getItem('token')
-    fetch(`/api/calls/${encodeURIComponent(uuid)}/recording`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then(async (res) => {
-        if (cancelled) return
-        const ct = res.headers.get('content-type') || ''
-        if (!res.ok || ct.includes('json')) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error(body.error || 'Recording not available')
-        }
-        return res.blob()
-      })
-      .then((blob) => {
-        if (cancelled || !blob) return
-        setBlobUrl(URL.createObjectURL(blob))
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message)
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-      setBlobUrl((prev) => { if (prev) URL.revokeObjectURL(prev); return null })
-    }
-  }, [uuid])
-
-  if (loading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 size={14} className="animate-spin" />{t('common.loading')}</div>
-  if (error) return <div className="text-sm text-muted-foreground">{error}</div>
-  if (!blobUrl) return null
-
-  return (
-    <div className="flex items-center gap-2">
-      <audio controls src={blobUrl} className="w-full h-8" preload="auto" />
-      <a href={blobUrl} download={`${uuid}.mp3`} className="shrink-0">
-        <Button variant="ghost" size="icon" className="h-8 w-8"><Download size={14} /></Button>
-      </a>
     </div>
   )
 }
