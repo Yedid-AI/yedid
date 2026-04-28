@@ -29,6 +29,43 @@ export function clearConfigCache() {
   configCache.clear()
 }
 
+// --- Idempotency cache: drop duplicate webhook deliveries by Chatwoot message id ---
+const PROCESSED_MSG_TTL_MS = 5 * 60_000 // 5 minutes is enough for retries
+const processedMessages = new Map() // chatwoot message id -> timestamp
+
+function alreadyProcessed(messageId) {
+  if (!messageId) return false
+  const now = Date.now()
+  // Cheap GC: prune expired entries when we have more than a few hundred
+  if (processedMessages.size > 500) {
+    for (const [k, ts] of processedMessages) {
+      if (now - ts > PROCESSED_MSG_TTL_MS) processedMessages.delete(k)
+    }
+  }
+  const ts = processedMessages.get(messageId)
+  if (ts && now - ts < PROCESSED_MSG_TTL_MS) return true
+  processedMessages.set(messageId, now)
+  return false
+}
+
+// --- Loop guard: cap AI replies per conversation per minute to break bot ping-pongs ---
+const REPLY_WINDOW_MS = 60_000
+const REPLY_LIMIT = 6
+const recentReplies = new Map() // conversation_id -> array of timestamps
+
+function tooManyRecentReplies(conversationId) {
+  if (!conversationId) return false
+  const now = Date.now()
+  const arr = (recentReplies.get(conversationId) || []).filter(ts => now - ts < REPLY_WINDOW_MS)
+  if (arr.length >= REPLY_LIMIT) {
+    recentReplies.set(conversationId, arr)
+    return true
+  }
+  arr.push(now)
+  recentReplies.set(conversationId, arr)
+  return false
+}
+
 /**
  * Main orchestrator — handles a Chatwoot webhook event end-to-end.
  * Replaces the entire n8n workflow.
@@ -48,6 +85,25 @@ export async function handleWebhook(webhookBody, supabase) {
   const inboxId = message?.inbox_id
   const conversationId = message?.conversation_id
   const accountId = webhookBody.account?.id
+
+  // --- 1b. Idempotency: skip retried webhook deliveries for the same message ---
+  if (alreadyProcessed(message?.id)) {
+    console.log(`[Engine] Skipping duplicate webhook for message ${message?.id}`)
+    return
+  }
+
+  // --- 1c. Loop guard: stop runaway bot-to-bot exchanges ---
+  if (tooManyRecentReplies(conversationId)) {
+    console.log(`[Engine] Loop guard tripped for conversation ${conversationId} — ${REPLY_LIMIT}+ replies in last minute`)
+    return
+  }
+
+  // --- 1d. Sender guard: only respond to real human contacts, not other bots/agents ---
+  const senderType = (message?.sender_type || message?.sender?.type || '').toLowerCase()
+  if (senderType && senderType !== 'contact') {
+    console.log(`[Engine] Skipping non-contact sender (type=${senderType})`)
+    return
+  }
 
   // --- Voice detection (🎤 marker set by Unipile webhook after Whisper transcription) ---
   let userMessage = message?.processed_message_content || message?.content || ''

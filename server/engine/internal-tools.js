@@ -41,18 +41,39 @@ export async function saveLead(params, { supabase, userId, sessionId }) {
     return JSON.stringify({ success: false, error: 'name and phone are required' })
   }
 
+  // Reject phone string accidentally placed in name (LLM sometimes does this
+  // when it skipped asking for the actual name).
+  if (normalizePhone(name) === phone || /^\+?\d{6,}$/.test(String(name).trim())) {
+    return JSON.stringify({ success: false, error: 'name must be the contact\'s actual name, not a phone number — ask the user for their name first' })
+  }
+
   const serviceNorm = normalizeService(body.service_requested)
   const company = body.company || resolveCompany(serviceNorm)
 
-  // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index
+  // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index.
+  // Use the new branch_id FK so the lead links cleanly to branches.
   let branch = body.branch || resolveFixedBranch(serviceNorm) || null
+  let branchId = null
   if (!branch && body.city && company === 'babait') {
     const { data: idx } = await supabase
       .from('city_branch_index')
-      .select('branch_name')
+      .select('branch_id, branches(name)')
+      .eq('user_id', userId)
       .eq('city', body.city)
       .limit(1)
-    if (idx?.length) branch = idx[0].branch_name
+    if (idx?.length) {
+      branchId = idx[0].branch_id
+      branch = idx[0].branches?.name || branch
+    }
+  } else if (branch) {
+    // If branch was supplied as text, resolve to id for FK linkage
+    const { data: br } = await supabase
+      .from('branches')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('name', branch)
+      .maybeSingle()
+    if (br?.id) branchId = br.id
   }
 
   // Check if lead already exists by phone + user_id
@@ -72,6 +93,7 @@ export async function saveLead(params, { supabase, userId, sessionId }) {
     if (body.email) updates.email = body.email
     if (body.city && !lead.city) updates.city = body.city
     if (branch && !lead.branch) updates.branch = branch
+    if (branchId && !lead.branch_id) updates.branch_id = branchId
     if (body.service_requested && !lead.service_requested) updates.service_requested = normalizeService(body.service_requested)
     if (body.service_type && !lead.service_type) updates.service_type = body.service_type
     if (body.details) updates.details = lead.details ? `${lead.details}\n---\n${body.details}` : body.details
@@ -123,6 +145,7 @@ export async function saveLead(params, { supabase, userId, sessionId }) {
     email: body.email || null,
     city: body.city || null,
     branch,
+    branch_id: branchId,
     coordinator: body.coordinator || null,
     source: body.source || 'chatbot',
     lead_channel: body.lead_channel || 'whatsapp',
@@ -161,12 +184,14 @@ export async function saveLead(params, { supabase, userId, sessionId }) {
 }
 
 /**
- * list_branches — List all active branches for the user.
+ * list_branches — List all active branches for the user, each with the
+ * cities it serves (joined via city_branch_index FK). Lets the AI answer
+ * "do you have a branch in <city>" without separate lookups.
  */
 async function listBranches(params, { supabase, userId }) {
   const { data, error } = await supabase
     .from('branches')
-    .select('id, name, address, phone, mobile, contact_name, is_active')
+    .select('id, name, address, phone, mobile, contact_name, city_branch_index(city)')
     .eq('user_id', userId)
     .eq('is_active', true)
     .order('name')
@@ -185,6 +210,7 @@ async function listBranches(params, { supabase, userId }) {
     address: b.address || null,
     phone: b.phone || b.mobile || null,
     contact: b.contact_name || null,
+    cities: (b.city_branch_index || []).map(c => c.city).sort(),
   }))
 
   return JSON.stringify({ success: true, branches, count: branches.length })

@@ -930,6 +930,14 @@ export function useConnectDispatchWhatsApp() {
   })
 }
 
+export function useReconnectDispatchWhatsApp() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => api.post('/dispatch-config/reconnect-whatsapp'),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.dispatchConfig }),
+  })
+}
+
 // ─── Settings ────────────────────────────────────────────
 export function useSettings() {
   return useQuery({
@@ -1062,6 +1070,14 @@ export function useConnectFollowupWhatsApp() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (orgId) => api.post('/followup-config/connect-whatsapp', { org_id: orgId || null }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['followup-config'] }),
+  })
+}
+
+export function useReconnectFollowupWhatsApp() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (orgId) => api.post('/followup-config/reconnect-whatsapp', { org_id: orgId || null }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['followup-config'] }),
   })
 }

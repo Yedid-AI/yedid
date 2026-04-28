@@ -110,6 +110,15 @@ IMPORTANT: You already have the contact's phone number${contactContext.name ? ' 
     { role: 'user', content: userMessage },
   ]
 
+  // Dedup identical tool calls across rounds — LLM occasionally re-emits the
+  // same call (e.g. save_lead with same phone) and we get duplicate
+  // lead_activities + confused agent state. Map signature → cached result.
+  const toolCallCache = new Map()
+  const sigOf = (name, args) => {
+    try { return `${name}::${JSON.stringify(args || {})}` }
+    catch { return `${name}::${String(args)}` }
+  }
+
   // Tool-use loop
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     let result
@@ -150,9 +159,15 @@ IMPORTANT: You already have the contact's phone number${contactContext.name ? ' 
         if (toolCall.name === 'search_knowledge_base') {
           // Knowledge base search
           const query = toolCall.arguments?.query || ''
-          const kbResults = await searchKnowledgeBase(supabase, query, userId)
-          toolResult = formatKBResults(kbResults) || 'No relevant information found in the knowledge base.'
-          metadata.kb_searches.push({ query, results_count: kbResults.length })
+          const sig = sigOf('search_knowledge_base', { query })
+          if (toolCallCache.has(sig)) {
+            toolResult = toolCallCache.get(sig)
+          } else {
+            const kbResults = await searchKnowledgeBase(supabase, query, userId)
+            toolResult = formatKBResults(kbResults) || 'No relevant information found in the knowledge base.'
+            metadata.kb_searches.push({ query, results_count: kbResults.length })
+            toolCallCache.set(sig, toolResult)
+          }
         } else {
           // Lookup tool from the agent's tool map
           const matchedTool = toolMap.get(toolCall.name)
@@ -163,11 +178,23 @@ IMPORTANT: You already have the contact's phone number${contactContext.name ? ' 
               if (!args.phone) args.phone = contactContext.phone
               toolCall.arguments = args
             }
-            toolResult = await executeInternalTool(matchedTool.handler, toolCall.arguments, { supabase, userId, sessionId })
-            metadata.tool_calls.push({ name: matchedTool.name, handler: matchedTool.handler, arguments: toolCall.arguments })
+            const sig = sigOf(matchedTool.name, toolCall.arguments)
+            if (toolCallCache.has(sig)) {
+              toolResult = toolCallCache.get(sig)
+            } else {
+              toolResult = await executeInternalTool(matchedTool.handler, toolCall.arguments, { supabase, userId, sessionId })
+              metadata.tool_calls.push({ name: matchedTool.name, handler: matchedTool.handler, arguments: toolCall.arguments })
+              toolCallCache.set(sig, toolResult)
+            }
           } else if (matchedTool) {
-            toolResult = await executeTool(matchedTool, toolCall.arguments?.body || toolCall.arguments)
-            metadata.tool_calls.push({ name: matchedTool.name, arguments: toolCall.arguments })
+            const sig = sigOf(matchedTool.name, toolCall.arguments)
+            if (toolCallCache.has(sig)) {
+              toolResult = toolCallCache.get(sig)
+            } else {
+              toolResult = await executeTool(matchedTool, toolCall.arguments?.body || toolCall.arguments)
+              metadata.tool_calls.push({ name: matchedTool.name, arguments: toolCall.arguments })
+              toolCallCache.set(sig, toolResult)
+            }
           } else {
             toolResult = `Unknown tool: ${toolCall.name}`
           }

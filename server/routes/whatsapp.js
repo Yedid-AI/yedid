@@ -62,9 +62,7 @@ router.post('/webhook/unipile/account', async (req, res) => {
       const phoneNumber = accountDetails?.connection_params?.im?.phone_number
         || accountDetails?.phone_number || ''
 
-      // Create Chatwoot inbox on account 1
       const chatwootAccountId = 1
-      // Get user's Chatwoot token as fallback (CHATWOOT_ADMIN_TOKEN is often not set)
       const { data: cwAccounts } = await supabase
         .from('chatwoot_accounts')
         .select('access_token')
@@ -72,6 +70,39 @@ router.post('/webhook/unipile/account', async (req, res) => {
         .limit(1)
       const userToken = getSetting('CHATWOOT_ADMIN_TOKEN') || cwAccounts?.[0]?.access_token
       const appBaseUrl = getSetting('APP_BASE_URL')
+
+      // Reconnect safety net: if a followup inbox already exists for this user+org,
+      // refresh its unipile_account_id instead of creating a duplicate Chatwoot inbox.
+      const existingCfgQuery = supabase
+        .from('followup_config')
+        .select('followup_inbox_id')
+        .eq('user_id', uid)
+      if (orgId) existingCfgQuery.eq('org_id', orgId)
+      else existingCfgQuery.is('org_id', null)
+      const { data: existingCfg } = await existingCfgQuery.maybeSingle()
+
+      if (existingCfg?.followup_inbox_id) {
+        await supabase
+          .from('inboxes')
+          .update({ unipile_account_id: account_id, phone_number: phoneNumber })
+          .eq('id', existingCfg.followup_inbox_id)
+
+        const updateCfg = supabase
+          .from('followup_config')
+          .update({
+            whatsapp_account_id: account_id,
+            whatsapp_connected: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', uid)
+        if (orgId) updateCfg.eq('org_id', orgId)
+        else updateCfg.is('org_id', null)
+        await updateCfg
+
+        try { await registerWebhook(`${appBaseUrl}/api/webhook/unipile/message`) } catch {}
+        console.log(`[unipile/account] Followup inbox ${existingCfg.followup_inbox_id} reconnected for user ${uid}`)
+        return
+      }
 
       const inboxName = `Relance ${phoneNumber || account_id}`
       const inbox = await createInbox(chatwootAccountId, {
@@ -158,13 +189,11 @@ router.post('/webhook/unipile/account', async (req, res) => {
 
       console.log(`[unipile/account] Dispatch WhatsApp connected: account=${account_id}, user=${uid}`)
 
-      // Create full inbox for dispatch on Chatwoot account 1
       const accountDetails = await getAccount(account_id)
       const phoneNumber = accountDetails?.connection_params?.im?.phone_number
         || accountDetails?.phone_number || ''
 
       const chatwootAccountId = 1
-      // Get user's Chatwoot token as fallback (CHATWOOT_ADMIN_TOKEN is often not set)
       const { data: cwAccounts } = await supabase
         .from('chatwoot_accounts')
         .select('access_token')
@@ -172,6 +201,30 @@ router.post('/webhook/unipile/account', async (req, res) => {
         .limit(1)
       const userToken = getSetting('CHATWOOT_ADMIN_TOKEN') || cwAccounts?.[0]?.access_token
       const appBaseUrl = getSetting('APP_BASE_URL')
+
+      // Reconnect safety net: if a dispatch inbox already exists for this user,
+      // refresh its unipile_account_id instead of creating a duplicate.
+      const { data: existingCfg } = await supabase
+        .from('dispatch_config')
+        .select('dispatch_inbox_id')
+        .eq('user_id', uid)
+        .maybeSingle()
+
+      if (existingCfg?.dispatch_inbox_id) {
+        await supabase
+          .from('inboxes')
+          .update({ unipile_account_id: account_id, phone_number: phoneNumber })
+          .eq('id', existingCfg.dispatch_inbox_id)
+
+        await supabase
+          .from('dispatch_config')
+          .update({ updated_at: new Date().toISOString() })
+          .eq('user_id', uid)
+
+        try { await registerWebhook(`${appBaseUrl}/api/webhook/unipile/message`) } catch {}
+        console.log(`[unipile/account] Dispatch inbox ${existingCfg.dispatch_inbox_id} reconnected for user ${uid}`)
+        return
+      }
 
       const inboxName = `Dispatch ${phoneNumber || account_id}`
       const inbox = await createInbox(chatwootAccountId, {

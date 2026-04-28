@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useCalls, useCallMetadata, useCallSync, useCallSyncStatus, useAgents, useFollowupConfig, useUpdateFollowupConfig, useConnectFollowupWhatsApp, useFollowupSources, useFollowupQueue, useFollowupStats, useMaskyooOrgs, useCreateMaskyooOrg, useUpdateMaskyooOrg, useDeleteMaskyooOrg, useMaskyooLines, useUpdateMaskyooLine, useDeleteMaskyooLine, useSyncMaskyooLines } from '../hooks/queries'
+import { useCalls, useCallMetadata, useCallSync, useCallSyncStatus, useAgents, useFollowupConfig, useUpdateFollowupConfig, useConnectFollowupWhatsApp, useReconnectFollowupWhatsApp, useFollowupSources, useFollowupQueue, useFollowupStats, useMaskyooOrgs, useCreateMaskyooOrg, useUpdateMaskyooOrg, useDeleteMaskyooOrg, useMaskyooLines, useUpdateMaskyooLine, useDeleteMaskyooLine, useSyncMaskyooLines } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { useSidePanel } from '../lib/side-panel'
@@ -407,6 +407,7 @@ function FollowupConfigTab({ t }) {
   const { data: stats } = useFollowupStats()
   const updateConfig = useUpdateFollowupConfig()
   const connectWhatsApp = useConnectFollowupWhatsApp()
+  const reconnectWhatsApp = useReconnectFollowupWhatsApp()
   const [saving, setSaving] = useState(false)
 
   // Detect callback from Unipile QR scan popup
@@ -457,7 +458,8 @@ function FollowupConfigTab({ t }) {
 
   const handleConnectWhatsApp = async () => {
     try {
-      const data = await connectWhatsApp.mutateAsync(selectedOrgId)
+      const mutation = config?.whatsapp_connected ? reconnectWhatsApp : connectWhatsApp
+      const data = await mutation.mutateAsync(selectedOrgId)
       if (data.url) {
         const w = 480, h = 720
         const left = window.screenX + Math.round((window.outerWidth - w) / 2)
@@ -600,8 +602,8 @@ function FollowupConfigTab({ t }) {
                   {t('followup.connected')}
                 </Badge>
               )}
-              <Button size="sm" variant={config?.whatsapp_connected ? 'outline' : 'default'} onClick={handleConnectWhatsApp} disabled={connectWhatsApp.isPending}>
-                {connectWhatsApp.isPending ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
+              <Button size="sm" variant={config?.whatsapp_connected ? 'outline' : 'default'} onClick={handleConnectWhatsApp} disabled={connectWhatsApp.isPending || reconnectWhatsApp.isPending}>
+                {(connectWhatsApp.isPending || reconnectWhatsApp.isPending) ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
                 <span className="ms-1.5">{config?.whatsapp_connected ? t('followup.reconnect') : t('followup.connectWhatsApp')}</span>
               </Button>
             </div>

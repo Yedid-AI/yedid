@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useBranches, useCreateBranch, useUpdateBranch, useDeleteBranch, useCityIndex, useCreateCityEntry, useDeleteCityEntry, useDispatchConfig, useUpdateDispatchConfig, useConnectDispatchWhatsApp } from '../hooks/queries'
+import { useBranches, useCreateBranch, useUpdateBranch, useDeleteBranch, useCityIndex, useCreateCityEntry, useDeleteCityEntry, useDispatchConfig, useUpdateDispatchConfig, useConnectDispatchWhatsApp, useReconnectDispatchWhatsApp } from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
@@ -342,6 +342,7 @@ function DispatchConfigTab({ t }) {
   const { data: config, isLoading, refetch } = useDispatchConfig()
   const updateConfig = useUpdateDispatchConfig()
   const connectWhatsApp = useConnectDispatchWhatsApp()
+  const reconnectWhatsApp = useReconnectDispatchWhatsApp()
   const [saving, setSaving] = useState(false)
 
   // Detect callback from Unipile QR scan popup
@@ -403,7 +404,8 @@ function DispatchConfigTab({ t }) {
 
   const handleConnectWhatsApp = async () => {
     try {
-      const data = await connectWhatsApp.mutateAsync()
+      const mutation = dispatchInbox ? reconnectWhatsApp : connectWhatsApp
+      const data = await mutation.mutateAsync()
       if (data.url) {
         const w = 480, h = 720
         const left = window.screenX + Math.round((window.outerWidth - w) / 2)
@@ -465,8 +467,8 @@ function DispatchConfigTab({ t }) {
                   {t('branches.dispatchConnected')}
                 </Badge>
               )}
-              <Button size="sm" variant={dispatchInbox ? 'outline' : 'default'} onClick={handleConnectWhatsApp} disabled={connectWhatsApp.isPending}>
-                {connectWhatsApp.isPending ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
+              <Button size="sm" variant={dispatchInbox ? 'outline' : 'default'} onClick={handleConnectWhatsApp} disabled={connectWhatsApp.isPending || reconnectWhatsApp.isPending}>
+                {(connectWhatsApp.isPending || reconnectWhatsApp.isPending) ? <Loader2 size={14} className="animate-spin" /> : <MessageCircle size={14} />}
                 <span className="ms-1.5">{dispatchInbox ? t('branches.reconnect') : t('branches.connectDispatchWhatsApp')}</span>
               </Button>
             </div>

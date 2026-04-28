@@ -105,13 +105,17 @@ async function enqueueNewCalls(supabase) {
 
     if (!matchingCalls.length) continue
 
-    // Check which phones are already queued (any status — avoid re-enqueuing)
-    const phones = [...new Set(matchingCalls.map(c => c.cdr_ani).filter(Boolean))]
-    const { data: existingQueue } = await supabase
+    // Check which phones are already queued (any status — avoid re-enqueuing).
+    // Normalize before querying so we compare apples to apples — the queue stores
+    // normalized phones, raw cdr_ani must be normalized first or dedup misses.
+    const phones = [...new Set(
+      matchingCalls.map(c => normalizePhone(c.cdr_ani)).filter(Boolean)
+    )]
+    const { data: existingQueue } = phones.length ? await supabase
       .from('followup_queue')
       .select('phone')
       .eq('user_id', config.user_id)
-      .in('phone', phones)
+      .in('phone', phones) : { data: [] }
 
     const alreadyQueued = new Set((existingQueue || []).map(q => q.phone))
 

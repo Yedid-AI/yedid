@@ -94,6 +94,41 @@ router.post('/followup-config/connect-whatsapp', checkRole('admin'), async (req,
   }
 })
 
+// POST /api/followup-config/reconnect-whatsapp — reconnect existing followup WhatsApp
+router.post('/followup-config/reconnect-whatsapp', checkRole('admin'), async (req, res) => {
+  try {
+    const userId = req.user.user_id
+    const orgId = req.body.org_id ? parseInt(req.body.org_id) : null
+    const supabase = req.supabaseAdmin || req.supabase
+
+    const cfgQuery = supabase
+      .from('followup_config')
+      .select('whatsapp_account_id')
+      .eq('user_id', userId)
+    if (orgId) cfgQuery.eq('org_id', orgId)
+    else cfgQuery.is('org_id', null)
+
+    const { data: cfg } = await cfgQuery.maybeSingle()
+    const unipileAccountId = cfg?.whatsapp_account_id
+    if (!unipileAccountId) return res.status(400).json({ error: 'Pas de compte followup WhatsApp a reconnecter' })
+
+    const appBaseUrl = getSetting('APP_BASE_URL')
+    if (!appBaseUrl) return res.status(400).json({ error: 'APP_BASE_URL non configure' })
+
+    const result = await createHostedAuthLink({
+      callbackUrl: `${appBaseUrl}/calls?followup=reconnected`,
+      notifyUrl: `${appBaseUrl}/api/webhook/unipile/account`,
+      name: orgId ? `followup-${userId}-org-${orgId}` : `followup-${userId}`,
+      reconnectAccountId: unipileAccountId,
+    })
+
+    res.json({ url: result.url })
+  } catch (err) {
+    console.error('[followup-config/reconnect-whatsapp]', err.message)
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // GET /api/followup-config/whatsapp-status
 router.get('/followup-config/whatsapp-status', checkRole('admin'), async (req, res) => {
   try {
