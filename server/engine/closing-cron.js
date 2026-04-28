@@ -15,6 +15,7 @@ import { getSetting } from '../settings.js'
 import { createCompletion } from './llm.js'
 import { closeSession } from './session-logger.js'
 import { saveLead } from './internal-tools.js'
+import { queueContextualSecondAttempt } from './followup-cron.js'
 import { normalizePhone } from '../normalize-service.js'
 
 const DEFAULT_CLOSING_PROMPT = `You are Yedid AI Closing Analyzer. Your task is to determine whether a support conversation was resolved by the AI assistant.
@@ -67,6 +68,19 @@ Rules:
 - details: 1-2 sentence summary of what the contact wanted
 - If the conversation is just greetings with no substance, return all nulls
 - Respond ONLY in JSON, no introduction.`
+
+// Used when a session ended mid-conversation without enough info to create a lead.
+// We craft a single short non-pushy WhatsApp message that picks up where the chat
+// left off, in the user's apparent language. No JSON — the model returns the bare
+// message string ready to send.
+const CONTEXTUAL_RELANCE_PROMPT = `אתה כותב הודעת WhatsApp קצרה לרלאנס, בעברית, עבור הלקוח של בבית.
+השיחה התחילה אבל הלקוח עזב באמצע לפני שהשארנו פרטים. כתב הודעה אחת:
+- חמה אבל לא לחוצה
+- מתחברת לנושא ששוחחו עליו
+- מציעה להמשיך בלי להתחייב
+- עם opt-out רך ("אם זה לא רלוונטי, אפשר פשוט להגיד")
+- 2-3 משפטים מקסימום, בלי אמוג'י סטנדרטי, בלי רשימות
+החזר רק את גוף ההודעה. בלי "Re:", בלי "תשובה:", בלי הקדמות.`
 
 let cronTask = null
 
@@ -206,43 +220,32 @@ export async function runClosingCycle(supabase) {
 }
 
 /**
- * Ensure a lead exists for this session's contact.
- * If the AI agent already called save_lead during the session, skip.
- * Otherwise, extract info from messages and create/update the lead.
+ * Decide what to do with an abandoned session at close time:
+ *   - chatbot already saved a lead during the session → skip
+ *   - we have at least a real name + phone → create the lead via lenient save
+ *   - we only have a phone, no name → queue a contextualized 2nd relance
+ *   - no phone → nothing we can do
  */
 async function ensureLeadExists(supabase, session, messages, llmConfig) {
   const phone = session.contact_phone
-  if (!phone) return // No phone → can't create lead
+  if (!phone) return
 
   const normalizedPhone = normalizePhone(phone)
+  if (!normalizedPhone) return
 
-  // Check if lead was already saved by chatbot during this session
-  const { data: activities } = await supabase
-    .from('lead_activities')
-    .select('id')
-    .eq('user_id', session.user_id)
-    .in('actor', ['chatbot'])
-    .gte('created_at', session.created_at)
+  // Skip if chatbot already saved/enriched a lead for this phone during the session.
+  const { data: existingLead } = await supabase
+    .from('leads')
+    .select('id, name')
+    .eq('phone', normalizedPhone)
+    .gte('updated_at', session.created_at)
     .limit(1)
-
-  // Need to verify the activity is for the same phone
-  if (activities?.length) {
-    const { data: existingLead } = await supabase
-      .from('leads')
-      .select('id')
-      .eq('user_id', session.user_id)
-      .eq('phone', normalizedPhone)
-      .gte('updated_at', session.created_at)
-      .limit(1)
-
-    if (existingLead?.length) {
-      console.log(`[Closing] Lead already saved for ${normalizedPhone} during session ${session.id}`)
-      return
-    }
+  if (existingLead?.length) {
+    console.log(`[Closing] Lead already exists for ${normalizedPhone} (session ${session.id})`)
+    return
   }
 
-  // Extract lead info from conversation via LLM. On failure (network error or invalid JSON)
-  // we still create a minimal lead from contact_name + phone so the contact isn't lost.
+  // Extract whatever we can from the conversation.
   let extracted = {}
   try {
     const extractResult = await createCompletion({
@@ -252,42 +255,90 @@ async function ensureLeadExists(supabase, session, messages, llmConfig) {
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
       responseFormat: { type: 'json_object' },
     })
+    try { extracted = JSON.parse(extractResult.content) }
+    catch { console.error(`[Closing] Extraction JSON parse failed for session ${session.id}`) }
+  } catch (err) {
+    console.error(`[Closing] Extraction call failed for session ${session.id}:`, err.message)
+  }
+
+  // We treat a name as real only if it's not the phone itself or another digit blob.
+  const candidateName = extracted.name || session.contact_name || ''
+  const looksLikePhone = /^\+?\d{6,}$/.test(candidateName.trim())
+  const hasRealName = candidateName.trim().length > 1 && !looksLikePhone
+
+  if (hasRealName) {
+    // Path A — create the lead via lenient closing_cron save (no city/service required).
+    const leadParams = {
+      name: candidateName.trim(),
+      phone: normalizedPhone,
+      source: 'closing_cron',
+      lead_channel: 'whatsapp',
+      service_requested: extracted.service_requested || null,
+      city: extracted.city || null,
+      details: extracted.details || null,
+    }
     try {
-      extracted = JSON.parse(extractResult.content)
-    } catch {
-      console.error(`[Closing] Lead extraction returned invalid JSON for session ${session.id} — falling back to phone-only lead. Raw:`, extractResult.content?.slice(0, 200))
+      const result = await saveLead(leadParams, { supabase, userId: session.user_id, sessionId: session.id })
+      const parsed = JSON.parse(result)
+      if (parsed.success && parsed.lead_id) {
+        await supabase
+          .from('lead_activities')
+          .update({ actor: 'closing_cron' })
+          .eq('lead_id', parsed.lead_id)
+          .eq('actor', 'chatbot')
+          .gte('created_at', new Date(Date.now() - 5000).toISOString())
+        console.log(`[Closing] Rescue lead ${parsed.updated ? 'enriched' : 'created'} for session ${session.id} (${normalizedPhone})`)
+      } else {
+        console.warn(`[Closing] saveLead failed for session ${session.id}:`, parsed.error)
+      }
+    } catch (err) {
+      console.error(`[Closing] saveLead threw for session ${session.id}:`, err.message)
     }
-  } catch (err) {
-    console.error(`[Closing] Lead extraction call failed for session ${session.id}:`, err.message)
+    return
   }
 
-  // Build lead params — use extracted name, fallback to contact_name, fallback to phone
-  const leadParams = {
-    name: extracted.name || session.contact_name || normalizedPhone,
-    phone: normalizedPhone,
-    source: 'closing_cron',
-    lead_channel: 'whatsapp',
-    service_requested: extracted.service_requested || null,
-    city: extracted.city || null,
-    details: extracted.details || null,
-  }
+  // Path B — not enough for a lead. Queue a contextualized 2nd relance instead.
+  // We do this only if the user actually engaged (≥1 user message) — otherwise
+  // they ignored the 1st relance and the followup-cron's own 24h rescheduler
+  // will handle it generically.
+  const userMsgCount = messages.filter(m => m.role === 'user').length
+  if (userMsgCount === 0) return
 
+  let contextMessage = null
   try {
-    const result = await saveLead(leadParams, { supabase, userId: session.user_id })
-    const parsed = JSON.parse(result)
-
-    // Update activity actor to closing_cron (saveLead logs as 'chatbot' by default)
-    if (parsed.success && parsed.lead_id) {
-      await supabase
-        .from('lead_activities')
-        .update({ actor: 'closing_cron' })
-        .eq('lead_id', parsed.lead_id)
-        .eq('actor', 'chatbot')
-        .gte('created_at', new Date(Date.now() - 5000).toISOString())
-
-      console.log(`[Closing] Lead ${parsed.updated ? 'enriched' : 'created'}: ${leadParams.name} (${normalizedPhone}) for session ${session.id}`)
-    }
+    const r = await createCompletion({
+      provider: llmConfig.provider,
+      model: llmConfig.model,
+      systemPrompt: CONTEXTUAL_RELANCE_PROMPT,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+    })
+    contextMessage = (r.content || '').trim()
   } catch (err) {
-    console.error(`[Closing] Lead creation failed for session ${session.id}:`, err.message)
+    console.error(`[Closing] Contextual relance generation failed:`, err.message)
+  }
+  if (!contextMessage) return
+
+  // Pull org_id from the originating followup_queue item (if any) so the 2nd
+  // attempt is grouped with the same followup_config when processQueue runs.
+  let orgId = null
+  if (session.chatwoot_conversation_id) {
+    const { data: src } = await supabase
+      .from('followup_queue')
+      .select('org_id, call_id, source_user_name, source_cdr_ddi')
+      .eq('chatwoot_conversation_id', session.chatwoot_conversation_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    orgId = src?.org_id || null
+  }
+
+  const queuedId = await queueContextualSecondAttempt(supabase, {
+    userId: session.user_id,
+    orgId,
+    phone: normalizedPhone,
+    message: contextMessage,
+  })
+  if (queuedId) {
+    console.log(`[Closing] Queued contextualized 2nd relance ${queuedId} for ${normalizedPhone} (session ${session.id})`)
   }
 }

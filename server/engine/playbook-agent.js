@@ -56,6 +56,14 @@ You must:
 - If no result is found, say so transparently. Do not invent facts.
 - NEVER offer to "send more details later" when you already have the information — just share it now.
 
+# save_lead — TRUTHFULNESS ABOUT SAVE STATUS (CRITICAL)
+NEVER tell the user their details have been saved (e.g. "השארתי את הפרטים", "רשמתי", "נציג יחזור אליך") UNTIL the save_lead tool returns success: true.
+- If save_lead returns success: false, READ the "instruction" field and follow it exactly — typically: ask the user for the missing field(s) and call save_lead again.
+- If save_lead returned an error (missing_fields, invalid name, invalid phone), DO NOT pretend it worked. Apologize briefly and ask for the missing piece.
+- The four required fields are: name, phone, city, service_requested. Do not call save_lead until you have all four collected from the user.
+- Never put placeholders like "המספר שלך", "phone", or any non-digit text in the phone argument. If the user has not given a phone yet, ask for it.
+- Never put a phone number in the name argument.
+
 # Writing Style — CRITICAL
 You are a REAL PERSON chatting on WhatsApp/webchat. You must sound human, not like an AI.
 - Write SHORT messages (1-3 sentences max)
@@ -90,8 +98,14 @@ Example of BAD response (robotic pattern — NEVER do this):
 - Rules: ${playbook.rules || 'N/A'}${contactContext?.phone ? `
 
 # Contact Info — ALREADY KNOWN (do NOT ask for these)
-- Phone: ${contactContext.phone}${contactContext.name ? `\n- Name: ${contactContext.name}` : ''}${contactContext.source ? `\n- Call Source: ${contactContext.source}` : ''}${contactContext.maskyoo_number ? `\n- Called Number: ${contactContext.maskyoo_number}` : ''}${contactContext.followup ? `\n- Context: This person called and we're following up via WhatsApp` : ''}
-IMPORTANT: You already have the contact's phone number${contactContext.name ? ' and name' : ''}. NEVER ask for information you already have above.` : ''}`
+- Phone: ${contactContext.phone}${contactContext.name ? `\n- Name: ${contactContext.name}` : ''}${contactContext.source ? `\n- Call Source: ${contactContext.source}` : ''}${contactContext.maskyoo_number ? `\n- Called Number: ${contactContext.maskyoo_number}` : ''}${contactContext.followup ? `\n- Context: WhatsApp follow-up — this person called us, we missed their call, we sent them a WhatsApp; this is their reply.` : ''}
+IMPORTANT: You already have the contact's phone number${contactContext.name ? ' and name' : ''}. NEVER ask for information you already have above.${contactContext.followup ? `
+
+# Follow-up framing (CRITICAL)
+This person already heard from us via WhatsApp asking about their missed call. Their reply means they're interested. DO NOT open with a generic "שלום, איך אפשר לעזור?" — that resets the conversation and feels robotic. Instead:
+1. Acknowledge briefly that you saw they called (don't ask why if the call source hints at it)${contactContext.source ? ` — the source was "${contactContext.source}", reference it naturally` : ''}.
+2. Ask ONE focused question to understand the need (not 3-4 fields at once).
+3. Their phone is already known — never ask for it again.` : ''}` : ''}`
 
   // Build available tools — KB search + all agent tools
   const tools = [knowledgeBaseToolDef]
@@ -183,7 +197,23 @@ IMPORTANT: You already have the contact's phone number${contactContext.name ? ' 
               toolResult = toolCallCache.get(sig)
             } else {
               toolResult = await executeInternalTool(matchedTool.handler, toolCall.arguments, { supabase, userId, sessionId })
-              metadata.tool_calls.push({ name: matchedTool.name, handler: matchedTool.handler, arguments: toolCall.arguments })
+              metadata.tool_calls.push({ name: matchedTool.name, handler: matchedTool.handler, arguments: toolCall.arguments, result: toolResult })
+              // Amplify failure signals INSIDE the tool result rather than via a
+              // separate system message — the latter gets dropped by the Anthropic
+              // adapter (llm.js filters role:system out of the messages array).
+              // Putting it in the tool result keeps it portable across providers.
+              try {
+                const parsed = JSON.parse(toolResult)
+                if (parsed && parsed.success === false) {
+                  console.warn(`[PlaybookAgent] ${matchedTool.handler} returned failure:`, parsed.error || parsed.instruction)
+                  if (parsed.must_not_tell_user_saved) {
+                    toolResult = JSON.stringify({
+                      ...parsed,
+                      _CRITICAL: `⚠️ ${parsed.error}. NEXT ACTION REQUIRED: ${parsed.instruction} You MUST NOT claim the lead was saved.`,
+                    })
+                  }
+                }
+              } catch { /* not JSON, ignore */ }
               toolCallCache.set(sig, toolResult)
             }
           } else if (matchedTool) {

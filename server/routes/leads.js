@@ -738,8 +738,11 @@ router.post('/leads/import', checkRole('admin'), upload.single('file'), async (r
 
       if (!lead.name || !lead.phone) { skipped++; continue }
 
-      // Normalize phone
-      lead.phone = normalizePhone(lead.phone)
+      // Normalize phone — drop rows whose phone can't be parsed (normalizePhone now
+      // returns null for non-numeric junk instead of falling through to trimmed text).
+      const normalized = normalizePhone(lead.phone)
+      if (!normalized) { skipped++; continue }
+      lead.phone = normalized
 
       // Normalize service_requested + auto-resolve company
       if (lead.service_requested) {

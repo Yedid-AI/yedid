@@ -31,21 +31,64 @@ async function logBotTranscript(supabase, leadId, userId, sessionId) {
 
 /**
  * save_lead — UPSERT a lead by phone number (enrich if exists, create if new).
+ *
+ * The LLM caller (Shira) ignores soft errors and tells the user "lead saved" anyway,
+ * which produced ~56% silent failures in production. Errors here are returned in a
+ * structured form with an `instruction` field that tells the LLM exactly what to do
+ * next so it cannot rationalize past the failure.
  */
 export async function saveLead(params, { supabase, userId, sessionId }) {
   const body = params?.body || params || {}
 
-  const name = body.name
+  const fail = (error, instruction, missing) => JSON.stringify({
+    success: false, error, instruction, missing_fields: missing || undefined,
+    must_not_tell_user_saved: true,
+  })
+
+  const rawName = typeof body.name === 'string' ? body.name.trim() : ''
   const phone = normalizePhone(body.phone)
-  if (!name || !phone) {
-    return JSON.stringify({ success: false, error: 'name and phone are required' })
+
+  // Required-field validation matching the published tool schema for chatbot calls.
+  // Rescue callers (closing_cron, manual imports) only need name+phone — they're trying
+  // to salvage a partial conversation, not collect a clean lead, and refusing to write
+  // a phone-only lead means we lose the contact entirely.
+  const isStrict = (body.source || 'chatbot') === 'chatbot'
+  const missing = []
+  if (!rawName) missing.push('name')
+  if (!phone) missing.push('phone')
+  if (isStrict && (!body.city || !String(body.city).trim())) missing.push('city')
+  if (isStrict && (!body.service_requested || !String(body.service_requested).trim())) missing.push('service_requested')
+  if (missing.length) {
+    return fail(
+      `MISSING REQUIRED FIELDS: ${missing.join(', ')}`,
+      `DO NOT tell the user the lead is saved. Ask the user for the missing field(s) one at a time, then call save_lead again with all four required fields: name, phone, city, service_requested.`,
+      missing,
+    )
   }
 
-  // Reject phone string accidentally placed in name (LLM sometimes does this
+  // Reject phone string accidentally placed in name (LLM occasionally does this
   // when it skipped asking for the actual name).
-  if (normalizePhone(name) === phone || /^\+?\d{6,}$/.test(String(name).trim())) {
-    return JSON.stringify({ success: false, error: 'name must be the contact\'s actual name, not a phone number — ask the user for their name first' })
+  if (normalizePhone(rawName) === phone || /^\+?\d{6,}$/.test(rawName)) {
+    return fail(
+      'name must be the contact\'s actual name, not a phone number',
+      'DO NOT tell the user the lead is saved. Ask the user for their full name (first + last), then call save_lead again.',
+    )
   }
+
+  // Reject obvious LLM placeholders for phone — normalizePhone already rejects
+  // text-only input, but this catches the few digit-bearing placeholders.
+  // Note: after normalize the country code is prepended, so we look at the trailing
+  // local-number digits (last 9) for repetition rather than the whole string.
+  const phoneDigits = phone.replace(/\D/g, '')
+  const localDigits = phoneDigits.slice(-9)
+  if (/^(\d)\1+$/.test(localDigits)) {
+    return fail(
+      'phone looks like a placeholder, not a real number',
+      'DO NOT tell the user the lead is saved. Ask the user to confirm their phone number, then call save_lead again.',
+    )
+  }
+
+  const name = rawName
 
   const serviceNorm = normalizeService(body.service_requested)
   const company = body.company || resolveCompany(serviceNorm)
@@ -125,7 +168,12 @@ export async function saveLead(params, { supabase, userId, sessionId }) {
     // Log enrichment activity
     await supabase.from('lead_activities').insert({
       lead_id: data.id, user_id: userId, action: 'enriched',
-      metadata: { source: body.source || 'chatbot', lead_channel: body.lead_channel || 'whatsapp', service_requested: serviceNorm },
+      metadata: {
+        source: body.source || 'chatbot',
+        lead_channel: body.lead_channel || 'whatsapp',
+        service_requested: serviceNorm,
+        ...(sessionId ? { session_id: sessionId } : {}),
+      },
       actor: 'chatbot',
     }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
 
@@ -173,7 +221,11 @@ export async function saveLead(params, { supabase, userId, sessionId }) {
   // Log creation activity
   await supabase.from('lead_activities').insert({
     lead_id: data.id, user_id: userId, action: 'created',
-    metadata: { source: body.source || 'chatbot', lead_channel: body.lead_channel || 'whatsapp' },
+    metadata: {
+      source: body.source || 'chatbot',
+      lead_channel: body.lead_channel || 'whatsapp',
+      ...(sessionId ? { session_id: sessionId } : {}),
+    },
     actor: 'chatbot',
   }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
 

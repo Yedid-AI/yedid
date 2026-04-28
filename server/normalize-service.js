@@ -104,14 +104,22 @@ export function resolveFixedBranch(normalizedService) {
 /**
  * Normalize an Israeli phone number to +972XXXXXXXXX format.
  * Strips dashes, spaces, and other non-numeric chars.
- * Returns the normalized number, or the original trimmed value if format is unrecognized.
+ * Returns the normalized number, or null if the input doesn't contain a real phone.
+ *
+ * Returning null for garbage (e.g. "המספר שלך", "phone", random text) is critical:
+ * the LLM occasionally hallucinates placeholders into the phone arg of save_lead, and
+ * all callers do `if (!phone) reject` — letting garbage pass would create leads with
+ * bogus phones that can never be re-matched or de-duped.
  */
 export function normalizePhone(phone) {
   if (!phone) return null
-  const p = phone.replace(/[^0-9+]/g, '')
+  const p = String(phone).replace(/[^0-9+]/g, '')
+  const digits = p.replace(/\D/g, '')
+  if (digits.length < 7) return null
   if (p.startsWith('+972')) return p
   if (p.startsWith('972')) return '+' + p
   if (p.startsWith('0')) return '+972' + p.slice(1)
   if (/^[2-9]\d{8}$/.test(p)) return '+972' + p
-  return phone.trim()
+  if (digits.length >= 10) return p.startsWith('+') ? p : '+' + p
+  return null
 }
