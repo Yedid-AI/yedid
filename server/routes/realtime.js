@@ -16,11 +16,16 @@ export function initRealtime(supabaseAdmin) {
   if (!supabaseAdmin || realtimeChannel) return
   supabaseRef = supabaseAdmin
 
+  // Keep in sync with TABLE_TO_KEYS in src/hooks/use-realtime.js.
+  // A table here without a mapping client-side fires SSE events that the client drops silently.
   const WATCHED_TABLES = [
     'leads', 'lead_activities', 'lead_affiliations', 'lead_documents',
     'sessions', 'conversation_messages',
     'calls',
     'agent_bots', 'inboxes',
+    'users', 'branches', 'user_branches',
+    'playbooks', 'tools', 'escalation_rules',
+    'dispatch_config', 'followup_config', 'followup_queue',
   ]
 
   realtimeChannel = supabaseAdmin

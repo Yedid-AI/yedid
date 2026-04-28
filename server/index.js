@@ -34,6 +34,7 @@ import { loadSettings } from './settings.js'
 import { startClosingCron } from './engine/closing-cron.js'
 import { startCallsCron } from './engine/calls-cron.js'
 import { startFollowupCron } from './engine/followup-cron.js'
+import { startDispatchQueueCron } from './engine/dispatch-queue-cron.js'
 
 // --- Validate required env vars at startup ---
 const REQUIRED_ENV = ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'SUPABASE_SERVICE_ROLE_KEY']
@@ -212,4 +213,5 @@ app.listen(PORT, async () => {
   startClosingCron(supabaseAdmin)
   startCallsCron(supabaseAdmin)
   startFollowupCron(supabaseAdmin)
+  startDispatchQueueCron(supabaseAdmin)
 })

@@ -111,8 +111,21 @@ router.post('/public/capture/:token', async (req, res) => {
         ip_address: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip || null,
       }
 
-      const { data, error } = await req.supabaseAdmin.from('leads').insert(insert).select('id').single()
-      if (error) throw error
+      let { data, error } = await req.supabaseAdmin.from('leads').insert(insert).select('id').single()
+      // Race: concurrent capture for same (user_id, phone) — recover by reading the winner.
+      if (error?.code === '23505') {
+        const { data: winner } = await req.supabaseAdmin
+          .from('leads')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('phone', phone)
+          .limit(1)
+          .maybeSingle()
+        if (winner) data = winner
+        else throw error
+      } else if (error) {
+        throw error
+      }
       leadId = data.id
 
       // Log activity

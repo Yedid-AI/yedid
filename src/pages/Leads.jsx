@@ -19,7 +19,8 @@ import { Calendar } from '@/components/ui/calendar'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Textarea } from '@/components/ui/textarea'
-import { startOfDay, startOfWeek, subDays, startOfMonth, format } from 'date-fns'
+import { format } from 'date-fns'
+import { useDateRange } from '../hooks/use-date-range'
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
@@ -102,22 +103,7 @@ export default function Leads() {
 
   const { panelContainer, isOpen: panelOpen } = useSidePanel(!!selectedLead)
 
-  // Date range computation
-  const { dateFrom, dateTo } = useMemo(() => {
-    const now = new Date()
-    switch (filterDateRange) {
-      case 'today': return { dateFrom: startOfDay(now).toISOString(), dateTo: now.toISOString() }
-      case 'thisWeek': return { dateFrom: startOfWeek(now, { weekStartsOn: 1 }).toISOString(), dateTo: now.toISOString() }
-      case 'last30': return { dateFrom: subDays(now, 30).toISOString(), dateTo: now.toISOString() }
-      case 'thisMonth': return { dateFrom: startOfMonth(now).toISOString(), dateTo: now.toISOString() }
-      case 'all': return { dateFrom: undefined, dateTo: undefined }
-      case 'custom': return {
-        dateFrom: customRange.from ? startOfDay(customRange.from).toISOString() : undefined,
-        dateTo: customRange.to ? new Date(new Date(customRange.to).setHours(23, 59, 59, 999)).toISOString() : undefined,
-      }
-      default: return { dateFrom: undefined, dateTo: undefined }
-    }
-  }, [filterDateRange, customRange])
+  const { dateFrom, dateTo } = useDateRange(filterDateRange, customRange)
 
   const dateRangeLabel = {
     today: t('sessions.today'),

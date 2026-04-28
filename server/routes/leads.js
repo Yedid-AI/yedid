@@ -303,12 +303,27 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
       metadata: req.body.metadata || null,
     }
 
-    const { data, error } = await req.supabase
+    let { data, error } = await req.supabase
       .from('leads')
       .insert(insert)
       .select()
       .single()
 
+    // Race: another request created the same (user_id, phone) lead between our SELECT and INSERT.
+    // The unique index in migration 033 guarantees only one wins — the loser retries as a merge.
+    if (error?.code === '23505') {
+      const { data: winner } = await req.supabase
+        .from('leads')
+        .select('*')
+        .eq('user_id', req.user.user_id)
+        .eq('phone', phone)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (winner) {
+        return res.status(200).json({ lead: winner, merged: true, raced: true })
+      }
+    }
     if (error) throw error
 
     // Log creation activity
@@ -331,7 +346,8 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
     // Respond immediately — don't block on auto-dispatch
     res.status(201).json({ lead: data })
 
-    // Auto-dispatch in background (fire-and-forget)
+    // Auto-dispatch in background (fire-and-forget). We log the actual outcome
+    // so silent failures (no whatsapp account, branch disabled, etc.) are visible.
     if (data.branch) {
       req.supabase
         .from('dispatch_config')
@@ -339,13 +355,18 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
         .eq('user_id', req.user.user_id)
         .limit(1)
         .maybeSingle()
-        .then(({ data: config }) => {
-          if (config?.auto_dispatch) {
-            return dispatchLead(req.supabaseAdmin || req.supabase, data)
+        .then(async ({ data: config }) => {
+          if (!config?.auto_dispatch) return
+          const result = await dispatchLead(req.supabaseAdmin || req.supabase, data)
+          if (result?.error) {
+            console.warn(`[leads/auto-dispatch] lead=${data.id} error: ${result.error}`)
+          } else if (result?.queued) {
+            console.log(`[leads/auto-dispatch] lead=${data.id} queued (out of schedule)`)
+          } else if (result?.success) {
+            console.log(`[leads/auto-dispatch] lead=${data.id} dispatched to ${data.branch}`)
           }
         })
-        .then(() => {})
-        .catch(err => console.log('[leads/auto-dispatch]', err.message))
+        .catch(err => console.error('[leads/auto-dispatch]', err.message))
     }
   } catch (err) {
     console.error('[leads]', err.message)

@@ -2,17 +2,32 @@ import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '../lib/auth'
 
-// Maps Supabase table names → React Query key prefixes to invalidate
+// Maps Supabase table names → React Query key PREFIXES to invalidate.
+// Each value is an array of queryKey prefixes (so a single table change can fan out to
+// multiple unrelated query trees, e.g. user_branches affects both branches and users views).
+// React-Query invalidates by prefix match, so e.g. ['leads'] hits ['leads', filters] etc.
+// Keep in sync with WATCHED_TABLES in server/routes/realtime.js. Names of the actual query
+// keys live in src/lib/query-keys.js — match against the FIRST element used there.
 const TABLE_TO_KEYS = {
-  leads: ['leads'],
-  lead_activities: ['leads'],
-  lead_affiliations: ['leads'],
-  lead_documents: ['leads'],
-  sessions: ['sessions'],
-  conversation_messages: ['sessions'],
-  calls: ['calls'],
-  agent_bots: ['agents'],
-  inboxes: ['inboxes'],
+  leads: [['leads']],
+  lead_activities: [['leads']],
+  lead_affiliations: [['leads']],
+  lead_documents: [['leads']],
+  sessions: [['sessions']],
+  conversation_messages: [['sessions']],
+  calls: [['calls']],
+  agent_bots: [['agents']],
+  inboxes: [['inboxes']],
+  users: [['users']],
+  branches: [['branches']],
+  user_branches: [['branches'], ['users']],
+  // Playbooks/tools/escalation queries live under 'agents' (per-agent) and '*-library' (shared).
+  playbooks: [['playbooks-library'], ['agents']],
+  tools: [['tools-library'], ['agents']],
+  escalation_rules: [['escalation-rules-library'], ['agents']],
+  dispatch_config: [['dispatch-config']],
+  followup_config: [['followup-config'], ['followup-sources'], ['followup-stats']],
+  followup_queue: [['followup-queue'], ['followup-stats']],
 }
 
 // Debounce: batch rapid changes into a single invalidation
@@ -78,7 +93,7 @@ export function useRealtimeInvalidation() {
                     const data = JSON.parse(line.slice(6))
                     if (data.type === 'connected') continue
                     const keys = TABLE_TO_KEYS[data.table]
-                    if (keys) debounceInvalidate(keys)
+                    if (keys) for (const k of keys) debounceInvalidate(k)
                   } catch { /* ignore */ }
                 }
               }

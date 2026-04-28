@@ -130,12 +130,26 @@ router.post('/public/leads', async (req, res) => {
       metadata: req.body.metadata || null,
     }
 
-    const { data, error } = await req.supabaseAdmin
+    let { data, error } = await req.supabaseAdmin
       .from('leads')
       .insert(insert)
       .select()
       .single()
 
+    // Race against the unique (user_id, phone) index — concurrent submission landed first.
+    if (error?.code === '23505') {
+      const { data: winner } = await req.supabaseAdmin
+        .from('leads')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('phone', phone)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (winner) {
+        return res.status(200).json({ success: true, lead_id: winner.id, merged: true, raced: true })
+      }
+    }
     if (error) throw error
 
     // Auto-dispatch if configured

@@ -37,6 +37,29 @@ export function stopFollowupCron() {
   }
 }
 
+// Recover queue items stuck in 'processing' (process crashed between claim and final mark).
+// Without this they would never be retried — but also never be re-sent since their phone
+// would still be claimed. After STUCK_PROCESSING_MIN we assume the previous attempt died
+// and reset to 'pending' so the next cycle can retry.
+const STUCK_PROCESSING_MIN = 10
+
+async function recoverStuckProcessing(supabase) {
+  const cutoff = new Date(Date.now() - STUCK_PROCESSING_MIN * 60 * 1000).toISOString()
+  const { data, error } = await supabase
+    .from('followup_queue')
+    .update({ status: 'pending', result: null })
+    .eq('status', 'processing')
+    .lte('processed_at', cutoff)
+    .select('id')
+  if (error) {
+    console.error('[Followup Cron] Recovery error:', error.message)
+    return
+  }
+  if (data?.length) {
+    console.log(`[Followup Cron] Recovered ${data.length} stuck items (>${STUCK_PROCESSING_MIN}m in processing)`)
+  }
+}
+
 async function runFollowupCycle(supabase) {
   if (running) {
     console.log('[Followup Cron] Already running, skipping')
@@ -44,6 +67,9 @@ async function runFollowupCycle(supabase) {
   }
   running = true
   try {
+    // Step 0: Recover items stuck in 'processing' from a previous crash
+    await recoverStuckProcessing(supabase)
+
     // Step 1: Enqueue new calls
     await enqueueNewCalls(supabase)
 
@@ -84,8 +110,11 @@ async function enqueueNewCalls(supabase) {
 
     if (!sourceFilters.length) continue
 
-    // Find calls from the last 30 minutes that match any configured source
-    const since = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    // Find calls from the last (delay_minutes + 30min) so a missed cron cycle doesn't drop calls.
+    // Without this, a call that arrives just before delay_minutes elapsed but after the 30min
+    // window would never be picked up if the cron is paused/crashed for a few minutes.
+    const lookbackMin = Math.max(30, (config.delay_minutes || 0) + 30)
+    const since = new Date(Date.now() - lookbackMin * 60 * 1000).toISOString()
 
     const { data: recentCalls, error: callsErr } = await supabase
       .from('calls')
@@ -201,16 +230,23 @@ async function processQueue(supabase) {
       continue
     }
 
-    // Check which phones have recent lead activity (created/updated < 1 hour ago)
+    // Skip follow-up if a lead exists for this phone that is BOTH recently touched AND still active.
+    // A lead in a terminal state (handled / not_relevant / no_answer) shouldn't block a fresh follow-up
+    // triggered by a *new* call — it just means we already dealt with this person on a previous cycle.
     const phones = items.map(i => i.phone)
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
     const { data: leads } = await supabase
       .from('leads')
-      .select('phone')
+      .select('phone, status')
       .in('phone', phones)
       .gte('updated_at', oneHourAgo)
 
-    const leadPhones = new Set((leads || []).map(l => l.phone))
+    const TERMINAL_STATUSES = new Set(['handled', 'not_relevant', 'no_answer'])
+    const leadPhones = new Set(
+      (leads || [])
+        .filter(l => !TERMINAL_STATUSES.has(l.status))
+        .map(l => l.phone)
+    )
 
     // Resolve Chatwoot details for conversation tracking
     const chatwootInbox = config.inboxes

@@ -11,6 +11,7 @@ import { Separator } from './components/ui/separator'
 import { PageHeaderProvider, usePageHeader } from './lib/page-header'
 import { SidePanelProvider, useSidePanel } from './lib/side-panel'
 import { useRealtimeInvalidation } from './hooks/use-realtime'
+import { ToastProvider } from './components/ui/toast'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import Sources from './pages/Sources'
@@ -94,6 +95,7 @@ export default function App() {
     <ThemeProvider>
     <I18nProvider>
     <QueryClientProvider client={queryClient}>
+    <ToastProvider>
     <BrowserRouter>
       <AuthProvider>
         <RealtimeListener />
@@ -201,6 +203,7 @@ export default function App() {
         </Routes>
       </AuthProvider>
     </BrowserRouter>
+    </ToastProvider>
     </QueryClientProvider>
     </I18nProvider>
     </ThemeProvider>

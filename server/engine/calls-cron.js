@@ -1,7 +1,8 @@
 /**
  * Calls Cron — Automatically syncs call data from Maskyoo into Supabase.
  *
- * Schedule: runs every 10 minutes.
+ * Schedule: runs every minute (the followup cron depends on fresh call data
+ * within ~1 min to enqueue follow-ups, so we don't space these further apart).
  * Fetches the last 24h of CDR data and upserts into the calls table.
  */
 
@@ -50,7 +51,7 @@ export function startCallsCron(supabase) {
     return
   }
 
-  // Every 10 minutes
+  // Every minute (see file header). Use `syncing` flag to avoid overlap on slow Maskyoo responses.
   cronTask = cron.schedule('* * * * *', () => {
     runCallsSync(supabase).catch((err) => {
       console.error('[Calls Cron] Sync error:', err.message)

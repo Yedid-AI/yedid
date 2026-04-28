@@ -169,13 +169,15 @@ export async function runClosingCycle(supabase) {
         responseFormat: { type: 'json_object' },
       })
 
-      // 5. Parse response
+      // 5. Parse response. If the LLM returns malformed JSON, we don't leave the session
+      // open forever — fall back to a conservative "not resolved, low confidence" close
+      // so the session is removed from the open queue and someone (or the next cron) can revisit.
       let analysis
       try {
         analysis = JSON.parse(result.content)
       } catch {
-        console.error(`[Closing] Failed to parse LLM response for session ${session.id}:`, result.content)
-        continue
+        console.error(`[Closing] LLM returned invalid JSON for session ${session.id} — closing as unresolved fallback. Raw:`, result.content?.slice(0, 200))
+        analysis = { resolved: false, confidence: 0, reason: 'Auto-closed (LLM parse error)' }
       }
 
       // 6. Close the session (resolved maps to billable field in DB)
@@ -239,7 +241,8 @@ async function ensureLeadExists(supabase, session, messages, llmConfig) {
     }
   }
 
-  // Extract lead info from conversation via LLM
+  // Extract lead info from conversation via LLM. On failure (network error or invalid JSON)
+  // we still create a minimal lead from contact_name + phone so the contact isn't lost.
   let extracted = {}
   try {
     const extractResult = await createCompletion({
@@ -249,9 +252,13 @@ async function ensureLeadExists(supabase, session, messages, llmConfig) {
       messages: messages.map((m) => ({ role: m.role, content: m.content })),
       responseFormat: { type: 'json_object' },
     })
-    extracted = JSON.parse(extractResult.content)
+    try {
+      extracted = JSON.parse(extractResult.content)
+    } catch {
+      console.error(`[Closing] Lead extraction returned invalid JSON for session ${session.id} — falling back to phone-only lead. Raw:`, extractResult.content?.slice(0, 200))
+    }
   } catch (err) {
-    console.error(`[Closing] Lead extraction failed for session ${session.id}:`, err.message)
+    console.error(`[Closing] Lead extraction call failed for session ${session.id}:`, err.message)
   }
 
   // Build lead params — use extracted name, fallback to contact_name, fallback to phone
