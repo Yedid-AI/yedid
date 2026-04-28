@@ -583,8 +583,14 @@ async function markRepliesAndConversions(supabase) {
 // ============================================================================
 
 async function enqueueSecondAttempts(supabase) {
+  // Lower bound: 1st attempt must be at least FOLLOWUP_SECOND_ATTEMPT_HOURS old
+  // (let the user breathe before nagging). Upper bound: hard 7 days — relancing
+  // someone whose original call is a month old feels like cold spam, not a
+  // follow-up. Without the upper bound the very first cron cycle after the
+  // 034 schema rollout queued attempts for 33+-day-old originals.
   const hours = parseInt(getSetting('FOLLOWUP_SECOND_ATTEMPT_HOURS')) || 24
-  const cutoff = new Date(Date.now() - hours * 3600 * 1000).toISOString()
+  const oldCutoff = new Date(Date.now() - hours * 3600 * 1000).toISOString()
+  const recentCutoff = new Date(Date.now() - 7 * 86400000).toISOString()
 
   const { data: candidates } = await supabase
     .from('followup_queue')
@@ -593,36 +599,49 @@ async function enqueueSecondAttempts(supabase) {
     .eq('attempt_number', 1)
     .is('replied_at', null)
     .is('lead_id', null)
-    .lte('processed_at', cutoff)
+    .lte('processed_at', oldCutoff)
+    .gte('processed_at', recentCutoff)
     .limit(50)
 
   if (!candidates?.length) return
 
+  const phones = [...new Set(candidates.map(c => c.phone))]
+
   // Skip phones that already have a 2nd attempt queued (any status — once is enough).
-  const phones = candidates.map(c => c.phone)
-  const { data: existing } = await supabase
+  const { data: existingAttempts } = await supabase
     .from('followup_queue')
     .select('phone')
     .in('phone', phones)
     .gte('attempt_number', 2)
-  const skip = new Set((existing || []).map(r => r.phone))
+  const skipAttempt = new Set((existingAttempts || []).map(r => r.phone))
 
-  const toInsert = candidates.filter(c => !skip.has(c.phone)).map(c => ({
-    user_id: c.user_id,
-    org_id: c.org_id,
-    phone: c.phone,
-    call_id: c.call_id,
-    source_user_name: c.source_user_name,
-    source_cdr_ddi: c.source_cdr_ddi,
-    scheduled_at: new Date().toISOString(),
-    status: 'pending',
-    attempt_number: 2,
-    parent_id: c.id,
-  }))
+  // Skip phones that already have a lead — replied_at/lead_id can be NULL on
+  // legacy items that pre-date the tracking columns, so the WHERE-clause filter
+  // above is not enough. Belt-and-suspenders phone match against leads.
+  const { data: existingLeads } = await supabase
+    .from('leads')
+    .select('phone')
+    .in('phone', phones)
+  const skipLead = new Set((existingLeads || []).map(r => r.phone))
+
+  const toInsert = candidates
+    .filter(c => !skipAttempt.has(c.phone) && !skipLead.has(c.phone))
+    .map(c => ({
+      user_id: c.user_id,
+      org_id: c.org_id,
+      phone: c.phone,
+      call_id: c.call_id,
+      source_user_name: c.source_user_name,
+      source_cdr_ddi: c.source_cdr_ddi,
+      scheduled_at: new Date().toISOString(),
+      status: 'pending',
+      attempt_number: 2,
+      parent_id: c.id,
+    }))
 
   if (toInsert.length) {
     await supabase.from('followup_queue').insert(toInsert)
-    console.log(`[Followup Cron] Scheduled ${toInsert.length} 2nd-attempt follow-ups`)
+    console.log(`[Followup Cron] Scheduled ${toInsert.length} 2nd-attempt follow-ups (skipped ${candidates.length - toInsert.length} due to existing lead/attempt)`)
   }
 }
 
