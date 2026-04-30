@@ -19,7 +19,7 @@ const MAX_TOOL_ROUNDS = 5
  * @param {string} opts.userId - User ID for KB filtering
  * @returns {Promise<string>} Agent response text
  */
-export async function runPlaybookAgent({ agentConfig, playbook, agentTools = [], userMessage, conversationHistory, supabase, userId, contactContext, sessionId }) {
+export async function runPlaybookAgent({ agentConfig, playbook, agentTools = [], userMessage, conversationHistory, supabase, userId, enterpriseUserId, contactContext, sessionId }) {
   const provider = agentConfig.llm_provider || 'openai'
   const model = agentConfig.llm_model || 'gpt-4.1-mini'
 
@@ -196,7 +196,7 @@ This person already heard from us via WhatsApp asking about their missed call. T
             if (toolCallCache.has(sig)) {
               toolResult = toolCallCache.get(sig)
             } else {
-              toolResult = await executeInternalTool(matchedTool.handler, toolCall.arguments, { supabase, userId, sessionId })
+              toolResult = await executeInternalTool(matchedTool.handler, toolCall.arguments, { supabase, userId, sessionId, enterpriseUserId })
               metadata.tool_calls.push({ name: matchedTool.name, handler: matchedTool.handler, arguments: toolCall.arguments, result: toolResult })
               // Amplify failure signals INSIDE the tool result rather than via a
               // separate system message — the latter gets dropped by the Anthropic

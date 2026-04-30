@@ -37,7 +37,7 @@ async function logBotTranscript(supabase, leadId, userId, sessionId) {
  * structured form with an `instruction` field that tells the LLM exactly what to do
  * next so it cannot rationalize past the failure.
  */
-export async function saveLead(params, { supabase, userId, sessionId }) {
+export async function saveLead(params, { supabase, userId, sessionId, enterpriseUserId }) {
   const body = params?.body || params || {}
 
   const fail = (error, instruction, missing) => JSON.stringify({
@@ -95,13 +95,17 @@ export async function saveLead(params, { supabase, userId, sessionId }) {
 
   // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index.
   // Use the new branch_id FK so the lead links cleanly to branches.
+  // Branches and city_branch_index are owned by the enterprise tenant
+  // (babait=user_id 2, aviezer=user_id 3), not the inbox owner (admin=1).
+  // Fall back to the inbox userId so legacy single-tenant setups still resolve.
+  const branchUserId = enterpriseUserId || userId
   let branch = body.branch || resolveFixedBranch(serviceNorm) || null
   let branchId = null
   if (!branch && body.city && company === 'babait') {
     const { data: idx } = await supabase
       .from('city_branch_index')
       .select('branch_id, branches(name)')
-      .eq('user_id', userId)
+      .eq('user_id', branchUserId)
       .eq('city', body.city)
       .limit(1)
     if (idx?.length) {
@@ -113,7 +117,7 @@ export async function saveLead(params, { supabase, userId, sessionId }) {
     const { data: br } = await supabase
       .from('branches')
       .select('id')
-      .eq('user_id', userId)
+      .eq('user_id', branchUserId)
       .eq('name', branch)
       .maybeSingle()
     if (br?.id) branchId = br.id
@@ -240,11 +244,12 @@ export async function saveLead(params, { supabase, userId, sessionId }) {
  * cities it serves (joined via city_branch_index FK). Lets the AI answer
  * "do you have a branch in <city>" without separate lookups.
  */
-async function listBranches(params, { supabase, userId }) {
+async function listBranches(params, { supabase, userId, enterpriseUserId }) {
+  const branchUserId = enterpriseUserId || userId
   const { data, error } = await supabase
     .from('branches')
     .select('id, name, address, phone, mobile, contact_name, city_branch_index(city)')
-    .eq('user_id', userId)
+    .eq('user_id', branchUserId)
     .eq('is_active', true)
     .order('name')
 
