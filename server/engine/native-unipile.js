@@ -185,6 +185,22 @@ export async function handleUnipileNativeInbound({
     return
   }
 
+  // Skip empty payloads (Unipile envoie parfois des status events sans content)
+  if (!content && (!attachments || attachments.length === 0)) {
+    console.log('[native-unipile] Empty payload (no content, no attachments) — skipping')
+    return
+  }
+
+  // Debug: log la structure des attachments pour diagnostiquer les voice messages
+  if (attachments && attachments.length > 0) {
+    console.log('[native-unipile] Inbound attachments:', JSON.stringify(attachments.map(a => ({
+      type: a.type, content_type: a.content_type, mime_type: a.mime_type,
+      file_name: a.file_name || a.name,
+      url: a.url ? a.url.slice(0, 60) + '...' : null,
+      data_url: a.data_url ? a.data_url.slice(0, 60) + '...' : null,
+    }))))
+  }
+
   // 0. Idempotence: si on a deja inserre ce message externe, skip
   if (externalId) {
     const { data: dup } = await supabase
