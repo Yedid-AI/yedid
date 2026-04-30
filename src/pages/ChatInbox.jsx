@@ -10,6 +10,7 @@ import {
   useMarkChatRead,
   useChatInboxes,
   useLeadFields,
+  useBranches,
 } from '../hooks/queries'
 import { useAuth } from '../lib/auth'
 import { useI18n } from '../lib/i18n'
@@ -19,10 +20,9 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import {
   Send, Search, CheckCircle, Bot, BotOff, MessageSquare,
-  Paperclip, Mic, Square, FileText, X,
+  Paperclip, Mic, Square, FileText, X, Building2, MapPin, Phone, Mail,
 } from 'lucide-react'
 import { format, formatDistanceToNow, isToday, isYesterday, differenceInMinutes } from 'date-fns'
 import { fr as frLocale } from 'date-fns/locale/fr'
@@ -39,12 +39,15 @@ const STATUS_COLORS = {
   snoozed: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
 }
 
-const CHANNEL_LABELS = {
-  website: 'Website',
-  api: 'API',
-  gmail: 'Gmail',
-  whatsapp_unipile: 'WhatsApp',
-  whatsapp_business_manual: 'WhatsApp Business',
+function channelLabel(channel, t) {
+  const map = {
+    website: t('chatInbox.channelWebsite') || 'Website',
+    api: t('chatInbox.channelApi') || 'API',
+    gmail: t('chatInbox.channelGmail') || 'Gmail',
+    whatsapp_unipile: t('chatInbox.channelWhatsappUnipile') || 'WhatsApp',
+    whatsapp_business_manual: t('chatInbox.channelWhatsappBusiness') || 'WhatsApp Business',
+  }
+  return map[channel] || channel
 }
 
 function initials(name) {
@@ -62,6 +65,10 @@ function formatRelative(dateStr, locale) {
   return format(d, 'd MMM', { locale: loc })
 }
 
+function isBranchLead(lead) {
+  return !!lead?.metadata?.is_branch
+}
+
 export default function ChatInbox() {
   const { t, locale } = useI18n()
   const { user } = useAuth()
@@ -70,7 +77,7 @@ export default function ChatInbox() {
 
   const [filters, setFilters] = useState({ status: '', search: '', inbox_id: '' })
   const [selectedId, setSelectedId] = useState(null)
-  const [leadDetailOpen, setLeadDetailOpen] = useState(false)
+  const [contactPanelOpen, setContactPanelOpen] = useState(false)
 
   const { data: inboxes } = useChatInboxes()
   const { data: conversations = [], isLoading } = useChatConversations(filters)
@@ -87,9 +94,14 @@ export default function ChatInbox() {
     if (!selectedId && conversations.length > 0) setSelectedId(conversations[0].id)
   }, [conversations, selectedId])
 
+  // Auto-open the panel when switching to another conversation, but stay closed
+  // si l'utilisateur l'a explicitement fermé.
+  // Pour l'instant: ne pas auto-ouvrir, l'utilisateur clique pour ouvrir.
+
+  const lead = selected?.leads
+  const isBranch = isBranchLead(lead)
+
   return (
-    // Negate the AppLayout px-6 py-6 padding to be edge-to-edge.
-    // Header is h-12 (48px) → fill the rest of the viewport, no page scroll.
     <div className="-mx-6 -my-6 h-[calc(100svh-3rem)] flex bg-background overflow-hidden">
       {/* Left: conversation list */}
       <aside className="w-80 shrink-0 border-e flex flex-col bg-muted/30">
@@ -119,13 +131,15 @@ export default function ChatInbox() {
           <>
             <ConversationHeader
               conversation={selected}
-              onContactClick={() => setLeadDetailOpen(true)}
+              isBranch={isBranch}
+              contactPanelOpen={contactPanelOpen}
+              onContactClick={() => setContactPanelOpen(v => !v)}
             />
             <MessageThread
               conversationId={selectedId}
               messages={messages}
               locale={locale}
-              currentLead={selected.leads}
+              currentLead={lead}
             />
             <MessageInput conversationId={selectedId} aiDisabled={selected.ai_disabled} />
           </>
@@ -134,35 +148,44 @@ export default function ChatInbox() {
         )}
       </main>
 
-      {/* Lead detail — slide-in from end (Sheet "right" is logical: end-0 → RTL-aware) */}
-      <Sheet open={leadDetailOpen} onOpenChange={setLeadDetailOpen}>
-        <SheetContent
-          side="right"
-          className="w-full sm:max-w-2xl p-0 flex flex-col gap-0"
-        >
-          <SheetTitle className="sr-only">Lead detail</SheetTitle>
-          {selected?.leads ? (
-            <>
-              <div className="flex items-center justify-between px-6 py-3 border-b shrink-0">
-                <h3 className="text-sm font-semibold">{t('leads.detail') || 'Détails du lead'}</h3>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setLeadDetailOpen(false)}>
-                  <X size={14} />
-                </Button>
-              </div>
-              <div className="flex-1 overflow-y-auto px-6 py-4">
-                <LeadDetail
-                  lead={selected.leads}
-                  t={t}
-                  leadFields={leadFields}
-                  isSuperAdmin={isAdminOrAbove}
-                  userRole={user?.role}
-                />
-              </div>
-              <LeadCommentInput leadId={selected.leads.id} t={t} />
-            </>
-          ) : null}
-        </SheetContent>
-      </Sheet>
+      {/* Right: contact panel (lead detail or branch card) — INLINE column, pushes the chat */}
+      {selectedId && contactPanelOpen && lead && (
+        <aside className="w-[420px] shrink-0 border-s flex flex-col bg-background">
+          <div className="flex items-center justify-between px-4 py-3 border-b shrink-0">
+            <h3 className="text-sm font-semibold flex items-center gap-2">
+              {isBranch ? (
+                <>
+                  <Building2 className="h-4 w-4 text-primary" />
+                  {t('chatInbox.branchPanelTitle') || 'Détails du Snif'}
+                </>
+              ) : (
+                t('leads.detail') || 'Détails du lead'
+              )}
+            </h3>
+            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setContactPanelOpen(false)}>
+              <X size={14} />
+            </Button>
+          </div>
+          <div className="flex-1 overflow-y-auto">
+            {isBranch ? (
+              <BranchPanel lead={lead} t={t} />
+            ) : (
+              <>
+                <div className="px-6 py-4">
+                  <LeadDetail
+                    lead={lead}
+                    t={t}
+                    leadFields={leadFields}
+                    isSuperAdmin={isAdminOrAbove}
+                    userRole={user?.role}
+                  />
+                </div>
+                <LeadCommentInput leadId={lead.id} t={t} />
+              </>
+            )}
+          </div>
+        </aside>
+      )}
     </div>
   )
 }
@@ -175,7 +198,7 @@ function ConversationListHeader({ filters, setFilters, inboxes, t }) {
         <Input
           value={filters.search}
           onChange={e => setFilters(f => ({ ...f, search: e.target.value }))}
-          placeholder={t('common.search') || 'Rechercher…'}
+          placeholder={t('chatInbox.search')}
           className="ps-9 h-9"
         />
       </div>
@@ -188,11 +211,11 @@ function ConversationListHeader({ filters, setFilters, inboxes, t }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tous statuts</SelectItem>
-            <SelectItem value="open">Ouvertes</SelectItem>
-            <SelectItem value="pending">En attente</SelectItem>
-            <SelectItem value="resolved">Résolues</SelectItem>
-            <SelectItem value="snoozed">Reportées</SelectItem>
+            <SelectItem value="all">{t('chatInbox.allStatuses')}</SelectItem>
+            <SelectItem value="open">{t('chatInbox.statusOpen')}</SelectItem>
+            <SelectItem value="pending">{t('chatInbox.statusPending')}</SelectItem>
+            <SelectItem value="resolved">{t('chatInbox.statusResolved')}</SelectItem>
+            <SelectItem value="snoozed">{t('chatInbox.statusSnoozed')}</SelectItem>
           </SelectContent>
         </Select>
         <Select
@@ -200,10 +223,10 @@ function ConversationListHeader({ filters, setFilters, inboxes, t }) {
           onValueChange={v => setFilters(f => ({ ...f, inbox_id: v === 'all' ? '' : v }))}
         >
           <SelectTrigger className="h-8 text-xs flex-1">
-            <SelectValue placeholder="Inbox" />
+            <SelectValue placeholder={t('chatInbox.channelPlaceholder')} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Tous canaux</SelectItem>
+            <SelectItem value="all">{t('chatInbox.allChannels')}</SelectItem>
             {inboxes.map(ib => (
               <SelectItem key={ib.id} value={ib.id}>
                 {ib.name}
@@ -217,9 +240,11 @@ function ConversationListHeader({ filters, setFilters, inboxes, t }) {
 }
 
 function ConversationItem({ conversation, selected, onClick, locale }) {
+  const { t } = useI18n()
   const lead = conversation.leads
   const lastMsg = conversation.last_message
   const hasUnread = conversation.unread_count > 0
+  const isBranch = isBranchLead(lead)
 
   return (
     <button
@@ -228,10 +253,10 @@ function ConversationItem({ conversation, selected, onClick, locale }) {
         selected ? 'bg-accent' : ''
       }`}
     >
-      <div className={`h-10 w-10 shrink-0 rounded-full bg-primary/10 text-primary font-medium flex items-center justify-center text-sm ${
-        hasUnread ? 'ring-2 ring-primary' : ''
-      }`}>
-        {initials(lead?.name)}
+      <div className={`h-10 w-10 shrink-0 rounded-full font-medium flex items-center justify-center text-sm ${
+        isBranch ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400' : 'bg-primary/10 text-primary'
+      } ${hasUnread ? 'ring-2 ring-primary' : ''}`}>
+        {isBranch ? <Building2 className="h-4 w-4" /> : initials(lead?.name)}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex justify-between items-baseline gap-2">
@@ -244,11 +269,10 @@ function ConversationItem({ conversation, selected, onClick, locale }) {
         </div>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className="text-[10px] text-muted-foreground">
-            {CHANNEL_LABELS[conversation.channel] || conversation.channel}
+            {channelLabel(conversation.channel, t)}
           </span>
-          {conversation.ai_disabled && (
-            <BotOff className="h-3 w-3 text-muted-foreground" />
-          )}
+          {isBranch && <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">{t('chatInbox.branchBadge')}</span>}
+          {conversation.ai_disabled && <BotOff className="h-3 w-3 text-muted-foreground" />}
           <span className={`text-[9px] uppercase tracking-wide px-1.5 py-0 rounded ${STATUS_COLORS[conversation.status] || ''}`}>
             {conversation.status}
           </span>
@@ -272,7 +296,8 @@ function ConversationItem({ conversation, selected, onClick, locale }) {
   )
 }
 
-function ConversationHeader({ conversation, onContactClick }) {
+function ConversationHeader({ conversation, isBranch, contactPanelOpen, onContactClick }) {
+  const { t } = useI18n()
   const lead = conversation.leads
   const resolveMut = useResolveChatConversation()
   const toggleAi = useToggleChatAi()
@@ -281,15 +306,27 @@ function ConversationHeader({ conversation, onContactClick }) {
     <div className="border-b px-4 py-2.5 flex items-center gap-3 bg-background shrink-0">
       <button
         onClick={onContactClick}
-        className="flex items-center gap-3 flex-1 min-w-0 hover:bg-accent/50 -ms-2 ps-2 -my-1 py-1 rounded-md transition"
+        className={`flex items-center gap-3 flex-1 min-w-0 -ms-2 ps-2 -my-1 py-1 rounded-md transition ${
+          contactPanelOpen ? 'bg-accent' : 'hover:bg-accent/50'
+        }`}
+        title={contactPanelOpen ? t('chatInbox.closeContact') : t('chatInbox.openContact')}
       >
-        <div className="h-9 w-9 rounded-full bg-primary/10 text-primary font-medium flex items-center justify-center text-sm shrink-0">
-          {initials(lead?.name)}
+        <div className={`h-9 w-9 rounded-full font-medium flex items-center justify-center text-sm shrink-0 ${
+          isBranch ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400' : 'bg-primary/10 text-primary'
+        }`}>
+          {isBranch ? <Building2 className="h-4 w-4" /> : initials(lead?.name)}
         </div>
         <div className="text-start min-w-0">
-          <div className="font-medium truncate text-sm">{lead?.name || '—'}</div>
+          <div className="font-medium truncate text-sm flex items-center gap-1.5">
+            {lead?.name || '—'}
+            {isBranch && (
+              <span className="text-[9px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                {t('chatInbox.branchBadge')}
+              </span>
+            )}
+          </div>
           <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-            <span>{CHANNEL_LABELS[conversation.channel] || conversation.channel}</span>
+            <span>{channelLabel(conversation.channel, t)}</span>
             {lead?.phone && <><span>·</span><span dir="ltr">{lead.phone}</span></>}
           </div>
         </div>
@@ -298,11 +335,11 @@ function ConversationHeader({ conversation, onContactClick }) {
         size="sm"
         variant={conversation.ai_disabled ? 'default' : 'outline'}
         onClick={() => toggleAi.mutate(conversation.id)}
-        title={conversation.ai_disabled ? 'Réactiver l\'AI' : 'Désactiver l\'AI'}
+        title={conversation.ai_disabled ? t('chatInbox.aiOn') : t('chatInbox.aiOff')}
         className="h-8 gap-1"
       >
         {conversation.ai_disabled ? <BotOff className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
-        AI
+        {t('chatInbox.aiLabel')}
       </Button>
       {conversation.status !== 'resolved' && (
         <Button
@@ -312,14 +349,85 @@ function ConversationHeader({ conversation, onContactClick }) {
           className="h-8 gap-1"
         >
           <CheckCircle className="h-3.5 w-3.5" />
-          Résoudre
+          {t('chatInbox.resolve')}
         </Button>
       )}
     </div>
   )
 }
 
+function BranchPanel({ lead, t }) {
+  const branchId = lead?.metadata?.branch_id
+  const { data: branches } = useBranches()
+  const branch = (branches || []).find(b => b.id === branchId)
+
+  return (
+    <div className="px-6 py-5 space-y-4">
+      <div className="text-center space-y-2">
+        <div className="h-16 w-16 mx-auto rounded-full bg-amber-500/15 text-amber-700 dark:text-amber-400 flex items-center justify-center">
+          <Building2 className="h-7 w-7" />
+        </div>
+        <div>
+          <h3 className="font-semibold">{branch?.name || lead.name}</h3>
+          <Badge variant="outline" className="mt-1 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30 text-[10px]">{t('chatInbox.branchBadge')}</Badge>
+        </div>
+      </div>
+
+      <div className="space-y-3 text-sm">
+        {(branch?.contact_name || lead.metadata?.contact_name) && (
+          <Field icon={<Building2 className="h-3.5 w-3.5" />} label={t('chatInbox.branchCoordinator')} value={branch?.contact_name || lead.metadata?.contact_name} />
+        )}
+        {(branch?.phone || lead.phone) && (
+          <Field icon={<Phone className="h-3.5 w-3.5" />} label={t('chatInbox.branchPhone')} value={branch?.phone || lead.phone} link={`tel:${branch?.phone || lead.phone}`} ltr />
+        )}
+        {(branch?.mobile) && (
+          <Field icon={<Phone className="h-3.5 w-3.5" />} label={t('chatInbox.branchMobile')} value={branch.mobile} link={`tel:${branch.mobile}`} ltr />
+        )}
+        {(branch?.whatsapp_phone || lead.phone) && (
+          <Field icon={<MessageSquare className="h-3.5 w-3.5" />} label={t('chatInbox.branchWhatsapp')} value={branch?.whatsapp_phone || lead.phone} ltr />
+        )}
+        {(branch?.email) && (
+          <Field icon={<Mail className="h-3.5 w-3.5" />} label={t('chatInbox.branchEmail')} value={branch.email} link={`mailto:${branch.email}`} />
+        )}
+        {(branch?.address) && (
+          <Field icon={<MapPin className="h-3.5 w-3.5" />} label={t('chatInbox.branchAddress')} value={branch.address} />
+        )}
+      </div>
+
+      {branchId && (
+        <div className="pt-3 border-t">
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => window.location.assign(`/branches?id=${branchId}`)}
+          >
+            <Building2 className="h-4 w-4 me-1" /> {t('chatInbox.branchManage')}
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Field({ icon, label, value, link, ltr }) {
+  return (
+    <div className="flex items-start gap-2">
+      <div className="text-muted-foreground mt-0.5 shrink-0">{icon}</div>
+      <div className="flex-1 min-w-0">
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wide">{label}</div>
+        {link ? (
+          <a href={link} className="hover:underline break-all" dir={ltr ? 'ltr' : undefined}>{value}</a>
+        ) : (
+          <div className="break-all" dir={ltr ? 'ltr' : undefined}>{value}</div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function MessageThread({ conversationId, messages, locale, currentLead }) {
+  const { t } = useI18n()
   const scrollRef = useRef(null)
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
@@ -329,7 +437,7 @@ function MessageThread({ conversationId, messages, locale, currentLead }) {
     <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-2 bg-muted/10">
       {messages.length === 0 ? (
         <div className="text-center text-sm text-muted-foreground py-12">
-          Aucun message dans cette conversation.
+          {t('chatInbox.threadEmpty')}
         </div>
       ) : (
         messages.map((m, i) => (
@@ -347,6 +455,7 @@ function MessageThread({ conversationId, messages, locale, currentLead }) {
 }
 
 function MessageBubble({ message, locale, leadName, prevMsg }) {
+  const { t } = useI18n()
   const isContact = message.sender_type === 'contact'
   const isPrivate = message.is_private
   const isSameSenderAsPrev = prevMsg?.sender_type === message.sender_type && !prevMsg?.is_private && !isPrivate
@@ -357,6 +466,8 @@ function MessageBubble({ message, locale, leadName, prevMsg }) {
       : (message.agent?.email?.split('@')[0] || 'Agent')
 
   const attachments = Array.isArray(message.attachments) ? message.attachments : []
+  // Defensive: skip rendering of completely empty messages (no content + no attachments)
+  if (!message.content && attachments.length === 0) return null
 
   return (
     <div className={`flex ${isContact ? 'justify-start' : 'justify-end'}`}>
@@ -364,7 +475,7 @@ function MessageBubble({ message, locale, leadName, prevMsg }) {
         {!isSameSenderAsPrev && (
           <div className={`text-[10px] mb-1 px-1 ${isContact ? 'text-start' : 'text-end'} text-muted-foreground`}>
             {senderLabel}
-            {message.delivery_status === 'failed' && <span className="ms-1 text-red-500">· échec</span>}
+            {message.delivery_status === 'failed' && <span className="ms-1 text-red-500">· {t('chatInbox.deliveryFailed')}</span>}
           </div>
         )}
         <div className={`rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words ${
@@ -376,7 +487,7 @@ function MessageBubble({ message, locale, leadName, prevMsg }) {
                 ? 'bg-violet-500/10 border border-violet-500/30 text-foreground'
                 : 'bg-primary text-primary-foreground'
         }`}>
-          {isPrivate && <div className="text-[10px] font-medium mb-1 opacity-70">📝 NOTE PRIVÉE</div>}
+          {isPrivate && <div className="text-[10px] font-medium mb-1 opacity-70">📝 {t('chatInbox.privateNote')}</div>}
           {attachments.length > 0 && (
             <div className="mb-1.5 space-y-1.5">
               {attachments.map((a, i) => <AttachmentPreview key={i} attachment={a} />)}
@@ -403,7 +514,7 @@ function AttachmentPreview({ attachment }) {
     )
   }
   if (type === 'video') return <video src={url} controls className="max-h-56 rounded-lg" />
-  if (type === 'audio') return <audio src={url} controls className="max-w-full" />
+  if (type === 'audio') return <audio src={url} controls className="max-w-full min-w-[240px]" />
   return (
     <a href={url} target="_blank" rel="noreferrer" className="flex items-center gap-2 underline">
       <FileText className="h-4 w-4" /> {file_name || 'Fichier'}
@@ -412,6 +523,7 @@ function AttachmentPreview({ attachment }) {
 }
 
 function MessageInput({ conversationId, aiDisabled }) {
+  const { t } = useI18n()
   const [text, setText] = useState('')
   const [recording, setRecording] = useState(false)
   const fileRef = useRef(null)
@@ -445,7 +557,6 @@ function MessageInput({ conversationId, aiDisabled }) {
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      // Pick the best supported mime: webm (Chrome/Firefox) or mp4 (Safari)
       const mimeCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mpeg']
       const mimeType = mimeCandidates.find(m =>
         typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)
@@ -468,7 +579,7 @@ function MessageInput({ conversationId, aiDisabled }) {
       setRecording(true)
     } catch (err) {
       console.error('[chat] Mic access error:', err)
-      alert('Accès au micro refusé. Vérifiez les permissions du navigateur.')
+      alert(t('chatInbox.micDenied'))
     }
   }
 
@@ -483,7 +594,7 @@ function MessageInput({ conversationId, aiDisabled }) {
       {!aiDisabled && (
         <div className="text-[11px] text-muted-foreground px-4 pt-2 flex items-center gap-1.5">
           <Bot className="h-3 w-3" />
-          L'AI répond automatiquement. Vos messages remplacent sa réponse.
+          {t('chatInbox.aiActive')}
         </div>
       )}
       <input
@@ -499,7 +610,7 @@ function MessageInput({ conversationId, aiDisabled }) {
           size="icon"
           onClick={() => fileRef.current?.click()}
           disabled={attachMut.isPending || recording}
-          title="Joindre un fichier"
+          title={t('chatInbox.attachFile')}
           className="shrink-0 h-9 w-9"
         >
           <Paperclip className="h-4 w-4" />
@@ -509,7 +620,7 @@ function MessageInput({ conversationId, aiDisabled }) {
           size="icon"
           onClick={recording ? stopRecording : startRecording}
           disabled={attachMut.isPending}
-          title={recording ? 'Arrêter' : 'Message vocal'}
+          title={recording ? t('chatInbox.stopRecord') : t('chatInbox.recordVoice')}
           className="shrink-0 h-9 w-9"
         >
           {recording ? <Square className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
@@ -518,7 +629,7 @@ function MessageInput({ conversationId, aiDisabled }) {
           value={text}
           onChange={e => setText(e.target.value)}
           onKeyDown={onKey}
-          placeholder={recording ? 'Enregistrement…' : 'Tapez votre message…'}
+          placeholder={recording ? t('chatInbox.recording') : t('chatInbox.composePlaceholder')}
           rows={1}
           className="resize-none min-h-9 max-h-32 py-2"
           disabled={recording}
@@ -533,7 +644,7 @@ function MessageInput({ conversationId, aiDisabled }) {
         </Button>
       </div>
       {attachMut.isPending && (
-        <div className="text-[11px] text-muted-foreground px-4 pb-2">Envoi en cours…</div>
+        <div className="text-[11px] text-muted-foreground px-4 pb-2">{t('chatInbox.sending')}</div>
       )}
     </div>
   )
@@ -557,19 +668,21 @@ function ListSkeleton() {
 }
 
 function EmptyList() {
+  const { t } = useI18n()
   return (
     <div className="text-center text-sm text-muted-foreground py-12 px-6">
       <MessageSquare className="h-8 w-8 mx-auto opacity-30 mb-2" />
-      Aucune conversation pour ces filtres.
+      {t('chatInbox.empty')}
     </div>
   )
 }
 
 function EmptyThread() {
+  const { t } = useI18n()
   return (
     <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3 bg-muted/10">
       <MessageSquare className="h-12 w-12 opacity-20" />
-      <p className="text-sm">Sélectionnez une conversation</p>
+      <p className="text-sm">{t('chatInbox.selectConv')}</p>
     </div>
   )
 }
