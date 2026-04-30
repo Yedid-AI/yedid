@@ -376,7 +376,7 @@ export default {
   // nav — leads
   'nav.leads': 'לידים',
   'nav.leadsPage': 'לידים',
-  'nav.branches': 'סניפים',
+  'nav.branches': 'ניתוב',
 
   // leads
   'leads.title': 'לידים',
@@ -550,8 +550,22 @@ export default {
   'lines.editLine': 'עריכת קו',
 
   // branches
-  'branches.title': 'סניפים',
-  'branches.subtitle': 'ניהול סניפים וניתוב לפי עיר',
+  'branches.title': 'ניתוב',
+  'branches.subtitle': 'ניתוב לידים: שירותים, ערים ושליחה',
+  'branches.services': 'שירותים',
+  'branches.services.empty': 'לא הוגדרו שירותים',
+  'branches.services.add': 'שירות חדש',
+  'branches.services.name': 'שם',
+  'branches.services.aliases': 'כינויים',
+  'branches.services.aliasesHelp': 'ערכים גולמיים (דפי נחיתה, טפסים) שימופו לשירות זה. אחד בכל שורה.',
+  'branches.services.company': 'חברה',
+  'branches.services.fixedBranch': 'סניף קבוע',
+  'branches.services.fixedBranchHelp': 'אם מוגדר, עוקף את אינדקס עיר -> סניף.',
+  'branches.services.order': 'סדר',
+  'branches.services.active': 'פעיל',
+  'branches.services.deleteTitle': 'למחוק שירות זה?',
+  'branches.services.editTitle': 'עריכת שירות',
+  'branches.services.createTitle': 'שירות חדש',
   'branches.dialogTitle': 'סניף חדש',
   'branches.deleteTitle': 'למחוק סניף זה?',
   'branches.empty': 'אין סניפים',
