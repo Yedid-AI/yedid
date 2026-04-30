@@ -26,6 +26,7 @@ export function initRealtime(supabaseAdmin) {
     'users', 'branches', 'user_branches',
     'playbooks', 'tools', 'escalation_rules',
     'dispatch_config', 'followup_config', 'followup_queue',
+    'chat_inboxes', 'chat_conversations', 'chat_messages',
   ]
 
   realtimeChannel = supabaseAdmin

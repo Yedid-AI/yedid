@@ -28,6 +28,9 @@ const TABLE_TO_KEYS = {
   dispatch_config: [['dispatch-config']],
   followup_config: [['followup-config'], ['followup-sources'], ['followup-stats']],
   followup_queue: [['followup-queue'], ['followup-stats']],
+  chat_inboxes: [['chat-inboxes']],
+  chat_conversations: [['chat-conversations'], ['chat-unread']],
+  chat_messages: [['chat-messages'], ['chat-conversations'], ['chat-unread']],
 }
 
 // Debounce: batch rapid changes into a single invalidation

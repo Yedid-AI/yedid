@@ -60,4 +60,12 @@ export const queryKeys = {
   followupSources: (orgId) => ['followup-sources', orgId || 'default'],
   followupQueue: ['followup-queue'],
   followupStats: ['followup-stats'],
+
+  // Native chat module
+  chatInboxes: ['chat-inboxes'],
+  chatInbox: (id) => ['chat-inboxes', id],
+  chatConversations: (filters) => ['chat-conversations', filters || {}],
+  chatConversation: (id) => ['chat-conversations', 'detail', id],
+  chatMessages: (conversationId) => ['chat-messages', conversationId],
+  chatUnread: ['chat-unread'],
 }
