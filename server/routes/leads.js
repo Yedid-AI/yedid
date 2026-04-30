@@ -78,7 +78,9 @@ router.get('/leads', checkRole('admin', 'marketeur', 'branch'), async (req, res)
     let leadsQuery = supabase.from('leads').select('*', { count: 'exact' })
     leadsQuery = applyBaseFilters(leadsQuery)
     leadsQuery = applyTableFilters(leadsQuery)
-    leadsQuery = leadsQuery.order('created_at', { ascending: false })
+    // Sort by updated_at so leads with new bot activity surface back to the top
+    // — created_at would hide a re-engaged lead behind brand-new ones.
+    leadsQuery = leadsQuery.order('updated_at', { ascending: false })
       .range(page * pageSize, (page + 1) * pageSize - 1)
 
     const { data: leads, count: totalFiltered, error: leadsErr } = await leadsQuery
