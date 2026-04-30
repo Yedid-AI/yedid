@@ -273,11 +273,37 @@ async function listBranches(params, { supabase, userId, enterpriseUserId }) {
   return JSON.stringify({ success: true, branches, count: branches.length })
 }
 
+/**
+ * list_services — List configured services from service_config. Useful for
+ * cross-enterprise answers (e.g. Aviezer bot quoting Babait's offering when
+ * a contact asks). Filter by company if provided, otherwise return all active.
+ */
+async function listServices(params, { supabase }) {
+  const body = params?.body || params || {}
+  const company = body.company || null
+
+  let q = supabase
+    .from('service_config')
+    .select('name, company, aliases, display_order')
+    .eq('is_active', true)
+  if (company) q = q.eq('company', company)
+
+  const { data, error } = await q.order('display_order')
+
+  if (error) {
+    console.error('[internal-tools/list_services]', error.message)
+    return JSON.stringify({ success: false, error: error.message })
+  }
+
+  return JSON.stringify({ success: true, services: data || [], count: (data || []).length })
+}
+
 // --- Handler registry ---
 
 const HANDLERS = {
   save_lead: saveLead,
   list_branches: listBranches,
+  list_services: listServices,
 }
 
 /**
