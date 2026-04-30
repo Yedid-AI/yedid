@@ -52,6 +52,10 @@ export default {
   'nav.workspace': 'Workspace',
   'nav.configure': 'Configure',
   'nav.platform': 'Platform',
+  'nav.organisation': 'Organization',
+  'nav.group.crm': 'CRM',
+  'nav.group.ai': 'AI',
+  'nav.group.admin': 'Admin',
 
   // login
   'login.subtitle': 'Sign in to your workspace',

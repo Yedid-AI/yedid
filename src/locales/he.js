@@ -52,6 +52,10 @@ export default {
   'nav.workspace': 'סביבת עבודה',
   'nav.configure': 'הגדרות',
   'nav.platform': 'פלטפורמה',
+  'nav.organisation': 'ארגון',
+  'nav.group.crm': 'CRM',
+  'nav.group.ai': 'בינה מלאכותית',
+  'nav.group.admin': 'ניהול',
 
   // login
   'login.subtitle': 'התחבר למרחב העבודה שלך',

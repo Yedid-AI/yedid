@@ -52,6 +52,10 @@ export default {
   'nav.workspace': 'Espace de travail',
   'nav.configure': 'Configuration',
   'nav.platform': 'Plateforme',
+  'nav.organisation': 'Organisation',
+  'nav.group.crm': 'CRM',
+  'nav.group.ai': 'IA',
+  'nav.group.admin': 'Administration',
 
   // login
   'login.subtitle': 'Connectez-vous a votre espace',
