@@ -13,6 +13,16 @@ import { sendMessage } from '../unipile.js'
 import { accountApi } from '../chatwoot.js'
 import { getSetting } from '../settings.js'
 import { normalizePhone } from '../normalize-service.js'
+import { sendNativeMessage } from './native-messaging.js'
+
+// Kill-switch (cf. routes/whatsapp.js)
+function isNativeChatEnabledFor(unipileAccountId) {
+  const enabled = String(process.env.NATIVE_CHAT_ENABLED || '').toLowerCase() === 'true'
+  if (!enabled) return false
+  const whitelist = (process.env.NATIVE_CHAT_INBOXES || '').split(',').map(s => s.trim()).filter(Boolean)
+  if (whitelist.length === 0) return true
+  return whitelist.includes(unipileAccountId)
+}
 
 // Best-effort mapping from a Maskyoo source line name to the spoken topic to
 // inject into the relance message. The template embeds this as " (בנוגע ל...)"
@@ -372,21 +382,37 @@ async function processQueue(supabase) {
           callDate,
         })
 
-        // Send via Chatwoot → channel callback → Unipile (single path, no double send).
-        // If Chatwoot inbox is configured, let the channel callback handle WhatsApp delivery.
         const callMeta = {
           source: item.source_user_name || null,
           maskyoo_number: item.source_cdr_ddi || null,
           followup: true,
           followup_attempt: item.attempt_number || 1,
         }
+
+        // Native path active si NATIVE_CHAT_ENABLED + chat_inbox existe pour ce compte
+        const useNative = isNativeChatEnabledFor(config.whatsapp_account_id)
+        let nativeConversationId = null
         let chatwootConversationId = null
-        if (chatwootAccountId && chatwootInboxId && accessToken) {
-          chatwootConversationId = await createChatwootConversation(
-            chatwootAccountId, chatwootInboxId, accessToken, item.phone, message, callMeta,
-          )
-        } else {
-          await sendMessage(config.whatsapp_account_id, item.phone, message)
+
+        if (useNative) {
+          nativeConversationId = await sendNativeFollowup(supabase, {
+            userId,
+            unipileAccountId: config.whatsapp_account_id,
+            phone: item.phone,
+            message,
+            callMeta,
+          })
+        }
+
+        if (!nativeConversationId) {
+          // Fallback Chatwoot (legacy ou kill-switch off)
+          if (chatwootAccountId && chatwootInboxId && accessToken) {
+            chatwootConversationId = await createChatwootConversation(
+              chatwootAccountId, chatwootInboxId, accessToken, item.phone, message, callMeta,
+            )
+          } else {
+            await sendMessage(config.whatsapp_account_id, item.phone, message)
+          }
         }
 
         await supabase
@@ -397,10 +423,11 @@ async function processQueue(supabase) {
             processed_at: new Date().toISOString(),
             message_sent: message,
             chatwoot_conversation_id: chatwootConversationId,
+            conversation_id: nativeConversationId,
           })
           .eq('id', item.id)
 
-        console.log(`[Followup Cron] Sent attempt #${item.attempt_number || 1} to ${item.phone}`)
+        console.log(`[Followup Cron] Sent attempt #${item.attempt_number || 1} to ${item.phone} via ${nativeConversationId ? 'native' : 'chatwoot'}`)
       } catch (err) {
         console.error(`[Followup Cron] Send failed for ${item.phone}:`, err.message)
         await supabase
@@ -530,7 +557,7 @@ async function markRepliesAndConversions(supabase) {
   // converted-or-not, since there's no #3).
   const { data: sentItems } = await supabase
     .from('followup_queue')
-    .select('id, phone, processed_at, chatwoot_conversation_id, lead_id, replied_at, user_id')
+    .select('id, phone, processed_at, chatwoot_conversation_id, conversation_id, lead_id, replied_at, user_id')
     .eq('status', 'sent')
     .or('replied_at.is.null,lead_id.is.null')
     .gte('processed_at', new Date(Date.now() - 7 * 86400000).toISOString())
@@ -541,8 +568,21 @@ async function markRepliesAndConversions(supabase) {
   for (const item of sentItems) {
     const updates = {}
 
-    // Reply detection: any inbound message in the chatwoot conversation we created.
-    if (!item.replied_at && item.chatwoot_conversation_id) {
+    // Reply detection: any inbound contact message after processed_at.
+    // Native: check chat_messages on conversation_id.
+    // Legacy Chatwoot: check conversation_messages joined on sessions.chatwoot_conversation_id.
+    if (!item.replied_at && item.conversation_id) {
+      const { data: nativeReplies } = await supabase
+        .from('chat_messages')
+        .select('created_at')
+        .eq('conversation_id', item.conversation_id)
+        .eq('sender_type', 'contact')
+        .gte('created_at', item.processed_at)
+        .order('created_at', { ascending: true })
+        .limit(1)
+      if (nativeReplies?.length) updates.replied_at = nativeReplies[0].created_at
+    }
+    if (!updates.replied_at && !item.replied_at && item.chatwoot_conversation_id) {
       const { data: replyMsgs } = await supabase
         .from('conversation_messages')
         .select('created_at, sessions!inner(chatwoot_conversation_id)')
@@ -680,4 +720,106 @@ export async function queueContextualSecondAttempt(supabase, { userId, orgId, ph
     return null
   }
   return data.id
+}
+
+// ============================================================================
+// NATIVE FOLLOW-UP (chat_messages + relais Unipile via native-messaging)
+// ============================================================================
+
+/**
+ * Envoi de relance via le natif: trouve/cree le lead + chat_inbox + chat_conversation,
+ * puis INSERT chat_messages (sender_type='bot') qui declenche le relais Unipile.
+ *
+ * @returns {Promise<string|null>} chat_conversations.id ou null si rien ne s'est passe.
+ */
+async function sendNativeFollowup(supabase, { userId, unipileAccountId, phone, message, callMeta }) {
+  try {
+    // 1. Find the chat_inbox bound to this Unipile account
+    const { data: inbox } = await supabase
+      .from('chat_inboxes')
+      .select('id, user_id')
+      .eq('unipile_account_id', unipileAccountId)
+      .eq('channel_type', 'whatsapp_unipile')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle()
+    if (!inbox) {
+      console.log(`[Followup Cron] No chat_inbox for unipile_account=${unipileAccountId} — falling back to Chatwoot`)
+      return null
+    }
+
+    // 2. Find or create lead by phone (normalized)
+    const normalizedPhone = phone.startsWith('+') ? phone : `+${phone.replace(/^\+?/, '')}`
+    let { data: lead } = await supabase
+      .from('leads')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('phone', normalizedPhone)
+      .limit(1)
+      .maybeSingle()
+    if (!lead) {
+      const r = await supabase
+        .from('leads')
+        .insert({
+          user_id: userId,
+          name: normalizedPhone,
+          phone: normalizedPhone,
+          source: 'followup',
+          lead_channel: 'whatsapp',
+          status: 'new',
+        })
+        .select('id')
+        .single()
+      if (r.error) throw r.error
+      lead = r.data
+    }
+
+    // 3. Find or create open conversation for this lead+inbox
+    let { data: conv } = await supabase
+      .from('chat_conversations')
+      .select('id')
+      .eq('user_id', inbox.user_id)
+      .eq('inbox_id', inbox.id)
+      .eq('contact_id', lead.id)
+      .in('status', ['open', 'pending'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!conv) {
+      const r = await supabase
+        .from('chat_conversations')
+        .insert({
+          user_id: inbox.user_id,
+          inbox_id: inbox.id,
+          contact_id: lead.id,
+          channel: 'whatsapp_unipile',
+          status: 'open',
+          metadata: { followup: true, callMeta },
+        })
+        .select('id')
+        .single()
+      if (r.error) throw r.error
+      conv = r.data
+    }
+
+    // 4. Send the followup message — relay handled by native-messaging
+    const result = await sendNativeMessage({
+      supabase,
+      userId: inbox.user_id,
+      conversationId: conv.id,
+      senderType: 'bot',
+      content: message,
+      contentType: 'text',
+      metadata: { ...callMeta, source_kind: 'followup' },
+    })
+    if (result?.error) {
+      console.error('[Followup Cron] sendNativeMessage error:', result.error)
+      return null
+    }
+
+    return conv.id
+  } catch (err) {
+    console.error('[Followup Cron] sendNativeFollowup failed:', err.message)
+    return null
+  }
 }
