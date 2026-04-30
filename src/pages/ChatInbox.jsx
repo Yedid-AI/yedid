@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import {
   Send, Search, CheckCircle, Bot, BotOff, MessageSquare,
   Paperclip, Mic, Square, FileText, X,
@@ -134,12 +134,13 @@ export default function ChatInbox() {
         )}
       </main>
 
-      {/* Lead detail — slide-in from end */}
+      {/* Lead detail — slide-in from end (Sheet "right" is logical: end-0 → RTL-aware) */}
       <Sheet open={leadDetailOpen} onOpenChange={setLeadDetailOpen}>
         <SheetContent
-          side="end"
+          side="right"
           className="w-full sm:max-w-2xl p-0 flex flex-col gap-0"
         >
+          <SheetTitle className="sr-only">Lead detail</SheetTitle>
           {selected?.leads ? (
             <>
               <div className="flex items-center justify-between px-6 py-3 border-b shrink-0">

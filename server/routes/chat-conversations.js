@@ -4,7 +4,8 @@ import { checkRole } from '../middleware.js'
 const router = Router()
 
 // Lead = contact dans yedid. Selection des colonnes utiles pour la UI.
-const LEADS_SELECT = 'id, name, phone, email, city, company, type, status, branch, source, metadata'
+// Full lead fields — LeadDetail (UI) attend toutes les colonnes
+const LEADS_SELECT = '*'
 const AGENT_SELECT = 'id, email, role'
 
 // GET /api/chat/conversations
