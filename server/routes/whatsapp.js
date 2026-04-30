@@ -7,6 +7,17 @@ import { handleUnipileNativeInbound, extractSenderPhone } from '../engine/native
 
 const router = Router()
 
+// Kill-switch lecture par account_id Unipile.
+//  - NATIVE_CHAT_ENABLED=false (default) → toujours false (Chatwoot uniquement)
+//  - NATIVE_CHAT_ENABLED=true → true si pas de whitelist OU si l'account est dedans
+function isNativeChatEnabledFor(unipileAccountId) {
+  const enabled = String(process.env.NATIVE_CHAT_ENABLED || '').toLowerCase() === 'true'
+  if (!enabled) return false
+  const whitelist = (process.env.NATIVE_CHAT_INBOXES || '').split(',').map(s => s.trim()).filter(Boolean)
+  if (whitelist.length === 0) return true
+  return whitelist.includes(unipileAccountId)
+}
+
 // ─── POST /api/whatsapp/connect ─── Generate hosted auth link for WhatsApp QR
 router.post('/whatsapp/connect', checkAuth, checkRole('admin'), async (req, res) => {
   try {
@@ -432,33 +443,40 @@ router.post('/webhook/unipile/message', async (req, res) => {
     const supabase = req.supabaseAdmin || req.supabase
 
     // ─── NATIVE CHAT BRANCH ───────────────────────────────────────
-    // Si un chat_inbox existe pour ce compte Unipile, on route vers le flow
-    // natif (chat_messages + handleNativeMessage). Sinon on tombe sur Chatwoot.
-    const { data: nativeInbox } = await supabase
-      .from('chat_inboxes')
-      .select('id, user_id')
-      .eq('unipile_account_id', account_id)
-      .eq('channel_type', 'whatsapp_unipile')
-      .eq('is_active', true)
-      .limit(1)
-      .maybeSingle()
+    // Kill-switch:
+    //   NATIVE_CHAT_ENABLED=true|false       → master on/off (default: false)
+    //   NATIVE_CHAT_INBOXES=acc1,acc2[,...]  → optional whitelist of unipile_account_id
+    //                                          (vide = tous les chat_inboxes actifs)
+    //
+    // Quand actif et qu'un chat_inbox existe pour ce compte Unipile, on route
+    // vers le natif (chat_messages + handleNativeMessage). Sinon Chatwoot.
+    if (isNativeChatEnabledFor(account_id)) {
+      const { data: nativeInbox } = await supabase
+        .from('chat_inboxes')
+        .select('id, user_id')
+        .eq('unipile_account_id', account_id)
+        .eq('channel_type', 'whatsapp_unipile')
+        .eq('is_active', true)
+        .limit(1)
+        .maybeSingle()
 
-    if (nativeInbox) {
-      try {
-        await handleUnipileNativeInbound({
-          supabase,
-          inbox: nativeInbox,
-          senderPhone: extractSenderPhone(sender),
-          senderName: sender?.attendee_name || null,
-          content: typeof message === 'string' ? message : (message?.text || ''),
-          attachments: attachments || [],
-          quoted: quoted || null,
-          externalId: body?.message_id || body?.id || null,
-        })
-      } catch (err) {
-        console.error('[unipile/message/native] error:', err.message)
+      if (nativeInbox) {
+        try {
+          await handleUnipileNativeInbound({
+            supabase,
+            inbox: nativeInbox,
+            senderPhone: extractSenderPhone(sender),
+            senderName: sender?.attendee_name || null,
+            content: typeof message === 'string' ? message : (message?.text || ''),
+            attachments: attachments || [],
+            quoted: quoted || null,
+            externalId: body?.message_id || body?.id || null,
+          })
+        } catch (err) {
+          console.error('[unipile/message/native] error:', err.message)
+        }
+        return
       }
-      return
     }
     // ─── /NATIVE CHAT BRANCH ──────────────────────────────────────
 
