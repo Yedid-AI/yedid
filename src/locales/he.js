@@ -471,6 +471,7 @@ export default {
 
   // nav — calls
   'nav.calls': 'שיחות טלפון',
+  'nav.chat': 'הודעות',
 
   // calls (Maskyoo)
   'calls.title': 'שיחות טלפון',

@@ -31,6 +31,9 @@ import leadCaptureRoutes from './routes/lead-capture.js'
 import followupConfigRoutes from './routes/followup-config.js'
 import maskyooLinesRoutes from './routes/maskyoo-lines.js'
 import realtimeRoutes, { initRealtime } from './routes/realtime.js'
+import chatInboxesRoutes from './routes/chat-inboxes.js'
+import chatConversationsRoutes from './routes/chat-conversations.js'
+import chatMessagesRoutes from './routes/chat-messages.js'
 import { loadSettings } from './settings.js'
 import { loadServiceCache } from './normalize-service.js'
 import { startClosingCron } from './engine/closing-cron.js'
@@ -140,6 +143,9 @@ app.use('/api', checkAuth, serviceConfigRoutes)
 app.use('/api', checkAuth, callsRoutes)
 app.use('/api', checkAuth, followupConfigRoutes)
 app.use('/api', checkAuth, maskyooLinesRoutes)
+app.use('/api', checkAuth, chatInboxesRoutes)
+app.use('/api', checkAuth, chatConversationsRoutes)
+app.use('/api', checkAuth, chatMessagesRoutes)
 app.use('/api', realtimeRoutes)
 
 // Serve frontend in production

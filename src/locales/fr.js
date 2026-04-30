@@ -470,6 +470,7 @@ export default {
 
   // nav — calls
   'nav.calls': 'Appels',
+  'nav.chat': 'Messages',
 
   // calls (Maskyoo)
   'calls.title': 'Appels',

@@ -3,6 +3,11 @@ import { runPlaybookAgent } from './playbook-agent.js'
 import { runEscalationAgent } from './escalation-agent.js'
 import { getConversationHistory } from './memory.js'
 import { sendMessage, sendMessageWithAudio, assignConversation, sendPrivateNote } from './chatwoot-messaging.js'
+import {
+  sendNativeMessage,
+  assignNativeConversation,
+  sendNativePrivateNote,
+} from './native-messaging.js'
 import { generateTTS } from './voice.js'
 import { createOrFindSession, logMessage, closeSession } from './session-logger.js'
 import { decrypt } from '../crypto.js'
@@ -507,4 +512,279 @@ async function handleEscalation({ config, escalationRules, route, userMessage, c
   await closeSession(supabase, session.id, `ESCALATION: ${resume}`, false)
 
   console.log(`[Engine] Escalation handled for conversation ${conversationId}`)
+}
+
+// ============================================================
+// NATIVE CHAT — Entry point declenche apres INSERT dans chat_messages
+//   (sender_type='contact'). Remplace handleWebhook pour les conversations
+//   sur chat_inboxes.
+// ============================================================
+
+const nativeConfigCache = new Map()
+function getCachedNativeConfig(inboxId) {
+  const e = nativeConfigCache.get(inboxId)
+  if (!e || Date.now() - e.ts > CACHE_TTL_MS) return null
+  return e.data
+}
+function setCachedNativeConfig(inboxId, data) {
+  nativeConfigCache.set(inboxId, { data, ts: Date.now() })
+}
+export function clearNativeConfigCache() {
+  nativeConfigCache.clear()
+}
+
+/**
+ * Charge la config d'un chat_inbox (id UUID) -> agent_bot + playbooks + tools + escalations.
+ */
+async function loadNativeAgentConfig(supabase, inboxId) {
+  const cached = getCachedNativeConfig(inboxId)
+  if (cached) return cached
+
+  const { data: inbox } = await supabase
+    .from('chat_inboxes')
+    .select('id, user_id, agent_bot_id, ai_enabled, ai_schedule, ai_timezone')
+    .eq('id', inboxId)
+    .single()
+  if (!inbox || !inbox.agent_bot_id) return null
+
+  const { user_id: userId, agent_bot_id: agentBotId } = inbox
+
+  const [botsRes, configsRes, playbookRes, escalationRes, toolsRes] = await Promise.all([
+    supabase.from('agent_bots').select('enterprise').eq('id', agentBotId).limit(1),
+    supabase.from('agent_config').select('*').eq('agent_bot_id', agentBotId).limit(1),
+    supabase.from('agent_bot_playbooks')
+      .select('playbook_id, playbooks(id, title, content, audience, rules, is_active)')
+      .eq('agent_bot_id', agentBotId),
+    supabase.from('agent_bot_escalation_rules')
+      .select('escalation_rule_id, escalation_rules(*)')
+      .eq('agent_bot_id', agentBotId),
+    supabase.from('tools')
+      .select('id, name, description, method, url, query_parameters, headers, body_schema, type, handler, emoji')
+      .eq('agent_bot_id', agentBotId),
+  ])
+
+  const enterprise = botsRes.data?.[0]?.enterprise || null
+  let enterpriseUserId = null
+  if (enterprise) {
+    const { data: ent } = await supabase.from('users').select('id').eq('enterprise', enterprise).limit(1)
+    enterpriseUserId = ent?.[0]?.id || null
+  }
+
+  const result = {
+    userId,
+    inboxDbId: inbox.id,
+    aiEnabled: inbox.ai_enabled,
+    aiSchedule: inbox.ai_schedule,
+    aiTimezone: inbox.ai_timezone,
+    enterprise,
+    enterpriseUserId,
+    agentConfig: configsRes.data?.[0] || null,
+    playbooks: (playbookRes.data || []).map(j => j.playbooks).filter(pb => pb && pb.is_active),
+    escalationRules: (escalationRes.data || []).map(j => j.escalation_rules).filter(er => er && er.is_active),
+    allTools: toolsRes.data || [],
+  }
+  setCachedNativeConfig(inboxId, result)
+  return result
+}
+
+/**
+ * Construit l'historique LLM-friendly depuis chat_messages.
+ */
+async function getNativeHistory(supabase, conversationId, limit = 10) {
+  const { data } = await supabase
+    .from('chat_messages')
+    .select('sender_type, content, created_at')
+    .eq('conversation_id', conversationId)
+    .eq('is_private', false)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  return (data || []).reverse().map(m => ({
+    role: m.sender_type === 'contact' ? 'user' : 'assistant',
+    content: m.content || '',
+  }))
+}
+
+/**
+ * Entry point pour les messages natifs entrants (sender_type='contact').
+ * @param {object} supabase - service-role client
+ * @param {string} conversationId - chat_conversations.id (UUID)
+ * @param {string} messageId - chat_messages.id (UUID) qui vient d'arriver
+ */
+export async function handleNativeMessage(supabase, conversationId, messageId) {
+  if (alreadyProcessed(messageId)) return
+  if (tooManyRecentReplies(conversationId)) {
+    console.log(`[Engine/Native] Loop guard tripped for ${conversationId}`)
+    return
+  }
+
+  // Load message + conversation + lead
+  const { data: msg } = await supabase
+    .from('chat_messages')
+    .select('id, conversation_id, sender_type, content, content_type, is_private')
+    .eq('id', messageId)
+    .single()
+  if (!msg || msg.sender_type !== 'contact' || msg.is_private) return
+
+  let userMessage = (msg.content || '').trim()
+  if (!userMessage) return
+
+  // Detection vocale (le webhook Unipile a prefixe '🎤 ' apres transcription Whisper)
+  let isVoiceMessage = false
+  if (userMessage.startsWith('🎤 ')) {
+    isVoiceMessage = true
+    userMessage = userMessage.slice(3)
+  }
+
+  const { data: conv } = await supabase
+    .from('chat_conversations')
+    .select('id, user_id, inbox_id, contact_id, ai_disabled, status')
+    .eq('id', conversationId)
+    .single()
+  if (!conv || !conv.inbox_id) return
+
+  if (conv.ai_disabled) {
+    console.log(`[Engine/Native] AI disabled for conversation ${conversationId}`)
+    return
+  }
+
+  // Filter voice call events (same as Chatwoot path)
+  const VOICE_CALL_MESSAGES = ['Incoming Voice call', 'Missed voice call', 'Voice call ended']
+  if (VOICE_CALL_MESSAGES.some(m => userMessage.startsWith(m))) {
+    console.log(`[Engine/Native] Skipping voice call event`)
+    return
+  }
+
+  const config = await loadNativeAgentConfig(supabase, conv.inbox_id)
+  if (!config || !config.agentConfig) {
+    console.log(`[Engine/Native] No agent config for inbox ${conv.inbox_id}`)
+    return
+  }
+  if (!isAiAvailable(config)) {
+    console.log(`[Engine/Native] AI unavailable for inbox ${conv.inbox_id}`)
+    return
+  }
+
+  // Load lead context
+  const { data: lead } = await supabase
+    .from('leads')
+    .select('name, phone, email, city, branch')
+    .eq('id', conv.contact_id)
+    .single()
+  const contactContext = {
+    phone: lead?.phone || null,
+    name: lead?.name || null,
+    email: lead?.email || null,
+    city: lead?.city || null,
+    branch: lead?.branch || null,
+  }
+
+  const conversationHistory = await getNativeHistory(supabase, conversationId, 10)
+
+  try {
+    const route = await routeMessage({
+      agentConfig: config.agentConfig,
+      playbooks: config.playbooks,
+      escalationRules: config.escalationRules,
+      userMessage,
+      conversationHistory,
+      lastPlaybookId: null,
+    })
+    console.log(`[Engine/Native] Route: ${route.type} → ${route.id}`)
+
+    if (route.type === 'scenario') {
+      await handleNativeScenario({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext, isVoiceMessage })
+    } else {
+      await handleNativeEscalation({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext })
+    }
+  } catch (err) {
+    console.error(`[Engine/Native] Fatal error for conversation ${conversationId}:`, err.message)
+  }
+}
+
+async function handleNativeScenario({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext, isVoiceMessage = false }) {
+  const { userId, agentConfig, allTools, enterpriseUserId, playbooks } = config
+  const playbook = playbooks.find(pb => String(pb.id) === route.id)
+  if (!playbook) return
+
+  const result = await runPlaybookAgent({
+    agentConfig,
+    playbook,
+    agentTools: allTools || [],
+    userMessage,
+    conversationHistory,
+    supabase,
+    userId,
+    enterpriseUserId,
+    contactContext,
+    sessionId: null, // pas de session billing-tracking dans le natif (TODO)
+  })
+
+  if (!result || !result.content) return
+
+  const messageParts = result.content.split(/\n?---\n?/).map(p => p.trim()).filter(Boolean)
+  for (let i = 0; i < messageParts.length; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, 800 + Math.random() * 700))
+    await sendNativeMessage({
+      supabase,
+      userId,
+      conversationId,
+      senderType: 'bot',
+      content: messageParts[i],
+      // Si l'utilisateur a parle (voice in), on repond en voice (TTS via relay)
+      metadata: {
+        ...result.metadata,
+        playbook_id: playbook.id,
+        ...(isVoiceMessage ? { tts_voice: true, voice_response: true } : {}),
+      },
+    })
+  }
+}
+
+async function handleNativeEscalation({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext }) {
+  const { userId, agentConfig, escalationRules } = config
+  const rule = escalationRules.find(er => String(er.id) === route.id)
+  if (!rule) return
+
+  const { reponse, resume, token_usage } = await runEscalationAgent({
+    agentConfig,
+    rule,
+    userMessage,
+    conversationHistory,
+  })
+
+  await sendNativeMessage({
+    supabase,
+    userId,
+    conversationId,
+    senderType: 'bot',
+    content: reponse,
+    metadata: { escalation_id: rule.id, token_usage },
+  })
+
+  // Assign conversation to human agent (yedid: rule.assign_to_agent = users.id)
+  if (rule.assign_to_agent) {
+    try {
+      await assignNativeConversation(supabase, conversationId, rule.assign_to_agent)
+    } catch (err) {
+      console.error('[Engine/Native] assign error:', err.message)
+    }
+  }
+
+  // Private note with summary (visible to agents only)
+  await sendNativeMessage({
+    supabase,
+    userId,
+    conversationId,
+    senderType: 'bot',
+    content: resume,
+    isPrivate: true,
+    metadata: { escalation_id: rule.id },
+  })
+
+  await supabase
+    .from('chat_conversations')
+    .update({ status: 'pending', updated_at: new Date().toISOString() })
+    .eq('id', conversationId)
+
+  console.log(`[Engine/Native] Escalation handled for conversation ${conversationId}`)
 }

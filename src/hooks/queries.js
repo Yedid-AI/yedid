@@ -1136,3 +1136,153 @@ export function useFollowupStats() {
     refetchInterval: 60_000,
   })
 }
+
+// ─── Native chat ─────────────────────────────────────────
+
+export function useChatInboxes() {
+  return useQuery({
+    queryKey: queryKeys.chatInboxes,
+    queryFn: () => api.get('/chat/inboxes').then(r => r.inboxes),
+  })
+}
+
+export function useChatInbox(id) {
+  return useQuery({
+    queryKey: queryKeys.chatInbox(id),
+    queryFn: () => api.get(`/chat/inboxes/${id}`).then(r => r.inbox),
+    enabled: !!id,
+  })
+}
+
+export function useCreateChatInbox() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/chat/inboxes', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.chatInboxes }),
+  })
+}
+
+export function useUpdateChatInbox(id) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.put(`/chat/inboxes/${id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.chatInboxes })
+      qc.invalidateQueries({ queryKey: queryKeys.chatInbox(id) })
+    },
+  })
+}
+
+export function useDeleteChatInbox() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/chat/inboxes/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.chatInboxes }),
+  })
+}
+
+export function useChatConversations(filters = {}) {
+  const qs = new URLSearchParams()
+  for (const [k, v] of Object.entries(filters)) {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, v)
+  }
+  const url = `/chat/conversations${qs.toString() ? `?${qs}` : ''}`
+  return useQuery({
+    queryKey: queryKeys.chatConversations(filters),
+    queryFn: () => api.get(url).then(r => r.conversations),
+  })
+}
+
+export function useChatConversation(id) {
+  return useQuery({
+    queryKey: queryKeys.chatConversation(id),
+    queryFn: () => api.get(`/chat/conversations/${id}`).then(r => r.conversation),
+    enabled: !!id,
+  })
+}
+
+export function useChatMessages(conversationId) {
+  return useQuery({
+    queryKey: queryKeys.chatMessages(conversationId),
+    queryFn: () => api.get(`/chat/conversations/${conversationId}/messages`).then(r => r.messages),
+    enabled: !!conversationId,
+  })
+}
+
+export function useSendChatMessage(conversationId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post(`/chat/conversations/${conversationId}/messages`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.chatMessages(conversationId) })
+      qc.invalidateQueries({ queryKey: ['chat-conversations'] })
+    },
+  })
+}
+
+export function useSendChatNote(conversationId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post(`/chat/conversations/${conversationId}/notes`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.chatMessages(conversationId) }),
+  })
+}
+
+export function useSendChatAttachment(conversationId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ file, content }) => {
+      const fd = new FormData()
+      fd.append('file', file)
+      if (content) fd.append('content', content)
+      return api.upload(`/chat/conversations/${conversationId}/attachments`, fd)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.chatMessages(conversationId) })
+      qc.invalidateQueries({ queryKey: ['chat-conversations'] })
+    },
+  })
+}
+
+export function useResolveChatConversation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.put(`/chat/conversations/${id}/resolve`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chat-conversations'] }),
+  })
+}
+
+export function useAssignChatConversation() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, agent_id }) => api.put(`/chat/conversations/${id}/assign`, { agent_id }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chat-conversations'] }),
+  })
+}
+
+export function useToggleChatAi() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.put(`/chat/conversations/${id}/toggle-ai`, {}),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chat-conversations'] }),
+  })
+}
+
+export function useMarkChatRead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.put(`/chat/conversations/${id}/read`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chat-conversations'] })
+      qc.invalidateQueries({ queryKey: queryKeys.chatUnread })
+    },
+  })
+}
+
+export function useChatUnreadCount() {
+  return useQuery({
+    queryKey: queryKeys.chatUnread,
+    queryFn: () => api.get('/chat/unread-count').then(r => r.count),
+    refetchInterval: 30_000,
+  })
+}

@@ -1,0 +1,279 @@
+/**
+ * Pont Unipile <-> chat natif.
+ *
+ * Inbound : un message WhatsApp arrive via le webhook Unipile
+ *   - cree/trouve le lead (par telephone)
+ *   - cree/trouve la conversation (statut 'open' ou 'pending' pour cet inbox)
+ *   - download des attachments dans le bucket Supabase 'chat-attachments'
+ *   - transcription audio (Whisper) si message vocal sans texte
+ *   - INSERT chat_messages (sender_type='contact')
+ *   - declenche handleNativeMessage pour lancer l'AI
+ *
+ * Outbound : le relais vers Unipile est dans native-messaging.js (relayToChannel).
+ */
+
+import { downloadAttachment, sendMessage as unipileSendMessage, sendMessageWithAttachment } from '../unipile.js'
+import { transcribeAudio } from './voice.js'
+import { handleNativeMessage } from './index.js'
+
+const ATTACHMENT_BUCKET = 'chat-attachments'
+
+export function extractSenderPhone(sender) {
+  return sender?.attendee_specifics?.phone_number
+    || sender?.attendee_public_identifier?.split('@')[0]
+    || ''
+}
+
+function isAudioAttachment(att) {
+  const ct = (att?.content_type || att?.type || '').toLowerCase()
+  const fn = (att?.file_name || att?.name || '').toLowerCase()
+  return ct.startsWith('audio/')
+    || fn.endsWith('.ogg') || fn.endsWith('.opus')
+    || fn.endsWith('.mp3') || fn.endsWith('.m4a')
+    || fn.endsWith('.wav')
+}
+
+function classifyAttachment(att) {
+  const ct = (att?.content_type || att?.type || '').toLowerCase()
+  const fn = (att?.file_name || att?.name || '').toLowerCase()
+  if (ct.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(fn)) return 'image'
+  if (ct.startsWith('video/') || /\.(mp4|mov|webm)$/i.test(fn)) return 'video'
+  if (isAudioAttachment(att)) return 'audio'
+  return 'file'
+}
+
+/**
+ * Trouve un lead par telephone pour un user, ou en cree un nouveau.
+ */
+async function findOrCreateLead(supabase, userId, phone, name) {
+  const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
+
+  // Try with the +-prefixed form, then without
+  let { data: lead } = await supabase
+    .from('leads')
+    .select('id, name, phone, email')
+    .eq('user_id', userId)
+    .eq('phone', normalizedPhone)
+    .limit(1)
+    .maybeSingle()
+
+  if (!lead) {
+    const noPlus = phone.replace(/^\+/, '')
+    const r = await supabase
+      .from('leads')
+      .select('id, name, phone, email')
+      .eq('user_id', userId)
+      .eq('phone', noPlus)
+      .limit(1)
+      .maybeSingle()
+    lead = r.data
+  }
+
+  if (lead) return lead
+
+  // Create lead — minimal fields
+  const { data: created, error } = await supabase
+    .from('leads')
+    .insert({
+      user_id: userId,
+      name: name || normalizedPhone,
+      phone: normalizedPhone,
+      source: 'whatsapp_native',
+      lead_channel: 'whatsapp',
+      status: 'new',
+    })
+    .select('id, name, phone, email')
+    .single()
+  if (error) throw error
+  return created
+}
+
+/**
+ * Trouve une conversation native ouverte/pending pour un lead+inbox,
+ * ou en cree une nouvelle.
+ */
+async function findOrCreateConversation(supabase, userId, inboxId, leadId) {
+  const { data: existing } = await supabase
+    .from('chat_conversations')
+    .select('id, status')
+    .eq('user_id', userId)
+    .eq('inbox_id', inboxId)
+    .eq('contact_id', leadId)
+    .in('status', ['open', 'pending'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) return existing
+
+  const { data: created, error } = await supabase
+    .from('chat_conversations')
+    .insert({
+      user_id: userId,
+      inbox_id: inboxId,
+      contact_id: leadId,
+      channel: 'whatsapp_unipile',
+      status: 'open',
+    })
+    .select('id, status')
+    .single()
+  if (error) throw error
+  return created
+}
+
+/**
+ * Telecharge un attachment depuis Unipile et l'upload dans le bucket
+ * chat-attachments. Retourne l'objet a stocker dans chat_messages.attachments.
+ */
+async function persistAttachment(supabase, userId, conversationId, att) {
+  const url = att.url || att.data_url
+  if (!url) return null
+
+  const { buffer, contentType } = await downloadAttachment(url)
+  const fileName = att.file_name || att.name || 'attachment'
+  const ext = fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : 'bin'
+  const safeName = fileName.replace(/[^\w.-]+/g, '_').slice(0, 80)
+  const storagePath = `chat/${userId}/${conversationId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${safeName}`
+
+  const { error: upErr } = await supabase.storage
+    .from(ATTACHMENT_BUCKET)
+    .upload(storagePath, buffer, { contentType, upsert: false })
+  if (upErr) {
+    console.error('[native-unipile] storage upload error:', upErr.message)
+    return null
+  }
+
+  const { data: pub } = supabase.storage
+    .from(ATTACHMENT_BUCKET)
+    .getPublicUrl(storagePath)
+
+  return {
+    type: classifyAttachment(att),
+    url: pub.publicUrl,
+    storage_path: storagePath,
+    content_type: contentType,
+    file_name: fileName,
+    size: buffer.length,
+  }
+}
+
+/**
+ * Entry point: traite un message Unipile entrant pour un chat_inbox natif.
+ *
+ * @param {object} args
+ * @param {object} args.supabase - service-role client
+ * @param {object} args.inbox    - { id, user_id }
+ * @param {string} args.senderPhone
+ * @param {string|null} args.senderName
+ * @param {string} args.content
+ * @param {Array}  [args.attachments=[]]
+ * @param {object} [args.quoted]
+ * @param {string} [args.externalId] - id Unipile du message (idempotence)
+ */
+export async function handleUnipileNativeInbound({
+  supabase,
+  inbox,
+  senderPhone,
+  senderName,
+  content,
+  attachments = [],
+  quoted = null,
+  externalId = null,
+}) {
+  if (!senderPhone) {
+    console.log('[native-unipile] No sender phone, skipping')
+    return
+  }
+
+  // 0. Idempotence: si on a deja inserre ce message externe, skip
+  if (externalId) {
+    const { data: dup } = await supabase
+      .from('chat_messages')
+      .select('id')
+      .eq('external_id', externalId)
+      .limit(1)
+      .maybeSingle()
+    if (dup) {
+      console.log(`[native-unipile] Duplicate external_id=${externalId}, skipping`)
+      return
+    }
+  }
+
+  // 1. Lead = contact
+  const lead = await findOrCreateLead(supabase, inbox.user_id, senderPhone, senderName)
+
+  // 2. Conversation
+  const conv = await findOrCreateConversation(supabase, inbox.user_id, inbox.id, lead.id)
+
+  // 3. Attachments (download + upload to Supabase Storage)
+  const persistedAttachments = []
+  let firstAudio = null
+  for (const att of attachments) {
+    if (!firstAudio && isAudioAttachment(att)) firstAudio = att
+    try {
+      const persisted = await persistAttachment(supabase, inbox.user_id, conv.id, att)
+      if (persisted) persistedAttachments.push(persisted)
+    } catch (err) {
+      console.error('[native-unipile] attachment persist failed:', err.message)
+    }
+  }
+
+  // 4. Transcription audio (Whisper) si vocal sans texte
+  let finalContent = content || ''
+  if (quoted?.message) {
+    finalContent = `> ${quoted.message}\n\n${finalContent}`.trim()
+  }
+  let transcribed = false
+  if (firstAudio && !finalContent) {
+    try {
+      const { transcription } = await transcribeAudio(firstAudio.url || firstAudio.data_url)
+      finalContent = `🎤 ${transcription}`
+      transcribed = true
+      console.log(`[native-unipile] Voice transcribed: "${transcription.slice(0, 100)}"`)
+    } catch (err) {
+      console.error('[native-unipile] Whisper failed:', err.message)
+      finalContent = '🎤 [message vocal]'
+    }
+  }
+
+  // 5. Determine content_type for the message row
+  let contentType = 'text'
+  if (persistedAttachments.length > 0) {
+    contentType = persistedAttachments[0].type === 'audio' ? 'audio'
+      : persistedAttachments[0].type === 'image' ? 'image'
+      : persistedAttachments[0].type === 'video' ? 'video'
+      : 'file'
+  }
+
+  // 6. INSERT chat_messages (sender_type='contact')
+  const { data: msg, error: msgErr } = await supabase
+    .from('chat_messages')
+    .insert({
+      conversation_id: conv.id,
+      user_id: inbox.user_id,
+      sender_type: 'contact',
+      contact_id: lead.id,
+      content_type: contentType,
+      content: finalContent,
+      attachments: persistedAttachments,
+      external_id: externalId,
+      delivery_status: 'delivered',
+      metadata: transcribed
+        ? { transcription_source: 'whisper-1', voice: true }
+        : {},
+    })
+    .select('id, conversation_id')
+    .single()
+
+  if (msgErr) {
+    console.error('[native-unipile] insert chat_messages error:', msgErr.message)
+    return
+  }
+
+  console.log(`[native-unipile] Inserted message ${msg.id} on conv ${conv.id}`)
+
+  // 7. Trigger AI (handleNativeMessage)
+  handleNativeMessage(supabase, conv.id, msg.id).catch(err => {
+    console.error('[native-unipile] handleNativeMessage error:', err.message)
+  })
+}

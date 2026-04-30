@@ -32,6 +32,7 @@ import EscalationLibrary from './pages/EscalationLibrary'
 import Leads from './pages/Leads'
 import Branches from './pages/Branches'
 import Calls from './pages/Calls'
+import ChatInbox from './pages/ChatInbox'
 import PublicLeadCapture from './pages/PublicLeadCapture'
 
 function AppHeader() {
@@ -196,6 +197,11 @@ export default function App() {
           <Route path="/calls" element={
             <ProtectedRoute roles={['admin']}>
               <AppLayout><Calls /></AppLayout>
+            </ProtectedRoute>
+          } />
+          <Route path="/chat" element={
+            <ProtectedRoute roles={['admin', 'agent']}>
+              <AppLayout><ChatInbox /></AppLayout>
             </ProtectedRoute>
           } />
           <Route path="/lead/:token" element={<PublicLeadCapture />} />

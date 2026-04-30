@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Brain, Sparkles, Radio, Route, Plug, ArrowRightLeft,
   Settings, LogOut, KeyRound, UserPlus, Building2, Phone,
   Moon, Sun, Globe, CalendarClock, ChevronsUpDown, Network, ChevronRight,
+  MessageSquare,
 } from 'lucide-react'
 import { useTheme } from '../../lib/theme'
 import {
@@ -45,6 +46,7 @@ const navGroups = [
     defaultOpen: true,
     items: [
       { path: '/leads', labelKey: 'nav.leadsPage', icon: UserPlus, roles: ['admin', 'marketeur', 'branch'] },
+      { path: '/chat', labelKey: 'nav.chat', icon: MessageSquare, roles: ['admin', 'agent'] },
       { path: '/calls', labelKey: 'nav.calls', icon: Phone, roles: ['admin'] },
       { path: '/branches', labelKey: 'nav.branches', icon: Route, roles: ['admin', 'branch'] },
     ],

@@ -3,6 +3,7 @@ import { checkAuth, checkRole } from '../middleware.js'
 import { getSetting } from '../settings.js'
 import { createHostedAuthLink, getAccount, sendMessage, sendMessageWithAttachment, downloadAttachment, registerWebhook } from '../unipile.js'
 import { createInbox, addInboxMember, attachBotToInbox, accountApi } from '../chatwoot.js'
+import { handleUnipileNativeInbound, extractSenderPhone } from '../engine/native-unipile.js'
 
 const router = Router()
 
@@ -430,7 +431,38 @@ router.post('/webhook/unipile/message', async (req, res) => {
 
     const supabase = req.supabaseAdmin || req.supabase
 
-    // 1. Look up inbox by Unipile account_id
+    // ─── NATIVE CHAT BRANCH ───────────────────────────────────────
+    // Si un chat_inbox existe pour ce compte Unipile, on route vers le flow
+    // natif (chat_messages + handleNativeMessage). Sinon on tombe sur Chatwoot.
+    const { data: nativeInbox } = await supabase
+      .from('chat_inboxes')
+      .select('id, user_id')
+      .eq('unipile_account_id', account_id)
+      .eq('channel_type', 'whatsapp_unipile')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle()
+
+    if (nativeInbox) {
+      try {
+        await handleUnipileNativeInbound({
+          supabase,
+          inbox: nativeInbox,
+          senderPhone: extractSenderPhone(sender),
+          senderName: sender?.attendee_name || null,
+          content: typeof message === 'string' ? message : (message?.text || ''),
+          attachments: attachments || [],
+          quoted: quoted || null,
+          externalId: body?.message_id || body?.id || null,
+        })
+      } catch (err) {
+        console.error('[unipile/message/native] error:', err.message)
+      }
+      return
+    }
+    // ─── /NATIVE CHAT BRANCH ──────────────────────────────────────
+
+    // 1. Look up inbox by Unipile account_id (Chatwoot path)
     const { data: inboxData } = await supabase
       .from('inboxes')
       .select('id, user_id, chatwoot_account_id, inbox_id')
