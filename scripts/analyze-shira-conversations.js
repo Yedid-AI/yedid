@@ -22,8 +22,8 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 }
 
 const AGENT_BOT_ID = 1
-const DAYS = 90
-const OUT = '/tmp/shira-analysis'
+const DAYS = Number(process.env.DAYS) || 90
+const OUT = process.env.OUT_DIR || '/tmp/shira-analysis'
 fs.mkdirSync(`${OUT}/samples`, { recursive: true })
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })

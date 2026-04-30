@@ -308,7 +308,7 @@ async function loadAgentConfig(supabase, inboxId) {
 
   // Parallel fetch: bot token, config, playbooks, escalation rules, chatwoot user, all tools
   const [botsRes, configsRes, playbookRes, escalationRes, cwRes, toolsRes] = await Promise.all([
-    supabase.from('agent_bots').select('bot_token').eq('id', agentBotId).limit(1),
+    supabase.from('agent_bots').select('bot_token, enterprise').eq('id', agentBotId).limit(1),
     supabase.from('agent_config').select('*').eq('agent_bot_id', agentBotId).limit(1),
     supabase.from('agent_bot_playbooks')
       .select('playbook_id, playbooks(id, title, content, audience, rules, is_active)')
@@ -328,6 +328,17 @@ async function loadAgentConfig(supabase, inboxId) {
   // Decrypt bot token (supports legacy plaintext)
   const rawToken = botsRes.data?.[0]?.bot_token || null
   const botToken = rawToken ? decrypt(rawToken) : null
+  const enterprise = botsRes.data?.[0]?.enterprise || null
+
+  // Resolve enterprise → tenant user_id once. Branches and city_branch_index
+  // are stored under the enterprise's user_id (babait=2, aviezer=3) — using the
+  // inbox owner (often admin=1) returns an empty list.
+  let enterpriseUserId = null
+  if (enterprise) {
+    const { data: entUsers } = await supabase
+      .from('users').select('id').eq('enterprise', enterprise).limit(1)
+    enterpriseUserId = entUsers?.[0]?.id || null
+  }
 
   const agentConfig = configsRes.data?.[0] || null
 
@@ -350,6 +361,8 @@ async function loadAgentConfig(supabase, inboxId) {
     aiSchedule: inboxes[0].ai_schedule,
     aiTimezone: inboxes[0].ai_timezone,
     botToken,
+    enterprise,
+    enterpriseUserId,
     agentConfig,
     playbooks: formattedPlaybooks,
     allTools,
@@ -365,7 +378,7 @@ async function loadAgentConfig(supabase, inboxId) {
 // --- Scenario path ---
 
 async function handleScenario({ config, playbooks, route, userMessage, conversationHistory, supabase, accountId, conversationId, session, isVoiceMessage, contactContext }) {
-  const { userId, botToken, agentConfig, allTools } = config
+  const { userId, botToken, agentConfig, allTools, enterpriseUserId } = config
 
   // Find active playbook
   const playbook = playbooks.find(pb => String(pb.id) === route.id)
@@ -383,6 +396,7 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
     conversationHistory,
     supabase,
     userId,
+    enterpriseUserId,
     contactContext,
     sessionId: session.id,
   })
