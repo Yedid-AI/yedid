@@ -50,6 +50,10 @@ router.get('/leads', checkRole('admin', 'marketeur', 'branch'), async (req, res)
       if (affiliatedFilterIds) q = q.in('id', affiliatedFilterIds)
       if (req.query.date_from) q = q.gte('created_at', req.query.date_from)
       if (req.query.date_to) q = q.lte('created_at', req.query.date_to)
+      // Exclure les "leads virtuels" representant des branches (crees par
+      // dispatch native pour tracker les conversations dans /chat).
+      // metadata->>'is_branch' = 'true' signale ces lignes.
+      q = q.or('metadata->>is_branch.is.null,metadata->>is_branch.neq.true')
       return q
     }
 
@@ -136,6 +140,150 @@ router.get('/leads', checkRole('admin', 'marketeur', 'branch'), async (req, res)
     res.json({ leads: leads || [], stats, total: totalFiltered ?? 0, page, page_size: pageSize })
   } catch (err) {
     console.error('[leads]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
+// GET /api/leads/stats — aggregated KPIs for the admin dashboard
+// Scoped via getLeadScope so each role only counts what it can see.
+// Returned shape is the union of every chart the dashboard renders, so the
+// frontend only needs one query for the whole "leads" panel.
+router.get('/leads/stats', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
+  try {
+    const sb = req.supabaseAdmin || req.supabase
+    const empty = {
+      total: 0, status: {}, by_company: {}, by_type: {}, by_source: [], by_branch: [],
+      series: [], top_marketers: [], dispatch: { branches: 0, dispatch_enabled: 0, missing_whatsapp: 0, queued: 0 },
+      avg_time_to_handle_seconds: null,
+    }
+
+    const scope = await getLeadScope(req)
+    if (scope.scope === 'none') return res.json(empty)
+    if ((scope.scope === 'branches' || scope.scope === 'affiliations') && scope.value.length === 0) {
+      return res.json(empty)
+    }
+
+    let q = sb.from('leads').select('id, status, company, type, source, branch, branch_id, created_at, dispatched_at, updated_at')
+    q = applyLeadScope(q, scope)
+    if (req.query.date_from) q = q.gte('created_at', req.query.date_from)
+    if (req.query.date_to) q = q.lte('created_at', req.query.date_to)
+    // Exclure les leads virtuels representant des branches (cf. /leads list).
+    q = q.or('metadata->>is_branch.is.null,metadata->>is_branch.neq.true')
+    // Cap to keep the payload bounded; for huge orgs we'd move this to SQL aggregates,
+    // but at current volumes a single 5k-row scan is faster than 5 round-trips.
+    q = q.order('created_at', { ascending: false }).limit(5000)
+    const { data: rows, error } = await q
+    if (error) throw error
+
+    const status = {}, by_company = {}, by_type = {}, by_source = {}, by_branch = {}
+    const dayBuckets = {}
+    let timeToHandleSum = 0, timeToHandleCount = 0
+    let queued = 0
+
+    for (const l of rows || []) {
+      status[l.status] = (status[l.status] || 0) + 1
+      if (l.status === 'queued_for_dispatch') queued++
+      if (l.company) by_company[l.company] = (by_company[l.company] || 0) + 1
+      if (l.type) by_type[l.type] = (by_type[l.type] || 0) + 1
+      const src = l.source || 'unknown'
+      by_source[src] = (by_source[src] || 0) + 1
+      const br = l.branch || '—'
+      if (!by_branch[br]) by_branch[br] = { count: 0, handled: 0 }
+      by_branch[br].count++
+      if (l.status === 'handled') by_branch[br].handled++
+
+      const day = (l.created_at || '').slice(0, 10)
+      if (day) {
+        if (!dayBuckets[day]) dayBuckets[day] = { date: day, total: 0, handled: 0, lost: 0 }
+        dayBuckets[day].total++
+        if (l.status === 'handled') dayBuckets[day].handled++
+        if (l.status === 'not_relevant' || l.status === 'no_answer') dayBuckets[day].lost++
+      }
+
+      if (l.status === 'handled' && l.created_at && l.updated_at) {
+        const diff = (new Date(l.updated_at) - new Date(l.created_at)) / 1000
+        if (diff > 0) { timeToHandleSum += diff; timeToHandleCount++ }
+      }
+    }
+
+    const series = Object.values(dayBuckets).sort((a, b) => a.date.localeCompare(b.date))
+    const sourceArr = Object.entries(by_source).map(([source, count]) => ({ source, count }))
+      .sort((a, b) => b.count - a.count).slice(0, 10)
+    const branchArr = Object.entries(by_branch).map(([branch, v]) => ({ branch, count: v.count, handled: v.handled }))
+      .sort((a, b) => b.count - a.count).slice(0, 12)
+
+    // Top marketers — only when caller can see across users
+    let top_marketers = []
+    if ((scope.scope === 'all' || scope.scope === 'company') && (rows?.length || 0) > 0) {
+      const leadIds = rows.map(r => r.id)
+      const { data: affs } = await sb.from('lead_affiliations')
+        .select('user_id, lead_id, source')
+        .in('lead_id', leadIds)
+      const byUser = {}
+      for (const a of affs || []) {
+        if (!byUser[a.user_id]) byUser[a.user_id] = { user_id: a.user_id, count: 0, capture: 0, handled: 0 }
+        byUser[a.user_id].count++
+        if (a.source === 'capture_link') byUser[a.user_id].capture++
+      }
+      // Cross-ref handled status
+      const leadStatusById = Object.fromEntries(rows.map(r => [r.id, r.status]))
+      for (const a of affs || []) {
+        if (leadStatusById[a.lead_id] === 'handled') byUser[a.user_id].handled++
+      }
+      const userIds = Object.keys(byUser).map(Number)
+      if (userIds.length > 0) {
+        const { data: users } = await sb.from('users').select('id, first_name, last_name, email, role').in('id', userIds)
+        const idToUser = Object.fromEntries((users || []).map(u => [u.id, u]))
+        top_marketers = Object.values(byUser)
+          .map(u => {
+            const info = idToUser[u.user_id]
+            const name = info ? (info.first_name || info.email) : `#${u.user_id}`
+            return { ...u, name, role: info?.role || null }
+          })
+          .filter(u => u.role === 'marketeur' || u.role === 'admin' || u.role === 'super_admin')
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10)
+      }
+    }
+
+    // Branch / dispatch readiness — independent of date range, scoped by role
+    let dispatch_branches = 0, dispatch_enabled = 0, dispatch_missing_wa = 0
+    {
+      let bq = sb.from('branches').select('id, dispatch_enabled, whatsapp_phone, user_id')
+      if (req.user.role === 'branch') {
+        const { data: ub } = await sb.from('user_branches').select('branch_id').eq('user_id', req.user.user_id)
+        const ids = (ub || []).map(r => r.branch_id)
+        if (ids.length === 0) bq = bq.eq('id', -1)
+        else bq = bq.in('id', ids)
+      } else if (req.user.role === 'admin' && req.user.enterprise) {
+        const ownerId = await resolveCompanyOwnerId(sb, req.user.enterprise)
+        if (ownerId) bq = bq.eq('user_id', ownerId)
+      }
+      const { data: brs } = await bq
+      for (const b of brs || []) {
+        dispatch_branches++
+        if (b.dispatch_enabled) dispatch_enabled++
+        if (b.dispatch_enabled && !b.whatsapp_phone) dispatch_missing_wa++
+      }
+    }
+
+    res.json({
+      total: rows?.length || 0,
+      status, by_company, by_type,
+      by_source: sourceArr,
+      by_branch: branchArr,
+      series,
+      top_marketers,
+      dispatch: {
+        branches: dispatch_branches,
+        dispatch_enabled,
+        missing_whatsapp: dispatch_missing_wa,
+        queued,
+      },
+      avg_time_to_handle_seconds: timeToHandleCount > 0 ? Math.round(timeToHandleSum / timeToHandleCount) : null,
+    })
+  } catch (err) {
+    console.error('[leads/stats]', err.message)
     res.status(500).json({ error: 'Erreur interne' })
   }
 })
