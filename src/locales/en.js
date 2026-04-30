@@ -376,7 +376,7 @@ export default {
   // nav — leads
   'nav.leads': 'Leads',
   'nav.leadsPage': 'Leads',
-  'nav.branches': 'Branches',
+  'nav.branches': 'Routing',
 
   // leads
   'leads.title': 'Leads',
@@ -549,8 +549,22 @@ export default {
   'lines.editLine': 'Edit line',
 
   // branches
-  'branches.title': 'Branches',
-  'branches.subtitle': 'Manage branches and city routing',
+  'branches.title': 'Routing',
+  'branches.subtitle': 'Lead routing: services, cities and dispatch',
+  'branches.services': 'Services',
+  'branches.services.empty': 'No service configured',
+  'branches.services.add': 'New service',
+  'branches.services.name': 'Name',
+  'branches.services.aliases': 'Aliases',
+  'branches.services.aliasesHelp': 'Raw values (landings, forms) that will be mapped to this service. One per line.',
+  'branches.services.company': 'Company',
+  'branches.services.fixedBranch': 'Fixed branch',
+  'branches.services.fixedBranchHelp': 'If set, bypasses the city -> branch index.',
+  'branches.services.order': 'Order',
+  'branches.services.active': 'Active',
+  'branches.services.deleteTitle': 'Delete this service?',
+  'branches.services.editTitle': 'Edit service',
+  'branches.services.createTitle': 'New service',
   'branches.dialogTitle': 'New branch',
   'branches.deleteTitle': 'Delete this branch?',
   'branches.empty': 'No branches',

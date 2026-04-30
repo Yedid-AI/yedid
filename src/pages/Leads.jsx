@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useLeads, useLead, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls, useLeadActivities, useAddLeadComment, useLeadDocuments, useUploadLeadDocument, useDeleteLeadDocument, useLeadAffiliations, useAddLeadAffiliation, useRemoveLeadAffiliation, useUsers, useCityIndex } from '../hooks/queries'
+import { useLeads, useLead, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls, useLeadActivities, useAddLeadComment, useLeadDocuments, useUploadLeadDocument, useDeleteLeadDocument, useLeadAffiliations, useAddLeadAffiliation, useRemoveLeadAffiliation, useUsers, useCityIndex, useServiceConfig } from '../hooks/queries'
 import { useSearchParams } from 'react-router-dom'
 import { RecordingPlayer } from '@/components/RecordingPlayer'
 import { useAuth } from '../lib/auth'
@@ -1151,11 +1151,6 @@ export default function Leads() {
 }
 
 // ─── Dropdown options ───────────────────────────────────
-const SERVICE_OPTIONS = [
-  'סיעוד וזכאות', 'עובד זר', 'מטפל/ת', 'יעוץ', 'שירות פרטי',
-  'השגחה בבית חולים', 'אחות פרטית', 'שירות אמבולנס', 'מחפש עבודה',
-]
-
 const SOURCE_OPTIONS = [
   'manual', 'website', 'phone', 'whatsapp', 'chatbot', 'referral', 'facebook', 'google', 'csv_import',
 ]
@@ -1274,6 +1269,11 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
   const isPatient = form.type === 'patient'
   const isCaregiver = form.type === 'caregiver'
   const isForeignCaregiver = form.type === 'foreign_caregiver'
+  const { data: services = [] } = useServiceConfig()
+  const serviceOptions = useMemo(
+    () => services.filter(s => s.is_active).map(s => s.name).filter(n => n !== 'מחפש עבודה'),
+    [services],
+  )
 
   return (
     <>
@@ -1341,7 +1341,13 @@ function LeadFormFields({ form, setForm, t, branches, cities, leadFields, showCo
           <div className="grid grid-cols-2 gap-x-4 gap-y-4">
             <div className="space-y-1.5">
               <Label className="text-[13px] text-muted-foreground">{t('leads.serviceRequested')}</Label>
-              <SelectWithOther value={form.service_requested} onChange={(v) => setForm({ ...form, service_requested: v })} options={SERVICE_OPTIONS.filter(o => o !== 'מחפש עבודה')} placeholder={t('leads.placeholderService')} t={t} />
+              <Select value={form.service_requested || '__empty__'} onValueChange={(v) => setForm({ ...form, service_requested: v === '__empty__' ? '' : v })}>
+                <SelectTrigger className="h-10 w-full bg-background/80 border-border/50"><SelectValue placeholder={t('leads.placeholderService')} /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__empty__">-</SelectItem>
+                  {serviceOptions.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label className="text-[13px] text-muted-foreground">{t('leads.branch')}</Label>

@@ -19,7 +19,6 @@ import { normalizePhone } from '../normalize-service.js'
 // after the branch name. If no match, we just say nothing — better silence than
 // a wrong topic.
 const TOPIC_BY_SOURCE_HINT = [
-  { match: /סיעוד|זכאות|גמלת/i, topic: 'בנוגע לסיעוד וזכאות' },
   { match: /עובד[ -]?זר|זרים/i,   topic: 'בנוגע להעסקת עובד זר' },
   { match: /פרטי|השלמה/i,         topic: 'בנוגע לשירות פרטי' },
   { match: /אשפוז|בית[ -]?חולים/i, topic: 'בנוגע להשגחה בבית חולים' },

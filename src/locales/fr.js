@@ -376,7 +376,7 @@ export default {
   // nav — leads
   'nav.leads': 'Leads',
   'nav.leadsPage': 'Leads',
-  'nav.branches': 'Branches',
+  'nav.branches': 'Acheminement',
 
   // leads
   'leads.title': 'Leads',
@@ -549,8 +549,22 @@ export default {
   'lines.editLine': 'Modifier la ligne',
 
   // branches
-  'branches.title': 'Branches',
-  'branches.subtitle': 'Gestion des branches et routage par ville',
+  'branches.title': 'Acheminement',
+  'branches.subtitle': 'Acheminement des leads : services, villes et dispatch',
+  'branches.services': 'Services',
+  'branches.services.empty': 'Aucun service configure',
+  'branches.services.add': 'Nouveau service',
+  'branches.services.name': 'Nom',
+  'branches.services.aliases': 'Alias',
+  'branches.services.aliasesHelp': 'Valeurs brutes (landings, formulaires) qui seront mappees vers ce service. Une par ligne.',
+  'branches.services.company': 'Societe',
+  'branches.services.fixedBranch': 'Branche fixe',
+  'branches.services.fixedBranchHelp': 'Si renseigne, court-circuite l\'index ville -> branche.',
+  'branches.services.order': 'Ordre',
+  'branches.services.active': 'Actif',
+  'branches.services.deleteTitle': 'Supprimer ce service ?',
+  'branches.services.editTitle': 'Modifier le service',
+  'branches.services.createTitle': 'Nouveau service',
   'branches.dialogTitle': 'Nouvelle branche',
   'branches.deleteTitle': 'Supprimer cette branche ?',
   'branches.empty': 'Aucune branche',

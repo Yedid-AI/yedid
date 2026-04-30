@@ -24,6 +24,7 @@ import sessionsRoutes from './routes/sessions.js'
 import leadsRoutes from './routes/leads.js'
 import branchesRoutes from './routes/branches.js'
 import dispatchConfigRoutes from './routes/dispatch-config.js'
+import serviceConfigRoutes from './routes/service-config.js'
 import callsRoutes from './routes/calls.js'
 import publicLeadsRoutes from './routes/public-leads.js'
 import leadCaptureRoutes from './routes/lead-capture.js'
@@ -31,6 +32,7 @@ import followupConfigRoutes from './routes/followup-config.js'
 import maskyooLinesRoutes from './routes/maskyoo-lines.js'
 import realtimeRoutes, { initRealtime } from './routes/realtime.js'
 import { loadSettings } from './settings.js'
+import { loadServiceCache } from './normalize-service.js'
 import { startClosingCron } from './engine/closing-cron.js'
 import { startCallsCron } from './engine/calls-cron.js'
 import { startFollowupCron } from './engine/followup-cron.js'
@@ -134,6 +136,7 @@ app.use('/api', checkAuth, sessionsRoutes)
 app.use('/api', checkAuth, leadsRoutes)
 app.use('/api', checkAuth, branchesRoutes)
 app.use('/api', checkAuth, dispatchConfigRoutes)
+app.use('/api', checkAuth, serviceConfigRoutes)
 app.use('/api', checkAuth, callsRoutes)
 app.use('/api', checkAuth, followupConfigRoutes)
 app.use('/api', checkAuth, maskyooLinesRoutes)
@@ -208,6 +211,7 @@ app.listen(PORT, async () => {
     console.log('Warning: Supabase not configured.')
   }
   await loadSettings(supabase)
+  await loadServiceCache(supabaseAdmin)
   await seedAdmin()
   initRealtime(supabaseAdmin)
   startClosingCron(supabaseAdmin)

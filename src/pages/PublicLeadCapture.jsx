@@ -164,15 +164,9 @@ export default function PublicLeadCapture() {
               <SelectTrigger className="h-10 w-full"><SelectValue placeholder="בחר שירות" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="__empty__">-</SelectItem>
-                <SelectItem value="סיעוד וזכאות">סיעוד וזכאות</SelectItem>
-                <SelectItem value="עובד זר">עובד זר</SelectItem>
-                <SelectItem value="מטפל/ת">מטפל/ת</SelectItem>
-                <SelectItem value="יעוץ">יעוץ</SelectItem>
-                <SelectItem value="שירות פרטי">שירות פרטי</SelectItem>
-                <SelectItem value="השגחה בבית חולים">השגחה בבית חולים</SelectItem>
-                <SelectItem value="אחות פרטית">אחות פרטית</SelectItem>
-                <SelectItem value="שירות אמבולנס">שירות אמבולנס</SelectItem>
-                <SelectItem value="מחפש עבודה">מחפש עבודה</SelectItem>
+                {(config?.services || []).map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

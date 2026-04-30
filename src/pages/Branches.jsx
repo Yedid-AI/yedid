@@ -1,10 +1,16 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useBranches, useCreateBranch, useUpdateBranch, useDeleteBranch, useCityIndex, useCreateCityEntry, useDeleteCityEntry, useDispatchConfig, useUpdateDispatchConfig, useConnectDispatchWhatsApp, useReconnectDispatchWhatsApp } from '../hooks/queries'
+import {
+  useBranches,
+  useCityIndex, useCreateCityEntry, useDeleteCityEntry,
+  useDispatchConfig, useUpdateDispatchConfig, useConnectDispatchWhatsApp, useReconnectDispatchWhatsApp,
+  useServiceConfig, useCreateService, useUpdateService, useDeleteService,
+} from '../hooks/queries'
 import { useI18n } from '../lib/i18n'
 import { usePageTitle, usePageHeader } from '../lib/page-header'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -15,19 +21,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Building2, Home, MapPin, Trash2, Send, MessageCircle, Loader2, CheckCircle } from 'lucide-react'
-
-const AVATAR_COLORS = [
-  'bg-blue-500', 'bg-emerald-500', 'bg-violet-500', 'bg-amber-500',
-  'bg-rose-500', 'bg-cyan-500', 'bg-fuchsia-500', 'bg-lime-600',
-  'bg-indigo-500', 'bg-orange-500', 'bg-teal-500', 'bg-pink-500',
-]
-
-function nameColor(name) {
-  let h = 0
-  for (let i = 0; i < name.length; i++) h = name.charCodeAt(i) + ((h << 5) - h)
-  return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length]
-}
+import { Briefcase, MapPin, Trash2, Send, MessageCircle, Loader2, CheckCircle, Plus, Pencil } from 'lucide-react'
 
 const DISPATCH_FIELDS = [
   { key: 'company', label: 'leads.company' },
@@ -56,67 +50,21 @@ const FIELD_EMOJI = {
   position_type: '💼', experience: '⭐', campaign: '📣',
 }
 
-const emptyBranchForm = { name: '', contact_name: '', email: '', phone: '', mobile: '', address: '', whatsapp_phone: '' }
+const COMPANY_OPTIONS = ['babait', 'aviezer']
+
 const emptyCityForm = { city: '', branch_name: '' }
 
 export default function Branches() {
   const { t } = useI18n()
   usePageTitle(t('branches.title'))
   const { actionsContainer } = usePageHeader()
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editBranch, setEditBranch] = useState(null)
-  const [form, setForm] = useState(emptyBranchForm)
+
   const [cityForm, setCityForm] = useState(emptyCityForm)
   const [error, setError] = useState('')
 
-  const { data: branches = [], isLoading } = useBranches()
   const { data: cities = [], isLoading: citiesLoading } = useCityIndex()
-  const createBranch = useCreateBranch()
-  const updateBranch = useUpdateBranch()
-  const deleteBranch = useDeleteBranch()
   const createCity = useCreateCityEntry()
   const deleteCity = useDeleteCityEntry()
-
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError('')
-    try {
-      if (editBranch) {
-        await updateBranch.mutateAsync({ id: editBranch.id, body: form })
-      } else {
-        await createBranch.mutateAsync(form)
-      }
-      setDialogOpen(false)
-      setEditBranch(null)
-      setForm(emptyBranchForm)
-    } catch (err) {
-      setError(err.message)
-    }
-  }
-
-  const handleEdit = (branch) => {
-    setEditBranch(branch)
-    setForm({
-      name: branch.name || '',
-      contact_name: branch.contact_name || '',
-      email: branch.email || '',
-      phone: branch.phone || '',
-      mobile: branch.mobile || '',
-      address: branch.address || '',
-      whatsapp_phone: branch.whatsapp_phone || '',
-    })
-    setDialogOpen(true)
-  }
-
-  const handleDelete = async (id) => {
-    try { await deleteBranch.mutateAsync(id) } catch (err) { setError(err.message) }
-  }
-
-  const toggleDispatch = async (branch) => {
-    try {
-      await updateBranch.mutateAsync({ id: branch.id, body: { dispatch_enabled: !branch.dispatch_enabled } })
-    } catch (err) { setError(err.message) }
-  }
 
   const handleAddCity = async (e) => {
     e.preventDefault()
@@ -133,69 +81,21 @@ export default function Branches() {
     try { await deleteCity.mutateAsync(id) } catch (err) { setError(err.message) }
   }
 
-  if (isLoading) return <div className="text-muted-foreground">{t('common.loading')}</div>
-
   return (
     <div>
       <div className="flex items-center justify-between mb-8">
         <p className="text-sm text-muted-foreground mt-1">{t('branches.subtitle')}</p>
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setEditBranch(null); setForm(emptyBranchForm) } }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{editBranch ? t('common.edit') : t('branches.dialogTitle')}</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label>{t('branches.name')}</Label>
-              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>{t('branches.contactName')}</Label>
-                <Input value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('common.email')}</Label>
-                <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>{t('branches.phone')}</Label>
-                <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>{t('branches.mobile')}</Label>
-                <Input value={form.mobile} onChange={(e) => setForm({ ...form, mobile: e.target.value })} />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>{t('branches.address')}</Label>
-              <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <Label>{t('branches.whatsappPhone')}</Label>
-              <Input value={form.whatsapp_phone} onChange={(e) => setForm({ ...form, whatsapp_phone: e.target.value })} placeholder="+972..." />
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
-              <Button type="submit">{editBranch ? t('common.save') : t('common.create')}</Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
       {error && (
         <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
       )}
 
-      <Tabs defaultValue="branches">
+      <Tabs defaultValue="services">
         <TabsList>
-          <TabsTrigger value="branches" className="gap-1.5">
-            <Building2 size={14} />
-            {t('branches.title')} ({branches.length})
+          <TabsTrigger value="services" className="gap-1.5">
+            <Briefcase size={14} />
+            {t('branches.services')}
           </TabsTrigger>
           <TabsTrigger value="cities" className="gap-1.5">
             <MapPin size={14} />
@@ -207,76 +107,8 @@ export default function Branches() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="branches" className="mt-4">
-          <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>{t('branches.name')}</TableHead>
-                  <TableHead>{t('branches.contactName')}</TableHead>
-                  <TableHead>{t('branches.phone')}</TableHead>
-                  <TableHead>{t('branches.address')}</TableHead>
-                  <TableHead>{t('branches.whatsappPhone')}</TableHead>
-                  <TableHead>{t('branches.dispatch')}</TableHead>
-                  <TableHead>{t('common.actions')}</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {branches.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground py-6">{t('branches.empty')}</TableCell>
-                  </TableRow>
-                ) : branches.map((b) => (
-                  <TableRow key={b.id}>
-                    <TableCell className="font-medium">
-                      <span className="inline-flex items-center gap-1.5">
-                        <Home size={14} className="text-muted-foreground shrink-0" />
-                        {b.name}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      {b.contact_name ? (
-                        <span className="inline-flex items-center gap-2">
-                          <span className={`${nameColor(b.contact_name)} text-white shrink-0 size-6 rounded-full flex items-center justify-center text-xs font-medium`}>
-                            {b.contact_name.charAt(0).toUpperCase()}
-                          </span>
-                          {b.contact_name}
-                        </span>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell>{b.phone || b.mobile || '-'}</TableCell>
-                    <TableCell className="max-w-[200px] truncate">{b.address || '-'}</TableCell>
-                    <TableCell>
-                      {b.whatsapp_phone ? (
-                        <Badge variant="secondary" className="text-xs">{b.whatsapp_phone}</Badge>
-                      ) : '-'}
-                    </TableCell>
-                    <TableCell>
-                      <Switch size="sm" checked={!!b.dispatch_enabled} onCheckedChange={() => toggleDispatch(b)} />
-                    </TableCell>
-                    <TableCell className="flex gap-2">
-                      <Button size="sm" variant="ghost" onClick={() => handleEdit(b)}>{t('common.edit')}</Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button size="sm" variant="ghost" className="text-destructive">{t('common.delete')}</Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>{t('branches.deleteTitle')}</AlertDialogTitle>
-                            <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-                            <AlertDialogAction variant="destructive" onClick={() => handleDelete(b.id)}>{t('common.delete')}</AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </Card>
+        <TabsContent value="services" className="mt-4">
+          <ServicesTab t={t} />
         </TabsContent>
 
         <TabsContent value="cities" className="mt-4">
@@ -328,11 +160,221 @@ export default function Branches() {
           <DispatchConfigTab t={t} />
         </TabsContent>
       </Tabs>
+    </div>
+  )
+}
 
-      {actionsContainer && createPortal(
-        <Button onClick={() => setDialogOpen(true)}>{t('common.new')}</Button>,
-        actionsContainer
+// ─── Services Tab ────────────────────────────────────────
+const emptyServiceForm = {
+  name: '', aliases: '', company: '', fixed_branch: '', display_order: 0, is_active: true,
+}
+
+function ServicesTab({ t }) {
+  const { data: services = [], isLoading } = useServiceConfig()
+  const { data: branches = [] } = useBranches()
+  const createService = useCreateService()
+  const updateService = useUpdateService()
+  const deleteService = useDeleteService()
+
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState(null)
+  const [form, setForm] = useState(emptyServiceForm)
+  const [error, setError] = useState('')
+
+  const branchNames = useMemo(() => Array.from(new Set(branches.map(b => b.name).filter(Boolean))).sort(), [branches])
+
+  const openCreate = () => {
+    setEditing(null)
+    setForm({ ...emptyServiceForm, display_order: (services.at(-1)?.display_order ?? 0) + 10 })
+    setError('')
+    setDialogOpen(true)
+  }
+
+  const openEdit = (svc) => {
+    setEditing(svc)
+    setForm({
+      name: svc.name || '',
+      aliases: (svc.aliases || []).join('\n'),
+      company: svc.company || '',
+      fixed_branch: svc.fixed_branch || '',
+      display_order: svc.display_order ?? 0,
+      is_active: !!svc.is_active,
+    })
+    setError('')
+    setDialogOpen(true)
+  }
+
+  const handleSubmit = async (e) => {
+    e.preventDefault()
+    setError('')
+    const aliasList = form.aliases.split('\n').map(s => s.trim()).filter(Boolean)
+    const body = {
+      name: form.name.trim(),
+      aliases: aliasList,
+      company: form.company || null,
+      fixed_branch: form.fixed_branch || null,
+      display_order: Number(form.display_order) || 0,
+      is_active: !!form.is_active,
+    }
+    try {
+      if (editing) await updateService.mutateAsync({ id: editing.id, ...body })
+      else await createService.mutateAsync(body)
+      setDialogOpen(false)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const handleDelete = async (id) => {
+    setError('')
+    try { await deleteService.mutateAsync(id) } catch (err) { setError(err.message) }
+  }
+
+  const toggleActive = async (svc) => {
+    setError('')
+    try { await updateService.mutateAsync({ id: svc.id, is_active: !svc.is_active }) } catch (err) { setError(err.message) }
+  }
+
+  return (
+    <div>
+      {error && (
+        <div className="p-3 mb-4 text-sm rounded-md bg-destructive/10 text-destructive border border-destructive/20">{error}</div>
       )}
+
+      <div className="flex justify-end mb-3">
+        <Button size="sm" onClick={openCreate} className="gap-1.5">
+          <Plus size={14} />
+          {t('branches.services.add')}
+        </Button>
+      </div>
+
+      <Card>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t('branches.services.name')}</TableHead>
+              <TableHead>{t('branches.services.aliases')}</TableHead>
+              <TableHead>{t('branches.services.company')}</TableHead>
+              <TableHead>{t('branches.services.fixedBranch')}</TableHead>
+              <TableHead>{t('branches.services.active')}</TableHead>
+              <TableHead className="w-[120px]">{t('common.actions')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {(isLoading || services.length === 0) ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center text-muted-foreground py-6">
+                  {isLoading ? t('common.loading') : t('branches.services.empty')}
+                </TableCell>
+              </TableRow>
+            ) : services.map((s) => (
+              <TableRow key={s.id} className={!s.is_active ? 'opacity-60' : ''}>
+                <TableCell className="font-medium">{s.name}</TableCell>
+                <TableCell className="text-xs text-muted-foreground max-w-[260px]">
+                  {(s.aliases || []).length === 0
+                    ? '-'
+                    : (s.aliases || []).map((a) => <Badge key={a} variant="secondary" className="me-1 mb-1 text-[11px]">{a}</Badge>)}
+                </TableCell>
+                <TableCell>
+                  {s.company ? <Badge variant="outline" className="capitalize">{s.company}</Badge> : '-'}
+                </TableCell>
+                <TableCell>{s.fixed_branch || '-'}</TableCell>
+                <TableCell>
+                  <Switch size="sm" checked={!!s.is_active} onCheckedChange={() => toggleActive(s)} />
+                </TableCell>
+                <TableCell className="flex gap-1">
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(s)}>
+                    <Pencil size={13} />
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive">
+                        <Trash2 size={13} />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>{t('branches.services.deleteTitle')}</AlertDialogTitle>
+                        <AlertDialogDescription>{t('common.irreversible')}</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                        <AlertDialogAction variant="destructive" onClick={() => handleDelete(s.id)}>{t('common.delete')}</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Card>
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditing(null) }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editing ? t('branches.services.editTitle') : t('branches.services.createTitle')}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('branches.services.name')}</Label>
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t('branches.services.aliases')}</Label>
+              <Textarea
+                value={form.aliases}
+                onChange={(e) => setForm({ ...form, aliases: e.target.value })}
+                rows={4}
+                placeholder={'aliase 1\naliase 2'}
+              />
+              <p className="text-xs text-muted-foreground">{t('branches.services.aliasesHelp')}</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>{t('branches.services.company')}</Label>
+                <Select value={form.company || '__none__'} onValueChange={(v) => setForm({ ...form, company: v === '__none__' ? '' : v })}>
+                  <SelectTrigger><SelectValue placeholder="-" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">-</SelectItem>
+                    {COMPANY_OPTIONS.map(c => <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{t('branches.services.order')}</Label>
+                <Input type="number" value={form.display_order} onChange={(e) => setForm({ ...form, display_order: e.target.value })} />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>{t('branches.services.fixedBranch')}</Label>
+              <Select value={form.fixed_branch || '__none__'} onValueChange={(v) => setForm({ ...form, fixed_branch: v === '__none__' ? '' : v })}>
+                <SelectTrigger><SelectValue placeholder="-" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">-</SelectItem>
+                  {branchNames.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">{t('branches.services.fixedBranchHelp')}</p>
+            </div>
+
+            <div className="flex items-center gap-2 pt-1">
+              <Switch checked={form.is_active} onCheckedChange={(v) => setForm({ ...form, is_active: v })} id="svc-active" />
+              <Label htmlFor="svc-active" className="cursor-pointer">{t('branches.services.active')}</Label>
+            </div>
+
+            {error && <div className="p-2 text-xs rounded bg-destructive/10 text-destructive border border-destructive/20">{error}</div>}
+
+            <div className="flex gap-2 justify-end">
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>{t('common.cancel')}</Button>
+              <Button type="submit">{editing ? t('common.save') : t('common.create')}</Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -375,6 +417,8 @@ function DispatchConfigTab({ t }) {
       setAutoDispatch(config.auto_dispatch || false)
     }
   }, [config])
+
+  const dispatchInbox = config?.inboxes
 
   const handleSave = async () => {
     setSaving(true)
@@ -436,8 +480,6 @@ function DispatchConfigTab({ t }) {
   }, [fields, header, footer])
 
   if (isLoading) return <div className="text-muted-foreground py-6 text-center">{t('common.loading')}</div>
-
-  const dispatchInbox = config?.inboxes
 
   return (
     <div className="space-y-6">

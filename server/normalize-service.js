@@ -1,86 +1,68 @@
 /**
- * Normalize service_requested values from various landing pages
- * into a unified set of service keys.
+ * Service routing helpers.
  *
- * Normalized values:
- *   עובד זר | מטפל/ת | יעוץ | שירות פרטי | השגחה בבית חולים | אחות פרטית | שירות אמבולנס | מחפש עבודה
+ * The routing rules (which raw values normalize to which canonical service,
+ * which company / fixed branch each service routes to) live in the
+ * `service_config` table and are editable from the admin UI. This module
+ * exposes synchronous helpers backed by an in-memory cache that is loaded at
+ * server startup and refreshed whenever the config is mutated through the
+ * `/api/service-config` route.
  *
- * Routing:
- *   Aviezer  → עובד זר
- *   Babait   → מטפל/ת, יעוץ, שירות אמבולנס, מחפש עבודה
- *   Babait/אודי (fixed branch) → השגחה בבית חולים, אחות פרטית, שירות פרטי
+ * Why sync helpers + cache instead of awaited DB calls:
+ *   The helpers are called from many hot paths (lead capture webhooks,
+ *   internal tools, list normalization in /api/leads). Adding an `await` to
+ *   every call site would ripple through too much code for a config table
+ *   that is read 100x more often than it is written.
  */
 
-const SERVICE_MAP = {
-  // עובד זר
-  'אני מחפש/ת עובד זר': 'עובד זר',
-  'עובד זר':             'עובד זר',
-
-  // סיעוד וזכאות
-  'סיעוד וזכאות':        'סיעוד וזכאות',
-  'סיעוד':               'סיעוד וזכאות',
-  'גמלת סיעוד':          'סיעוד וזכאות',
-  'זכאות סיעוד':         'סיעוד וזכאות',
-
-  // מטפל/ת
-  'אני מחפש/ת מטפל':    'מטפל/ת',
-  'מטפל ישראלי':         'מטפל/ת',
-
-  // יעוץ
-  'אני מחפש/ת יעוץ':    'יעוץ',
-  'מחפש יעוץ':           'יעוץ',
-  'ייעוץ':               'יעוץ',
-  'מידע וייעוץ':         'יעוץ',
-
-  // שירות פרטי
-  'אני מחפש/ת שירות פרטי': 'שירות פרטי',
-
-  // השגחה בבית חולים
-  'השגחה בבית חולים':    'השגחה בבית חולים',
-
-  // אחות פרטית
-  'אחות פרטית':          'אחות פרטית',
-
-  // שירות אמבולנס
-  'שירות אמבולנס':       'שירות אמבולנס',
-
-  // מחפש עבודה
-  'מחפש עבודה':          'מחפש עבודה',
+let SERVICE_CACHE = {
+  byName: new Map(),    // canonical name → row
+  aliasMap: new Map(),  // raw alias → canonical name (also includes name → name)
+  list: [],             // ordered active rows, for UI / dropdowns
+  loadedAt: 0,
 }
 
 /**
- * Service → Company routing (Udi is a branch of Babait, not a separate company)
+ * Load service config from DB into the in-memory cache. Called at server
+ * startup and after any mutation through /api/service-config.
+ *
+ * Safe to call without a supabase client (no-op) — the helpers fall back to
+ * passthrough behavior so dev environments without a DB don't crash.
  */
-const SERVICE_COMPANY = {
-  'עובד זר':             'aviezer',
-  'סיעוד וזכאות':        'babait',
-  'מטפל/ת':              'babait',
-  'יעוץ':                'babait',
-  'שירות אמבולנס':       'babait',
-  'מחפש עבודה':          'babait',
-  'השגחה בבית חולים':    'babait',
-  'אחות פרטית':          'babait',
-  'שירות פרטי':          'babait',
+export async function loadServiceCache(supabaseAdmin) {
+  if (!supabaseAdmin) return
+  const { data, error } = await supabaseAdmin
+    .from('service_config')
+    .select('*')
+    .order('display_order', { ascending: true })
+
+  if (error) {
+    console.error('[service-config] cache load failed:', error.message)
+    return
+  }
+
+  const byName = new Map()
+  const aliasMap = new Map()
+  const list = []
+
+  for (const row of data || []) {
+    byName.set(row.name, row)
+    aliasMap.set(row.name, row.name)
+    for (const a of row.aliases || []) aliasMap.set(String(a).trim(), row.name)
+    if (row.is_active) list.push(row)
+  }
+
+  SERVICE_CACHE = { byName, aliasMap, list, loadedAt: Date.now() }
 }
 
 /**
- * Services that route to a fixed branch (bypass city→branch index).
- * Udi services always go to the אודי branch.
- */
-const SERVICE_FIXED_BRANCH = {
-  'השגחה בבית חולים':    'אודי',
-  'אחות פרטית':          'אודי',
-  'שירות פרטי':          'אודי',
-}
-
-/**
- * Normalize a raw service_requested value.
- * Returns the normalized value, or the original trimmed value if no mapping found.
+ * Normalize a raw service_requested value to its canonical name.
+ * Returns the canonical name, or the original trimmed value if no mapping found.
  */
 export function normalizeService(raw) {
   if (!raw) return null
-  const trimmed = raw.trim()
-  return SERVICE_MAP[trimmed] || trimmed
+  const trimmed = String(raw).trim()
+  return SERVICE_CACHE.aliasMap.get(trimmed) || trimmed
 }
 
 /**
@@ -89,7 +71,8 @@ export function normalizeService(raw) {
  */
 export function resolveCompany(normalizedService, defaultCompany = 'babait') {
   if (!normalizedService) return defaultCompany
-  return SERVICE_COMPANY[normalizedService] || defaultCompany
+  const row = SERVICE_CACHE.byName.get(normalizedService)
+  return row?.company || defaultCompany
 }
 
 /**
@@ -98,7 +81,14 @@ export function resolveCompany(normalizedService, defaultCompany = 'babait') {
  */
 export function resolveFixedBranch(normalizedService) {
   if (!normalizedService) return null
-  return SERVICE_FIXED_BRANCH[normalizedService] || null
+  return SERVICE_CACHE.byName.get(normalizedService)?.fixed_branch || null
+}
+
+/**
+ * Read the cached active service list (for dropdowns / public form).
+ */
+export function listServices() {
+  return SERVICE_CACHE.list
 }
 
 /**

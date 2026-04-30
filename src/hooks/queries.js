@@ -938,6 +938,38 @@ export function useReconnectDispatchWhatsApp() {
   })
 }
 
+// ─── Service Config ──────────────────────────────────────
+export function useServiceConfig() {
+  return useQuery({
+    queryKey: queryKeys.serviceConfig,
+    queryFn: () => api.get('/service-config').then(r => r.services),
+  })
+}
+
+export function useCreateService() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.post('/service-config', body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.serviceConfig }),
+  })
+}
+
+export function useUpdateService() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }) => api.put(`/service-config/${id}`, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.serviceConfig }),
+  })
+}
+
+export function useDeleteService() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.delete(`/service-config/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.serviceConfig }),
+  })
+}
+
 // ─── Settings ────────────────────────────────────────────
 export function useSettings() {
   return useQuery({

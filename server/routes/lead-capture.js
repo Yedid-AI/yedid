@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
+import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone, listServices } from '../normalize-service.js'
 import { resolveBranchId } from '../lead-scope.js'
 
 const router = Router()
@@ -30,6 +30,7 @@ router.get('/public/capture/:token', async (req, res) => {
       user_name: [user.first_name, user.last_name].filter(Boolean).join(' ') || 'Agent',
       enterprise: user.enterprise || null,
       fields: fields || [],
+      services: listServices().map(s => s.name),
     })
   } catch (err) {
     console.error('[lead-capture]', err.message)

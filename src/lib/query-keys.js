@@ -43,6 +43,7 @@ export const queryKeys = {
   branches: ['branches'],
   cityIndex: ['city-index'],
   dispatchConfig: ['dispatch-config'],
+  serviceConfig: ['service-config'],
 
   // Calls module (Maskyoo)
   calls: (filters) => ['calls', filters || {}],
