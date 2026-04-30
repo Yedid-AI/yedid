@@ -3,11 +3,21 @@ import { checkRole } from '../middleware.js'
 import { sendMessage } from '../unipile.js'
 import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
 import { getLeadScope, applyLeadScope, canAccessLead, resolveCompanyOwnerId, resolveBranchId } from '../lead-scope.js'
+import { sendNativeMessage } from '../engine/native-messaging.js'
 import multer from 'multer'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
 
 const router = Router()
+
+// Kill-switch (cf. routes/whatsapp.js)
+function isNativeChatEnabledFor(unipileAccountId) {
+  const enabled = String(process.env.NATIVE_CHAT_ENABLED || '').toLowerCase() === 'true'
+  if (!enabled) return false
+  const whitelist = (process.env.NATIVE_CHAT_INBOXES || '').split(',').map(s => s.trim()).filter(Boolean)
+  if (whitelist.length === 0) return true
+  return whitelist.includes(unipileAccountId)
+}
 
 // ─── Leads CRUD ──────────────────────────────────────────
 
@@ -534,7 +544,28 @@ async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) 
   if (!accountId) return { error: 'Aucune connexion WhatsApp configuree' }
 
   const message = buildDispatchMessage(lead, config)
-  const result = await sendMessage(accountId, branch.whatsapp_phone, message)
+
+  // Native chat path (kill-switch gated): tracker le dispatch dans /chat
+  // Le coordinateur de la branche devient un "contact" virtuel (lead) avec
+  // metadata.branch_id pour qu'on puisse filtrer ces conversations dans l'UI.
+  let result = null
+  let nativeConversationId = null
+  if (isNativeChatEnabledFor(accountId)) {
+    nativeConversationId = await sendNativeDispatch(supabase, {
+      userId: lead.user_id,
+      unipileAccountId: accountId,
+      branchPhone: branch.whatsapp_phone,
+      branchName: branch.name,
+      branchId: branch.id,
+      message,
+      leadId: lead.id,
+    })
+  }
+
+  // Fallback: envoi direct Unipile (legacy ou kill-switch off)
+  if (!nativeConversationId) {
+    result = await sendMessage(accountId, branch.whatsapp_phone, message)
+  }
 
   await supabase.from('leads').update({
     status: 'sent_to_branch',
@@ -544,6 +575,110 @@ async function dispatchLead(supabase, lead, { skipScheduleCheck = false } = {}) 
   }).eq('id', lead.id)
 
   return { success: true }
+}
+
+/**
+ * Dispatch via le natif: trace le dispatch dans /chat en creant une conversation
+ * sur un "lead virtuel" representant le coordinateur de la branche (phone =
+ * whatsapp_phone, metadata.branch_id pour filtrage). Quand la branche repond,
+ * le webhook Unipile retombera sur la meme conversation.
+ *
+ * @returns {Promise<string|null>} chat_conversations.id ou null si rien fait.
+ */
+async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPhone, branchName, branchId, message, leadId }) {
+  try {
+    const { data: inbox } = await supabase
+      .from('chat_inboxes')
+      .select('id, user_id')
+      .eq('unipile_account_id', unipileAccountId)
+      .eq('channel_type', 'whatsapp_unipile')
+      .eq('is_active', true)
+      .limit(1)
+      .maybeSingle()
+    if (!inbox) return null
+
+    // Le lead virtuel representant la branche (idempotent par phone)
+    const normalizedPhone = branchPhone.startsWith('+') ? branchPhone : `+${branchPhone.replace(/^\+?/, '')}`
+    let { data: branchLead } = await supabase
+      .from('leads')
+      .select('id, metadata')
+      .eq('user_id', userId)
+      .eq('phone', normalizedPhone)
+      .limit(1)
+      .maybeSingle()
+    if (!branchLead) {
+      const r = await supabase
+        .from('leads')
+        .insert({
+          user_id: userId,
+          name: branchName || normalizedPhone,
+          phone: normalizedPhone,
+          source: 'dispatch',
+          lead_channel: 'whatsapp',
+          status: 'new',
+          metadata: { is_branch: true, branch_id: branchId },
+        })
+        .select('id, metadata')
+        .single()
+      if (r.error) throw r.error
+      branchLead = r.data
+    } else if (!branchLead.metadata?.is_branch) {
+      // Tag the existing lead so the UI can filter
+      await supabase
+        .from('leads')
+        .update({ metadata: { ...(branchLead.metadata || {}), is_branch: true, branch_id: branchId } })
+        .eq('id', branchLead.id)
+    }
+
+    // Find or create conversation
+    let { data: conv } = await supabase
+      .from('chat_conversations')
+      .select('id')
+      .eq('user_id', inbox.user_id)
+      .eq('inbox_id', inbox.id)
+      .eq('contact_id', branchLead.id)
+      .in('status', ['open', 'pending'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (!conv) {
+      const r = await supabase
+        .from('chat_conversations')
+        .insert({
+          user_id: inbox.user_id,
+          inbox_id: inbox.id,
+          contact_id: branchLead.id,
+          channel: 'whatsapp_unipile',
+          status: 'open',
+          subject: `Dispatch ${branchName}`,
+          metadata: { is_dispatch: true, branch_id: branchId },
+        })
+        .select('id')
+        .single()
+      if (r.error) throw r.error
+      conv = r.data
+    }
+
+    // Send the dispatch message — relay handled by native-messaging
+    const result = await sendNativeMessage({
+      supabase,
+      userId: inbox.user_id,
+      conversationId: conv.id,
+      senderType: 'bot',
+      content: message,
+      contentType: 'text',
+      metadata: { source_kind: 'dispatch', dispatched_lead_id: leadId, branch_id: branchId },
+    })
+    if (result?.error) {
+      console.error('[dispatch native] sendNativeMessage error:', result.error)
+      return null
+    }
+
+    return conv.id
+  } catch (err) {
+    console.error('[dispatch native] failed:', err.message)
+    return null
+  }
 }
 
 // POST /api/leads/:id/dispatch — send lead to branch via WhatsApp
