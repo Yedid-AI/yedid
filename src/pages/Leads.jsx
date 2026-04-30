@@ -1761,7 +1761,7 @@ function LeadKanban({ leads, isLoading, selectedLead, onOpen, onStatusChange, sh
   )
 }
 
-function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
+export function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
   const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
   const { data: maskyooCalls } = useLeadCalls(lead.id)
   const { data: activities } = useLeadActivities(lead.id)
@@ -2210,7 +2210,7 @@ function LeadAffiliationsSection({ leadId, t }) {
   )
 }
 
-function LeadCommentInput({ leadId, t }) {
+export function LeadCommentInput({ leadId, t }) {
   const addComment = useAddLeadComment()
   const [text, setText] = useState('')
   return (
