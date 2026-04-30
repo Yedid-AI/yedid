@@ -9,7 +9,10 @@ const ATTACHMENT_BUCKET = 'chat-attachments'
 const ALLOWED_MIME_TYPES = [
   'image/jpeg', 'image/png', 'image/gif', 'image/webp',
   'video/mp4', 'video/quicktime', 'video/webm',
-  'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/mp4', 'audio/webm',
+  // Audio: variantes courantes + codec annotations
+  'audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/wav', 'audio/x-wav',
+  'audio/mp4', 'audio/x-m4a', 'audio/aac',
+  'audio/webm', 'audio/webm;codecs=opus', 'audio/ogg;codecs=opus',
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -18,10 +21,18 @@ const ALLOWED_MIME_TYPES = [
   'text/plain', 'text/csv',
 ]
 
+// Multer fileFilter compares strict equality. Strip codec suffix for matching.
+function isAllowedMime(mime) {
+  if (!mime) return false
+  if (ALLOWED_MIME_TYPES.includes(mime)) return true
+  const base = mime.split(';')[0].trim()
+  return ALLOWED_MIME_TYPES.includes(base)
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 16 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => cb(null, ALLOWED_MIME_TYPES.includes(file.mimetype)),
+  fileFilter: (_req, file, cb) => cb(null, isAllowedMime(file.mimetype)),
 })
 
 function classifyContentType(mime, fileName = '') {

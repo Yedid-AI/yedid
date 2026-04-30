@@ -19,7 +19,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Sheet, SheetContent } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import {
   Send, Search, CheckCircle, Bot, BotOff, MessageSquare,
   Paperclip, Mic, Square, FileText, X,
@@ -68,7 +68,7 @@ export default function ChatInbox() {
   const isAdminOrAbove = user?.role === 'admin' || user?.role === 'super_admin'
   usePageTitle(t('chatInbox.title') || 'Messages')
 
-  const [filters, setFilters] = useState({ status: 'open', search: '', inbox_id: '' })
+  const [filters, setFilters] = useState({ status: '', search: '', inbox_id: '' })
   const [selectedId, setSelectedId] = useState(null)
   const [leadDetailOpen, setLeadDetailOpen] = useState(false)
 
@@ -134,12 +134,13 @@ export default function ChatInbox() {
         )}
       </main>
 
-      {/* Lead detail — slide-in from end */}
+      {/* Lead detail — slide-in from end (Sheet "right" is logical: end-0 → RTL-aware) */}
       <Sheet open={leadDetailOpen} onOpenChange={setLeadDetailOpen}>
         <SheetContent
-          side="end"
+          side="right"
           className="w-full sm:max-w-2xl p-0 flex flex-col gap-0"
         >
+          <SheetTitle className="sr-only">Lead detail</SheetTitle>
           {selected?.leads ? (
             <>
               <div className="flex items-center justify-between px-6 py-3 border-b shrink-0">
@@ -444,12 +445,21 @@ function MessageInput({ conversationId, aiDisabled }) {
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' })
+      // Pick the best supported mime: webm (Chrome/Firefox) or mp4 (Safari)
+      const mimeCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/mpeg']
+      const mimeType = mimeCandidates.find(m =>
+        typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(m)
+      ) || ''
+      const mr = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream)
       recordChunks.current = []
       mr.ondataavailable = (ev) => { if (ev.data.size > 0) recordChunks.current.push(ev.data) }
       mr.onstop = () => {
-        const blob = new Blob(recordChunks.current, { type: 'audio/webm' })
-        const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' })
+        const actualType = mr.mimeType || mimeType || 'audio/webm'
+        const ext = actualType.includes('mp4') ? 'm4a' : actualType.includes('mpeg') ? 'mp3' : 'webm'
+        const blob = new Blob(recordChunks.current, { type: actualType })
+        const file = new File([blob], `voice-${Date.now()}.${ext}`, { type: actualType })
         attachMut.mutate({ file, content: '' })
         stream.getTracks().forEach(t => t.stop())
       }
@@ -457,7 +467,8 @@ function MessageInput({ conversationId, aiDisabled }) {
       recorderRef.current = mr
       setRecording(true)
     } catch (err) {
-      console.error('Mic access denied:', err)
+      console.error('[chat] Mic access error:', err)
+      alert('Accès au micro refusé. Vérifiez les permissions du navigateur.')
     }
   }
 
