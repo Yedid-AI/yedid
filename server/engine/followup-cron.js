@@ -405,12 +405,26 @@ async function processQueue(supabase) {
         }
 
         if (!nativeConversationId) {
-          // Fallback Chatwoot (legacy ou kill-switch off)
+          if (useNative) {
+            // Native est cense gerer cet account_id (kill-switch ON, eventuellement
+            // dans la whitelist) mais sendNativeFollowup a renvoye null —
+            // typiquement chat_inbox manquant pour ce unipile_account_id.
+            // On refuse le fire-and-forget Unipile (cf. bug observe sur 41% des
+            // relances 28-29/04 envoyees sans aucun trace en DB).
+            // Le catch outer marquera l'item 'failed' avec ce message — la queue
+            // retentera et un humain peut investiguer le chat_inbox manquant.
+            throw new Error(`Native chat enabled but sendNativeFollowup returned null (unipile_account=${config.whatsapp_account_id}). chat_inbox introuvable ou erreur INSERT — verifier chat_inboxes pour ce compte.`)
+          }
+          // Fallback Chatwoot (kill-switch off uniquement)
           if (chatwootAccountId && chatwootInboxId && accessToken) {
             chatwootConversationId = await createChatwootConversation(
               chatwootAccountId, chatwootInboxId, accessToken, item.phone, message, callMeta,
             )
           } else {
+            // Last resort fire-and-forget — uniquement quand useNative=false ET
+            // pas de Chatwoot configure. Trace minimaliste mais au moins le
+            // message part (legacy preserve).
+            console.warn(`[Followup Cron] Fire-and-forget Unipile pour ${item.phone} (ni native, ni Chatwoot) — pas de tracking`)
             await sendMessage(config.whatsapp_account_id, item.phone, message)
           }
         }

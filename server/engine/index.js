@@ -637,13 +637,22 @@ export async function handleNativeMessage(supabase, conversationId, messageId) {
 
   const { data: conv } = await supabase
     .from('chat_conversations')
-    .select('id, user_id, inbox_id, contact_id, ai_disabled, status')
+    .select('id, user_id, inbox_id, contact_id, ai_disabled, status, metadata')
     .eq('id', conversationId)
     .single()
   if (!conv || !conv.inbox_id) return
 
   if (conv.ai_disabled) {
     console.log(`[Engine/Native] AI disabled for conversation ${conversationId}`)
+    return
+  }
+
+  // Defense in depth: les conversations dispatch tracent les replies du
+  // coordinateur de branche, pas un dialogue client. ai_disabled doit etre set
+  // a la creation (cf. sendNativeDispatch) — ce filtre evite la regression si
+  // une conv dispatch ancienne ou un seed laisse ai_disabled=false.
+  if (conv.metadata?.is_dispatch) {
+    console.log(`[Engine/Native] Dispatch conversation ${conversationId} — skipping AI`)
     return
   }
 

@@ -252,7 +252,19 @@ export async function handleUnipileNativeInbound({
     }
   }
 
-  // 5. Determine content_type for the message row
+  // 5. Skip insert if everything ended up empty (eg Unipile event with attachments
+  // qui ont tous echoue au download + pas de transcription audio). Le guard initial
+  // (l.188) ne couvre que le cas content+attachments tous deux absents AVANT le
+  // download — si attachments etait non vide mais persistAttachment a renvoye null
+  // pour chacun, on aurait insere un message contact totalement vide. Resultat
+  // observe: handleNativeMessage skip car userMessage vide -> faux "lead bloque
+  // sans reponse" dans l'UI.
+  if (!finalContent && persistedAttachments.length === 0 && !transcribed) {
+    console.log(`[native-unipile] Empty after attachment processing (ext=${externalId}) — skipping insert`)
+    return
+  }
+
+  // 6. Determine content_type for the message row
   let contentType = 'text'
   if (persistedAttachments.length > 0) {
     contentType = persistedAttachments[0].type === 'audio' ? 'audio'
@@ -261,7 +273,7 @@ export async function handleUnipileNativeInbound({
       : 'file'
   }
 
-  // 6. INSERT chat_messages (sender_type='contact')
+  // 7. INSERT chat_messages (sender_type='contact')
   const { data: msg, error: msgErr } = await supabase
     .from('chat_messages')
     .insert({
@@ -288,7 +300,7 @@ export async function handleUnipileNativeInbound({
 
   console.log(`[native-unipile] Inserted message ${msg.id} on conv ${conv.id}`)
 
-  // 7. Trigger AI (handleNativeMessage)
+  // 8. Trigger AI (handleNativeMessage)
   handleNativeMessage(supabase, conv.id, msg.id).catch(err => {
     console.error('[native-unipile] handleNativeMessage error:', err.message)
   })
