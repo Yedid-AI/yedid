@@ -1850,7 +1850,7 @@ export function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
               <span className="text-sm font-bold text-primary">{(lead.name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <h3 className="font-semibold text-base leading-tight truncate">{lead.name}</h3>
+              <h3 className="font-semibold text-base leading-tight truncate">{lead.name || lead.phone || '—'}</h3>
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                 <button
                   type="button"

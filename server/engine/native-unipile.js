@@ -71,12 +71,19 @@ async function findOrCreateLead(supabase, userId, phone, name) {
 
   if (lead) return lead
 
-  // Create lead — minimal fields
+  // Create lead — minimal fields. NEVER fall back to name=phone: the AI's
+  // contactContext now treats name=phone as "no name" so the bot will ask for
+  // it, but storing the placeholder also pollutes the leads list UI ("contacts"
+  // become a wall of phone numbers). leads.name is NOT NULL → use '' (UI shows
+  // '—' fallback) and let the AI fill in the real name on the first turn.
+  const cleanName = (name || '').trim()
+  const finalName = cleanName && cleanName !== normalizedPhone && cleanName !== normalizedPhone.replace(/^\+/, '')
+    ? cleanName : ''
   const { data: created, error } = await supabase
     .from('leads')
     .insert({
       user_id: userId,
-      name: name || normalizedPhone,
+      name: finalName,
       phone: normalizedPhone,
       source: 'whatsapp_native',
       lead_channel: 'whatsapp',

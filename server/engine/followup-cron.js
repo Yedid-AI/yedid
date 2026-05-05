@@ -772,11 +772,16 @@ async function sendNativeFollowup(supabase, { userId, unipileAccountId, phone, m
       .limit(1)
       .maybeSingle()
     if (!lead) {
+      // Use '' for the stub name — leads.name is NOT NULL but '' is honest
+      // (UI falls back to '—'). The previous fallback (name=phone) tricked
+      // the AI's contactContext into thinking it already had a name, so the
+      // bot never asked — and save_lead never fired. Closing-cron / escalation
+      // enrichment fills in the real name once the contact replies.
       const r = await supabase
         .from('leads')
         .insert({
           user_id: userId,
-          name: normalizedPhone,
+          name: '',
           phone: normalizedPhone,
           source: 'followup',
           lead_channel: 'whatsapp',

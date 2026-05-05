@@ -11,6 +11,55 @@ import {
 import { generateTTS } from './voice.js'
 import { createOrFindSession, logMessage, closeSession } from './session-logger.js'
 import { decrypt } from '../crypto.js'
+import { saveLead, logBotTranscript } from './internal-tools.js'
+import { createCompletion } from './llm.js'
+import { normalizePhone } from '../normalize-service.js'
+
+// Best-effort lead enrichment from conversation history. Used by the escalation
+// path so we never end up with a lead stub (name=phone, city=null, service=null)
+// when the contact actually supplied that info — the previous flow only ran
+// save_lead from the playbook agent's tool loop, and the escalation agent has
+// no tools, so escalations always left leads untouched.
+const ESCALATION_EXTRACTION_PROMPT = `Extract the contact's intent from the WhatsApp conversation below.
+Return ONLY valid JSON:
+{"name": "contact's full name (first+last) or null",
+ "phone": "phone number in any format the contact mentioned, or null",
+ "city": "city or null",
+ "service_requested": "main service the contact wants, in Hebrew or original language, or null",
+ "details": "1-2 sentence summary of the request, or null"}
+
+Rules:
+- name: only the contact's own name, never the bot's
+- phone: only digits — null if not present
+- city: only if the contact stated it; do NOT infer from a hospital name
+- service_requested: short canonical phrase (e.g. "מטפל/ת", "עובד זר", "אחות פרטית", "השגחה בבית חולים", "שירות פרטי", "יעוץ", "שירות אמבולנס")
+- details: in Hebrew, factual summary of the situation
+- Respond ONLY in JSON, no preamble.`
+
+async function extractLeadFromMessages(messages, agentConfig) {
+  if (!messages?.length) return {}
+  try {
+    const res = await createCompletion({
+      provider: agentConfig?.llm_provider || 'openai',
+      model: agentConfig?.llm_model || 'gpt-4.1-mini',
+      systemPrompt: ESCALATION_EXTRACTION_PROMPT,
+      messages: messages.map(m => ({ role: m.role, content: m.content })),
+      responseFormat: { type: 'json_object' },
+    })
+    return JSON.parse(res.content || '{}') || {}
+  } catch (err) {
+    console.error('[Engine] Lead extraction failed:', err.message)
+    return {}
+  }
+}
+
+function looksLikePhonePlaceholder(name) {
+  if (!name) return true
+  const trimmed = String(name).trim()
+  if (trimmed.length < 2) return true
+  if (/^\+?\d[\d\s\-]{5,}$/.test(trimmed)) return true
+  return normalizePhone(trimmed) !== null && /\d{6,}/.test(trimmed)
+}
 
 // --- In-memory config cache (TTL-based) ---
 const configCache = new Map()
@@ -673,15 +722,21 @@ export async function handleNativeMessage(supabase, conversationId, messageId) {
     return
   }
 
-  // Load lead context
+  // Load lead context. Followup-cron and the inbound Unipile bridge create stub
+  // leads with name=phone when the original sender name is unknown. Passing that
+  // stub name into the AI's contactContext made it skip the "ask for name" step
+  // (the system prompt says "do NOT ask for info you already have"), so the
+  // playbook never reached save_lead with a real name. Treat phone-shaped stubs
+  // as no-name so the AI properly collects the contact's actual name.
   const { data: lead } = await supabase
     .from('leads')
-    .select('name, phone, email, city, branch')
+    .select('id, name, phone, email, city, branch')
     .eq('id', conv.contact_id)
     .single()
+  const stubName = looksLikePhonePlaceholder(lead?.name)
   const contactContext = {
     phone: lead?.phone || null,
-    name: lead?.name || null,
+    name: stubName ? null : (lead?.name || null),
     email: lead?.email || null,
     city: lead?.city || null,
     branch: lead?.branch || null,
@@ -701,16 +756,16 @@ export async function handleNativeMessage(supabase, conversationId, messageId) {
     console.log(`[Engine/Native] Route: ${route.type} → ${route.id}`)
 
     if (route.type === 'scenario') {
-      await handleNativeScenario({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext, isVoiceMessage })
+      await handleNativeScenario({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext, isVoiceMessage, lead })
     } else {
-      await handleNativeEscalation({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext })
+      await handleNativeEscalation({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext, lead })
     }
   } catch (err) {
     console.error(`[Engine/Native] Fatal error for conversation ${conversationId}:`, err.message)
   }
 }
 
-async function handleNativeScenario({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext, isVoiceMessage = false }) {
+async function handleNativeScenario({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext, isVoiceMessage = false, lead = null }) {
   const { userId, agentConfig, allTools, enterpriseUserId, playbooks } = config
   const playbook = playbooks.find(pb => String(pb.id) === route.id)
   if (!playbook) return
@@ -726,6 +781,7 @@ async function handleNativeScenario({ config, route, userMessage, conversationHi
     enterpriseUserId,
     contactContext,
     sessionId: null, // pas de session billing-tracking dans le natif (TODO)
+    conversationId,
   })
 
   if (!result || !result.content) return
@@ -747,19 +803,31 @@ async function handleNativeScenario({ config, route, userMessage, conversationHi
       },
     })
   }
+
+  // Always log a transcript activity onto the lead so the timeline shows the
+  // conversation. saveLead would do this on its own when the playbook calls it,
+  // but if it doesn't (low-data turn, agent is still gathering info) we still
+  // want the lead card to show what happened.
+  if (lead?.id) {
+    logBotTranscript(supabase, lead.id, userId, { conversationId }).catch(() => {})
+  }
 }
 
-async function handleNativeEscalation({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext }) {
-  const { userId, agentConfig, escalationRules } = config
+async function handleNativeEscalation({ config, route, userMessage, conversationHistory, supabase, conversationId, contactContext, lead = null }) {
+  const { userId, agentConfig, enterpriseUserId, escalationRules } = config
   const rule = escalationRules.find(er => String(er.id) === route.id)
   if (!rule) return
 
-  const { reponse, resume, token_usage } = await runEscalationAgent({
-    agentConfig,
-    rule,
-    userMessage,
-    conversationHistory,
-  })
+  // Run escalation agent + lead extraction in parallel — we need both before we
+  // can finalize the turn (extraction informs save_lead, escalation gives the
+  // user-facing reply). Doing them serially would add ~2-3s of latency on every
+  // escalated message.
+  const messagesForExtract = [...conversationHistory, { role: 'user', content: userMessage }]
+  const [escalation, extracted] = await Promise.all([
+    runEscalationAgent({ agentConfig, rule, userMessage, conversationHistory }),
+    extractLeadFromMessages(messagesForExtract, agentConfig),
+  ])
+  const { reponse, resume, token_usage } = escalation
 
   await sendNativeMessage({
     supabase,
@@ -777,6 +845,36 @@ async function handleNativeEscalation({ config, route, userMessage, conversation
     } catch (err) {
       console.error('[Engine/Native] assign error:', err.message)
     }
+  }
+
+  // Enrich the lead from whatever the conversation surfaced. Pre-fix, every
+  // escalation left the lead as a stub (name=phone, no city/service/branch)
+  // because the escalation agent has no save_lead tool. Now: lenient saveLead
+  // (source='escalation' bypasses the strict "all 4 fields required" guard) +
+  // logBotTranscript so the lead card always shows the chat.
+  try {
+    if (lead?.phone) {
+      const candidateName = (extracted.name && !looksLikePhonePlaceholder(extracted.name))
+        ? extracted.name
+        : (lead?.name && !looksLikePhonePlaceholder(lead.name) ? lead.name : null)
+      const candidatePhone = lead.phone || extracted.phone || null
+      if (candidatePhone && candidateName) {
+        await saveLead({
+          name: candidateName,
+          phone: candidatePhone,
+          city: extracted.city || lead.city || null,
+          service_requested: extracted.service_requested || null,
+          details: extracted.details || resume || null,
+          source: 'escalation',
+          lead_channel: 'whatsapp',
+        }, { supabase, userId, conversationId, enterpriseUserId })
+      } else {
+        // Even without a candidate name, log the transcript so the timeline isn't empty.
+        await logBotTranscript(supabase, lead.id, userId, { conversationId })
+      }
+    }
+  } catch (err) {
+    console.error('[Engine/Native] enrich-on-escalation failed:', err.message)
   }
 
   // Private note with summary (visible to agents only)
