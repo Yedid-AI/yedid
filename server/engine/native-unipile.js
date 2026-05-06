@@ -157,13 +157,15 @@ async function findOrCreateLead(supabase, userId, phone, name) {
  * vers lui ait deja cree la conv) declenche Shira -> spam d'un humain non-client.
  */
 async function findOrCreateConversation(supabase, userId, inboxId, leadId) {
+  // Reuse the most recent conversation for this lead+inbox regardless of
+  // status — un lead = un thread continu. Le trigger on_chat_new_message
+  // re-ouvre automatiquement une conv 'resolved' si un contact ecrit dedans.
   const { data: existing } = await supabase
     .from('chat_conversations')
     .select('id, status')
     .eq('user_id', userId)
     .eq('inbox_id', inboxId)
     .eq('contact_id', leadId)
-    .in('status', ['open', 'pending'])
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()

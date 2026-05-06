@@ -869,14 +869,13 @@ async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPh
         .eq('id', branchLead.id)
     }
 
-    // Find or create conversation
+    // Find or create conversation — pas de filtre status (un lead = un thread).
     let { data: conv } = await supabase
       .from('chat_conversations')
       .select('id')
       .eq('user_id', inbox.user_id)
       .eq('inbox_id', inbox.id)
       .eq('contact_id', branchLead.id)
-      .in('status', ['open', 'pending'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
