@@ -3,6 +3,7 @@ import { Router } from 'express'
 import { checkRole } from '../middleware.js'
 import { queryCdr, getCallMetadata, getRecordingUrl } from '../maskyoo.js'
 import { normalizePhone } from '../normalize-service.js'
+import { runPipelineOnCall } from '../engine/audio-pipeline.js'
 
 function deterministicId(row) {
   const key = `${row.start_call || ''}_${row.cdr_ani || ''}_${row.cdr_ddi || ''}_${row.call_duration || ''}`
@@ -248,6 +249,28 @@ router.get('/calls/:uuid/recording', checkRole('admin'), async (req, res) => {
     if (!res.headersSent) {
       res.status(502).json({ error: err.message })
     }
+  }
+})
+
+// ─── POST /calls/:id/process-audio — manual trigger of the audio pipeline ──
+// id here is the calls.id (not the cdr_uniqueid). The pipeline fetches the
+// recording from Maskyoo, transcribes via Whisper, runs an LLM analysis and
+// creates/enriches a lead if the LLM judges it relevant.
+router.post('/calls/:id/process-audio', checkRole('admin'), async (req, res) => {
+  try {
+    const callId = parseInt(req.params.id)
+    if (!callId) return res.status(400).json({ error: 'invalid call id' })
+
+    const force = req.body?.force === true || req.query?.force === 'true'
+
+    const result = await runPipelineOnCall(req.supabaseAdmin, callId, {
+      force,
+      fallbackUserId: req.user.user_id,
+    })
+    res.json(result)
+  } catch (err) {
+    console.error('[calls/process-audio]', err.message)
+    res.status(400).json({ error: err.message })
   }
 })
 

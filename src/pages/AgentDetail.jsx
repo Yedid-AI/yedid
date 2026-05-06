@@ -95,9 +95,9 @@ export default function AgentDetail() {
   const cfg = agent.agent_config?.[0] || agent.agent_config || {}
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4 h-full min-h-0">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 shrink-0">
         <Button variant="ghost" size="sm" onClick={() => navigate('/agents')}>
           <ArrowLeft className="me-2 h-4 w-4 icon-directional" /> {t('common.back')}
         </Button>
@@ -125,7 +125,7 @@ export default function AgentDetail() {
       </div>
 
       {/* Title */}
-      <div className="flex items-end justify-between gap-4">
+      <div className="flex items-end justify-between gap-4 shrink-0">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">{t('agentDetail.orchestration')}</h2>
           <p className="text-sm text-muted-foreground">
@@ -135,8 +135,8 @@ export default function AgentDetail() {
         <KeyboardHints />
       </div>
 
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-6 items-start">
+      {/* Two-column layout — fills remaining viewport */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_420px] gap-4 flex-1 min-h-0">
         <FlowCanvas
           selected={selected.node}
           onSelect={goToList}
@@ -173,13 +173,13 @@ function FlowCanvas({ selected, onSelect, onEditPlaybook, onEditEscalation, agen
   const { t } = useI18n()
   return (
     <div
-      className="relative rounded-xl border bg-muted/30 p-8 lg:p-12 min-h-[760px] overflow-hidden"
+      className="relative rounded-xl border bg-muted/30 p-6 lg:p-10 h-full min-h-0 overflow-auto"
       style={{
         backgroundImage: 'radial-gradient(circle, oklch(0.85 0.005 75) 1px, transparent 1px)',
         backgroundSize: '20px 20px',
       }}
     >
-      <div className="relative flex flex-col items-center gap-10">
+      <div className="relative flex flex-col items-center justify-center gap-6 min-h-full">
         {/* Inboxes node */}
         <FlowNode
           kind="entry"
@@ -1144,7 +1144,7 @@ function EscalationEditor({ agentId, escalationId, escalations, onBack, onCreate
 function PanelShell({ title, subtitle, children, badge, headerRight, action, backLabel, onBack }) {
   const { t } = useI18n()
   return (
-    <div className="rounded-xl border bg-card p-5 shadow-soft-sm space-y-4 lg:sticky lg:top-4 max-h-[calc(100vh-2rem)] overflow-y-auto">
+    <div className="rounded-xl border bg-card p-5 shadow-soft-sm space-y-4 h-full min-h-0 overflow-y-auto">
       {onBack && (
         <button
           type="button"

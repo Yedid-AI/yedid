@@ -36,6 +36,7 @@ export const queryKeys = {
 
   // Leads module
   leads: (filters) => ['leads', filters || {}],
+  leadsStats: (filters) => ['leads', 'stats', filters || {}],
   lead: (id) => ['leads', 'detail', id],
   leadFields: ['lead-fields'],
   leadDocuments: (leadId) => ['leads', 'documents', leadId],
