@@ -5,7 +5,53 @@ import multer from 'multer'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } })
 import { getSetting } from '../settings.js'
-import { clearConfigCache } from '../engine/index.js'
+import { clearConfigCache, clearNativeConfigCache } from '../engine/index.js'
+
+/**
+ * Mirror a legacy `inboxes` row update onto the matching `chat_inboxes` row.
+ *
+ * The legacy table is what the current Inboxes.jsx UI reads/writes, but the
+ * native chat engine reads from `chat_inboxes` (different rows, same physical
+ * WhatsApp account via `unipile_account_id`). Without this mirror, edits in
+ * the UI (assign-agent, ai-settings) never reach the engine — observed in
+ * prod with the "Dispatch 972552732923" inbox where the UI showed no agent
+ * but Shira was running because `chat_inboxes.agent_bot_id` had been
+ * provisioned at migration time and never followed UI changes.
+ *
+ * Match key: `unipile_account_id` (set on both tables for WhatsApp inboxes).
+ * Falls back to no-op when not set (e.g. legacy Chatwoot-only website inboxes).
+ */
+async function mirrorToChatInbox(supabase, legacyInboxId, updates) {
+  try {
+    const { data: legacy } = await supabase
+      .from('inboxes')
+      .select('unipile_account_id')
+      .eq('id', legacyInboxId)
+      .maybeSingle()
+    const accountId = legacy?.unipile_account_id
+    if (!accountId) return // not a WhatsApp/Unipile inbox — nothing to mirror
+
+    const fields = {}
+    if ('agent_bot_id' in updates) fields.agent_bot_id = updates.agent_bot_id
+    if ('ai_enabled' in updates) fields.ai_enabled = updates.ai_enabled
+    if ('ai_schedule' in updates) fields.ai_schedule = updates.ai_schedule
+    if ('ai_timezone' in updates) fields.ai_timezone = updates.ai_timezone
+    if (!Object.keys(fields).length) return
+
+    fields.updated_at = new Date().toISOString()
+    const { error } = await supabase
+      .from('chat_inboxes')
+      .update(fields)
+      .eq('unipile_account_id', accountId)
+    if (error) {
+      console.error('[inboxes/mirror] chat_inboxes update failed:', error.message)
+      return
+    }
+    clearNativeConfigCache()
+  } catch (err) {
+    console.error('[inboxes/mirror]', err.message)
+  }
+}
 import { getAccount, createHostedAuthLink } from '../unipile.js'
 
 const router = Router()
@@ -295,6 +341,10 @@ router.put('/inboxes/:id/assign-agent', checkRole('admin'), async (req, res) => 
       .single()
 
     if (error) throw error
+
+    // Mirror to chat_inboxes so the native engine sees the same agent.
+    await mirrorToChatInbox(req.supabaseAdmin || req.supabase, id, { agent_bot_id: agent_bot_id || null })
+
     res.json({ inbox: data })
   } catch (err) {
     console.error('[inboxes]', err.message)
@@ -628,6 +678,9 @@ router.put('/inboxes/:id/ai-settings', checkRole('admin'), async (req, res) => {
     if (!data) return res.status(404).json({ error: 'Inbox introuvable' })
 
     clearConfigCache()
+
+    // Mirror to chat_inboxes so the native engine sees the same toggles/schedule.
+    await mirrorToChatInbox(req.supabaseAdmin || req.supabase, id, dbUpdates)
 
     res.json({ inbox: data })
   } catch (err) {
