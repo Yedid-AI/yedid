@@ -686,7 +686,7 @@ export async function handleNativeMessage(supabase, conversationId, messageId) {
 
   const { data: conv } = await supabase
     .from('chat_conversations')
-    .select('id, user_id, inbox_id, contact_id, ai_disabled, status, metadata')
+    .select('id, user_id, inbox_id, contact_id, branch_id, ai_disabled, status, metadata')
     .eq('id', conversationId)
     .single()
   if (!conv || !conv.inbox_id) return
@@ -696,12 +696,27 @@ export async function handleNativeMessage(supabase, conversationId, messageId) {
     return
   }
 
-  // Defense in depth: les conversations dispatch tracent les replies du
-  // coordinateur de branche, pas un dialogue client. ai_disabled doit etre set
-  // a la creation (cf. sendNativeDispatch) — ce filtre evite la regression si
-  // une conv dispatch ancienne ou un seed laisse ai_disabled=false.
+  // Branch dispatch convs (post-migration 041): branch_id column is the
+  // durable signal that this thread tracks a coordinator, not a customer.
+  // Bot must stay out — a coordinator's "OK on l'a appele" reply would
+  // otherwise spawn a Shira chat with a non-customer.
+  if (conv.branch_id) {
+    console.log(`[Engine/Native] Branch conversation ${conversationId} (branch_id=${conv.branch_id}) — skipping AI`)
+    if (!conv.ai_disabled) {
+      await supabase
+        .from('chat_conversations')
+        .update({
+          ai_disabled: true,
+          metadata: { ...(conv.metadata || {}), is_dispatch: true, branch_id: conv.branch_id },
+        })
+        .eq('id', conversationId)
+    }
+    return
+  }
+
+  // Legacy fallback: pre-041 dispatch convs were tagged via metadata only.
   if (conv.metadata?.is_dispatch) {
-    console.log(`[Engine/Native] Dispatch conversation ${conversationId} — skipping AI`)
+    console.log(`[Engine/Native] Dispatch conversation ${conversationId} (legacy metadata) — skipping AI`)
     return
   }
 
@@ -728,25 +743,30 @@ export async function handleNativeMessage(supabase, conversationId, messageId) {
   // (the system prompt says "do NOT ask for info you already have"), so the
   // playbook never reached save_lead with a real name. Treat phone-shaped stubs
   // as no-name so the AI properly collects the contact's actual name.
-  const { data: lead } = await supabase
-    .from('leads')
-    .select('id, name, phone, email, city, branch, metadata')
-    .eq('id', conv.contact_id)
-    .single()
+  // Note: post-041, branch dispatch convs have contact_id=null (we already
+  // returned above). Pure-customer convs always have contact_id set.
+  let lead = null
+  if (conv.contact_id) {
+    const { data } = await supabase
+      .from('leads')
+      .select('id, name, phone, email, city, branch, metadata')
+      .eq('id', conv.contact_id)
+      .single()
+    lead = data
+  }
 
-  // Skip AI when the contact is a branch coordinator (metadata.is_branch).
-  // Dispatch conversations are flagged with ai_disabled=true at creation time,
-  // but a coordinator writing inbound for the first time creates a fresh
-  // conversation without that flag — the lead-level marker is the durable
-  // signal. Auto-tag the conv so future replies short-circuit at the conv
-  // check above without re-loading the lead.
+  // Hybrid customer + coordinator (e.g. Aaron #15562): the lead is real but
+  // the lead.metadata.is_branch flag still triggers AI skip. Defensive — should
+  // already be covered by conv.branch_id check above, but a freshly tagged
+  // hybrid lead might have a conv created before the branch_id was attached.
   if (lead?.metadata?.is_branch) {
-    console.log(`[Engine/Native] Branch lead ${lead.id} — skipping AI on conv ${conversationId}`)
+    console.log(`[Engine/Native] Hybrid branch lead ${lead.id} — skipping AI on conv ${conversationId}`)
     if (!conv.ai_disabled) {
       await supabase
         .from('chat_conversations')
         .update({
           ai_disabled: true,
+          branch_id: conv.branch_id || lead.metadata?.branch_id || null,
           metadata: { ...(conv.metadata || {}), is_dispatch: true, branch_id: lead.metadata?.branch_id || null },
         })
         .eq('id', conversationId)

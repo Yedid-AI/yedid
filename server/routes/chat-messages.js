@@ -64,7 +64,8 @@ router.get('/chat/conversations/:conversationId/messages', checkRole('admin', 'a
       .select(`
         *,
         agent:agent_id (id, email, role),
-        lead:contact_id (id, name, phone, email)
+        lead:contact_id (id, name, phone, email),
+        branch:branch_id (id, name, contact_name, mobile)
       `)
       .eq('conversation_id', req.params.conversationId)
       .eq('user_id', req.user.user_id)

@@ -69,18 +69,32 @@ function isBranchLead(lead) {
   return !!lead?.metadata?.is_branch
 }
 
+// Post-migration 041 a conversation can be a branch dispatch thread without
+// any lead row at all (contact_id NULL, branch_id set). Helper that covers both:
+// the legacy hybrid Aaron-style lead-with-is_branch AND the new pure-branch conv.
+function isBranchConversation(conv) {
+  return !!conv?.branch_id || !!conv?.branches || isBranchLead(conv?.leads)
+}
+
 export default function ChatInbox() {
   const { t, locale } = useI18n()
   const { user } = useAuth()
   const isAdminOrAbove = user?.role === 'admin' || user?.role === 'super_admin'
   usePageTitle(t('chatInbox.title') || 'Messages')
 
-  const [filters, setFilters] = useState({ status: '', search: '', inbox_id: '' })
+  const [filters, setFilters] = useState({ status: '', search: '', inbox_id: '', lead_type: 'all' })
   const [selectedId, setSelectedId] = useState(null)
   const [contactPanelOpen, setContactPanelOpen] = useState(false)
 
   const { data: inboxes } = useChatInboxes()
-  const { data: conversations = [], isLoading } = useChatConversations(filters)
+  // server-side filters (excluding lead_type which is client-side, based on lead.metadata)
+  const { lead_type, ...serverFilters } = filters
+  const { data: allConversations = [], isLoading } = useChatConversations(serverFilters)
+  const conversations = allConversations.filter(c => {
+    if (lead_type === 'all') return true
+    const branch = isBranchConversation(c)
+    return lead_type === 'branch' ? branch : !branch
+  })
   const { data: selected } = useChatConversation(selectedId)
   const { data: messages = [] } = useChatMessages(selectedId)
   const { data: leadFields } = useLeadFields()
@@ -94,12 +108,19 @@ export default function ChatInbox() {
     if (!selectedId && conversations.length > 0) setSelectedId(conversations[0].id)
   }, [conversations, selectedId])
 
+  // Reset selection if it falls outside the filtered list (after a tab switch)
+  useEffect(() => {
+    if (selectedId && conversations.length > 0 && !conversations.some(c => c.id === selectedId)) {
+      setSelectedId(conversations[0].id)
+    }
+  }, [conversations, selectedId])
+
   // Auto-open the panel when switching to another conversation, but stay closed
   // si l'utilisateur l'a explicitement fermé.
   // Pour l'instant: ne pas auto-ouvrir, l'utilisateur clique pour ouvrir.
 
   const lead = selected?.leads
-  const isBranch = isBranchLead(lead)
+  const isBranch = isBranchConversation(selected)
 
   return (
     <div className="-mx-6 -my-6 h-[calc(100svh-3rem)] flex bg-background overflow-hidden">
@@ -191,8 +212,29 @@ export default function ChatInbox() {
 }
 
 function ConversationListHeader({ filters, setFilters, inboxes, t }) {
+  const tabs = [
+    { value: 'all', label: t('chatInbox.tabAll') },
+    { value: 'lead', label: t('chatInbox.tabLeads') },
+    { value: 'branch', label: t('chatInbox.tabBranches') },
+  ]
   return (
     <div className="p-3 border-b space-y-2 bg-background">
+      <div className="flex items-center gap-0.5 border rounded-lg p-0.5 bg-muted/30">
+        {tabs.map(tab => (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => setFilters(f => ({ ...f, lead_type: tab.value }))}
+            className={`flex-1 text-[11px] font-medium px-2 py-1 rounded-md transition-colors ${
+              (filters.lead_type || 'all') === tab.value
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
       <div className="relative">
         <Search className="absolute start-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         <Input
@@ -242,9 +284,10 @@ function ConversationListHeader({ filters, setFilters, inboxes, t }) {
 function ConversationItem({ conversation, selected, onClick, locale }) {
   const { t } = useI18n()
   const lead = conversation.leads
+  const branch = conversation.branches
   const lastMsg = conversation.last_message
   const hasUnread = conversation.unread_count > 0
-  const isBranch = isBranchLead(lead)
+  const isBranch = isBranchConversation(conversation)
 
   return (
     <button
@@ -261,7 +304,7 @@ function ConversationItem({ conversation, selected, onClick, locale }) {
       <div className="flex-1 min-w-0">
         <div className="flex justify-between items-baseline gap-2">
           <span className={`text-sm truncate ${hasUnread ? 'font-semibold' : 'font-medium'}`}>
-            {lead?.name || '—'}
+            {branch?.name || lead?.name || '—'}
           </span>
           <span className="text-[10px] text-muted-foreground shrink-0">
             {formatRelative(conversation.last_message_at, locale)}

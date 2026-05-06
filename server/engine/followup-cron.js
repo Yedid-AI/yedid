@@ -14,6 +14,21 @@ import { accountApi } from '../chatwoot.js'
 import { getSetting } from '../settings.js'
 import { normalizePhone } from '../normalize-service.js'
 import { sendNativeMessage } from './native-messaging.js'
+import { processAudioPipeline } from './audio-pipeline.js'
+
+// Calls under this many seconds are considered "missed" — even if Maskyoo
+// reports them as 'answered' (typically a musical voicemail picking up).
+// Calls >= this threshold are treated as real conversations and routed to
+// the audio pipeline instead of the WhatsApp follow-up.
+const MISSED_CALL_MAX_DURATION_SEC = 60
+
+// How long to wait before allowing another follow-up to the same phone
+// (lifts the previous "send once and never again" dedup so a prospect who
+// calls back days later can be re-relancé). Configurable via env.
+function relanceCooldownMs() {
+  const hours = parseInt(getSetting('FOLLOWUP_RELANCE_COOLDOWN_HOURS')) || 24
+  return hours * 3600 * 1000
+}
 
 // Kill-switch (cf. routes/whatsapp.js)
 function isNativeChatEnabledFor(unipileAccountId) {
@@ -137,6 +152,14 @@ async function runFollowupCycle(supabase) {
     // Step 4: For sent 1st attempts older than the configured window with no
     // reply and no resulting lead, schedule a softer 2nd attempt.
     await enqueueSecondAttempts(supabase)
+
+    // Step 5: Audio pipeline — for long-answered calls without a logged lead,
+    // transcribe and analyze to surface a CRM entry. Gated by AUDIO_PIPELINE_ENABLED.
+    try {
+      await processAudioPipeline(supabase)
+    } catch (err) {
+      console.error('[Followup Cron] audio pipeline error:', err.message)
+    }
   } finally {
     running = false
   }
@@ -178,10 +201,14 @@ async function enqueueNewCalls(supabase) {
     const lookbackMin = Math.max(30, (config.delay_minutes || 0) + 30)
     const since = new Date(Date.now() - lookbackMin * 60 * 1000).toISOString()
 
+    // Only short calls go to the WhatsApp follow-up queue. Calls with
+    // call_duration >= MISSED_CALL_MAX_DURATION_SEC are real conversations
+    // that the audio-pipeline handles separately (transcribe + LLM → lead).
     const { data: recentCalls, error: callsErr } = await supabase
       .from('calls')
-      .select('id, cdr_ani, user_name, cdr_ddi, start_call')
+      .select('id, cdr_ani, user_name, cdr_ddi, start_call, call_duration')
       .gte('start_call', since)
+      .lt('call_duration', MISSED_CALL_MAX_DURATION_SEC)
       .order('start_call', { ascending: false })
 
     if (callsErr || !recentCalls?.length) continue
@@ -196,17 +223,19 @@ async function enqueueNewCalls(supabase) {
 
     if (!matchingCalls.length) continue
 
-    // Check which phones are already queued (any status — avoid re-enqueuing).
-    // Normalize before querying so we compare apples to apples — the queue stores
-    // normalized phones, raw cdr_ani must be normalized first or dedup misses.
+    // Cooldown dedup: skip phones we already relanced within the cooldown
+    // window. Without the date filter a phone enqueued months ago would
+    // permanently block any new follow-up — even after a fresh callback.
     const phones = [...new Set(
       matchingCalls.map(c => normalizePhone(c.cdr_ani)).filter(Boolean)
     )]
+    const cooldownCutoff = new Date(Date.now() - relanceCooldownMs()).toISOString()
     const { data: existingQueue } = phones.length ? await supabase
       .from('followup_queue')
       .select('phone')
       .eq('user_id', config.user_id)
-      .in('phone', phones) : { data: [] }
+      .in('phone', phones)
+      .gte('created_at', cooldownCutoff) : { data: [] }
 
     const alreadyQueued = new Set((existingQueue || []).map(q => q.phone))
 
@@ -295,13 +324,14 @@ async function processQueue(supabase) {
     // Skip follow-up if a lead exists for this phone that is BOTH recently touched AND still active.
     // A lead in a terminal state (handled / not_relevant / no_answer) shouldn't block a fresh follow-up
     // triggered by a *new* call — it just means we already dealt with this person on a previous cycle.
+    // Window matches the relance cooldown so that a callback after the cooldown re-opens follow-up.
     const phones = items.map(i => i.phone)
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
+    const cooldownCutoffSend = new Date(Date.now() - relanceCooldownMs()).toISOString()
     const { data: leads } = await supabase
       .from('leads')
       .select('phone, status')
       .in('phone', phones)
-      .gte('updated_at', oneHourAgo)
+      .gte('updated_at', cooldownCutoffSend)
 
     const TERMINAL_STATUSES = new Set(['handled', 'not_relevant', 'no_answer'])
     const leadPhones = new Set(
@@ -659,22 +689,26 @@ async function enqueueSecondAttempts(supabase) {
   if (!candidates?.length) return
 
   const phones = [...new Set(candidates.map(c => c.phone))]
+  const cooldownCutoff2nd = new Date(Date.now() - relanceCooldownMs()).toISOString()
 
-  // Skip phones that already have a 2nd attempt queued (any status — once is enough).
+  // Skip phones that already have a 2nd attempt queued within the cooldown
+  // window. Older 2nd attempts no longer permanently block — without this a
+  // callback after weeks would never get its own 2nd-attempt cycle.
   const { data: existingAttempts } = await supabase
     .from('followup_queue')
     .select('phone')
     .in('phone', phones)
     .gte('attempt_number', 2)
+    .gte('created_at', cooldownCutoff2nd)
   const skipAttempt = new Set((existingAttempts || []).map(r => r.phone))
 
-  // Skip phones that already have a lead — replied_at/lead_id can be NULL on
-  // legacy items that pre-date the tracking columns, so the WHERE-clause filter
-  // above is not enough. Belt-and-suspenders phone match against leads.
+  // Skip phones with a lead recently touched. Older inactive leads no longer
+  // block a fresh 2nd attempt triggered by a new call.
   const { data: existingLeads } = await supabase
     .from('leads')
     .select('phone')
     .in('phone', phones)
+    .gte('updated_at', cooldownCutoff2nd)
   const skipLead = new Set((existingLeads || []).map(r => r.phone))
 
   const toInsert = candidates
@@ -793,14 +827,15 @@ async function sendNativeFollowup(supabase, { userId, unipileAccountId, phone, m
       lead = r.data
     }
 
-    // 3. Find or create open conversation for this lead+inbox
+    // 3. Find or create conversation for this lead+inbox — pas de filtre
+    // sur status: un lead = un thread continu (le trigger re-ouvre une conv
+    // 'resolved' quand un contact y ecrit).
     let { data: conv } = await supabase
       .from('chat_conversations')
       .select('id')
       .eq('user_id', inbox.user_id)
       .eq('inbox_id', inbox.id)
       .eq('contact_id', lead.id)
-      .in('status', ['open', 'pending'])
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()

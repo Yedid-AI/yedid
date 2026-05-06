@@ -43,25 +43,64 @@ function classifyAttachment(att) {
 }
 
 /**
- * Trouve un lead par telephone pour un user, ou en cree un nouveau.
+ * Cross-reference a phone with the `branches` table. Returns
+ * `{ branch_id }` when the phone matches an active branch's `mobile` or
+ * `whatsapp_phone`, otherwise null.
+ *
+ * Why: the `metadata.is_branch=true` flag on leads is only set by the
+ * dispatch-out flow (server/routes/leads.js — when sending a lead card TO a
+ * branch). A coordinator who hasn't yet received a dispatch (e.g. a freshly
+ * provisioned branch like the "test" branch with aaron's mobile) is invisible
+ * to the engine's branch guard. This lookup catches that case.
  */
-async function findOrCreateLead(supabase, userId, phone, name) {
+async function lookupBranchByPhone(supabase, normalizedPhone) {
+  const noPlus = normalizedPhone.replace(/^\+/, '')
+  const variants = [normalizedPhone, noPlus, `+${noPlus}`]
+  // Build OR clause — Supabase doesn't support .in() across two columns.
+  const orClauses = variants.flatMap(p => [`mobile.eq.${p}`, `whatsapp_phone.eq.${p}`]).join(',')
+  const { data } = await supabase
+    .from('branches')
+    .select('id, name, user_id')
+    .eq('is_active', true)
+    .or(orClauses)
+    .limit(1)
+  return data?.[0] || null
+}
+
+/**
+ * Resolve an inbound phone to either a lead (real customer) or a branch
+ * (coordinator). Returns `{ lead?, branch? }` — exactly one of the two will
+ * be set (branch wins when the phone matches both, since coordinator semantics
+ * always take precedence over customer for routing).
+ *
+ * For real customers: returns/creates a lead row as before.
+ * For coordinators: returns the matching branch (no lead row created since
+ * migration 041 — branches are first-class chat contacts).
+ *
+ * Hybrid case (a phone matching both a branches row AND an existing real-customer
+ * lead, e.g. Aaron #15562): returns BOTH — the lead anchors customer history,
+ * the branch flag triggers AI skip in handleNativeMessage. The conversation
+ * row will still be tagged branch_id so the engine routes correctly.
+ */
+async function resolveContact(supabase, userId, phone, name) {
   const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
 
-  // Try with the +-prefixed form, then without
+  // Branch lookup first — coordinator semantics dominate.
+  const branch = await lookupBranchByPhone(supabase, normalizedPhone)
+
+  // Existing lead lookup (same key as before).
   let { data: lead } = await supabase
     .from('leads')
-    .select('id, name, phone, email')
+    .select('id, name, phone, email, metadata')
     .eq('user_id', userId)
     .eq('phone', normalizedPhone)
     .limit(1)
     .maybeSingle()
-
   if (!lead) {
     const noPlus = phone.replace(/^\+/, '')
     const r = await supabase
       .from('leads')
-      .select('id, name, phone, email')
+      .select('id, name, phone, email, metadata')
       .eq('user_id', userId)
       .eq('phone', noPlus)
       .limit(1)
@@ -69,13 +108,21 @@ async function findOrCreateLead(supabase, userId, phone, name) {
     lead = r.data
   }
 
-  if (lead) return lead
+  // Branch hit + existing lead = hybrid (customer who's also a coordinator).
+  // Keep the lead, return the branch alongside.
+  if (branch && lead) return { lead, branch }
 
-  // Create lead — minimal fields. NEVER fall back to name=phone: the AI's
-  // contactContext now treats name=phone as "no name" so the bot will ask for
-  // it, but storing the placeholder also pollutes the leads list UI ("contacts"
-  // become a wall of phone numbers). leads.name is NOT NULL → use '' (UI shows
-  // '—' fallback) and let the AI fill in the real name on the first turn.
+  // Pure branch hit, no lead = coordinator-only. No lead row needed (migration
+  // 041 made chat_conversations.contact_id nullable; conv anchors on branch_id).
+  if (branch && !lead) return { branch }
+
+  // Real customer — create lead if not found.
+  if (lead) return { lead }
+
+  // Brand-new lead. NEVER fall back to name=phone: the AI's contactContext
+  // treats name=phone as "no name" so the bot will ask for it, but storing
+  // the placeholder also pollutes the leads list UI. leads.name is NOT NULL
+  // → use '' (UI shows '—' fallback). AI fills the real name on turn 1.
   const cleanName = (name || '').trim()
   const finalName = cleanName && cleanName !== normalizedPhone && cleanName !== normalizedPhone.replace(/^\+/, '')
     ? cleanName : ''
@@ -89,64 +136,48 @@ async function findOrCreateLead(supabase, userId, phone, name) {
       lead_channel: 'whatsapp',
       status: 'new',
     })
-    .select('id, name, phone, email')
+    .select('id, name, phone, email, metadata')
     .single()
   if (error) throw error
-  return created
+  return { lead: created }
 }
 
 /**
- * Trouve une conversation native ouverte/pending pour un lead+inbox,
- * ou en cree une nouvelle.
+ * Trouve une conversation native pour un (lead | branch) + inbox, ou en cree une.
  *
- * Si le lead est un branch lead (metadata.is_branch=true), la nouvelle
- * conversation est creee avec ai_disabled=true + metadata.is_dispatch=true.
- * Sans ca, un coordinateur de branche qui ecrit inbound (avant qu'un dispatch
- * vers lui ait deja cree la conv) declenche Shira -> spam d'un humain non-client.
+ * Anchor model post-migration 041: a conversation has either contact_id (real
+ * customer) or branch_id (coordinator) or both (hybrid customer + coordinator).
+ * The branch_id arg, if set, both indexes the conv lookup AND triggers the
+ * ai_disabled / is_dispatch flags so the bot stays out of coordinator threads.
  */
-async function findOrCreateConversation(supabase, userId, inboxId, leadId) {
-  const { data: existing } = await supabase
+async function findOrCreateConversation(supabase, userId, inboxId, { leadId = null, branchId = null }) {
+  if (!leadId && !branchId) throw new Error('findOrCreateConversation requires leadId or branchId')
+
+  // Lookup: prefer matching by branchId when present (coordinator dispatch
+  // thread is per-branch, regardless of which lead is also linked); fall back
+  // to leadId for pure customer threads.
+  let lookup = supabase
     .from('chat_conversations')
     .select('id, status')
     .eq('user_id', userId)
     .eq('inbox_id', inboxId)
-    .eq('contact_id', leadId)
-    .in('status', ['open', 'pending'])
     .order('created_at', { ascending: false })
     .limit(1)
-    .maybeSingle()
-
+  lookup = branchId ? lookup.eq('branch_id', branchId) : lookup.eq('contact_id', leadId)
+  const { data: existing } = await lookup.maybeSingle()
   if (existing) return existing
-
-  // Inspect the lead to see if it's a branch coordinator — if so, mute the AI
-  // on the brand-new conversation. Cheap (single-row by id) and fail-open if
-  // the lookup errors (creation still proceeds with default flags).
-  let isBranchLead = false
-  let branchIdForMeta = null
-  try {
-    const { data: lead } = await supabase
-      .from('leads')
-      .select('metadata')
-      .eq('id', leadId)
-      .maybeSingle()
-    if (lead?.metadata?.is_branch) {
-      isBranchLead = true
-      branchIdForMeta = lead.metadata?.branch_id || null
-    }
-  } catch (err) {
-    console.error('[native-unipile] branch-lead probe failed:', err.message)
-  }
 
   const insert = {
     user_id: userId,
     inbox_id: inboxId,
     contact_id: leadId,
+    branch_id: branchId,
     channel: 'whatsapp_unipile',
     status: 'open',
   }
-  if (isBranchLead) {
+  if (branchId) {
     insert.ai_disabled = true
-    insert.metadata = { is_dispatch: true, branch_id: branchIdForMeta }
+    insert.metadata = { is_dispatch: true, branch_id: branchId }
   }
 
   const { data: created, error } = await supabase
@@ -252,11 +283,20 @@ export async function handleUnipileNativeInbound({
     }
   }
 
-  // 1. Lead = contact
-  const lead = await findOrCreateLead(supabase, inbox.user_id, senderPhone, senderName)
+  // 1. Resolve sender → lead (real customer) or branch (coordinator) or both.
+  // resolveContact handles all three cases including the hybrid Aaron-style
+  // case where one phone is both a real customer and a registered coordinator.
+  const resolved = await resolveContact(supabase, inbox.user_id, senderPhone, senderName)
+  const lead = resolved.lead || null
+  const branch = resolved.branch || null
 
-  // 2. Conversation
-  const conv = await findOrCreateConversation(supabase, inbox.user_id, inbox.id, lead.id)
+  // 2. Conversation — branch_id wins as the routing key when set (so a
+  // coordinator's reply lands on the dispatch thread, not on a customer thread
+  // for the same person).
+  const conv = await findOrCreateConversation(supabase, inbox.user_id, inbox.id, {
+    leadId: branch ? null : lead?.id, // pure-branch conv has no contact_id
+    branchId: branch?.id || null,
+  })
 
   // 3. Attachments (download + upload to Supabase Storage)
   const persistedAttachments = []
@@ -310,14 +350,17 @@ export async function handleUnipileNativeInbound({
       : 'file'
   }
 
-  // 7. INSERT chat_messages (sender_type='contact')
+  // 7. INSERT chat_messages (sender_type='contact'). For coordinator replies
+  // on a pure-branch conv, contact_id is null and branch_id carries the anchor.
+  // The chk_sender_ref CHECK (post-migration 041) accepts either.
   const { data: msg, error: msgErr } = await supabase
     .from('chat_messages')
     .insert({
       conversation_id: conv.id,
       user_id: inbox.user_id,
       sender_type: 'contact',
-      contact_id: lead.id,
+      contact_id: branch ? null : lead?.id || null,
+      branch_id: branch?.id || null,
       content_type: contentType,
       content: finalContent,
       attachments: persistedAttachments,

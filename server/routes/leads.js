@@ -344,6 +344,58 @@ router.get('/leads/:id/activities', checkRole('admin', 'marketeur', 'branch'), a
   }
 })
 
+// GET /api/leads/:id/chat-sessions — chat conversations + their messages for a lead
+router.get('/leads/:id/chat-sessions', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
+  try {
+    if (!await canAccessLead(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+
+    const { data: conversations, error: convErr } = await req.supabaseAdmin
+      .from('chat_conversations')
+      .select(`
+        id, channel, status, ai_disabled, created_at, last_message_at,
+        chat_inboxes (id, name, channel_type)
+      `)
+      .eq('contact_id', req.params.id)
+      .order('created_at', { ascending: true })
+
+    if (convErr) throw convErr
+
+    const convIds = (conversations || []).map(c => c.id)
+    if (convIds.length === 0) return res.json({ sessions: [] })
+
+    const { data: messages, error: msgErr } = await req.supabaseAdmin
+      .from('chat_messages')
+      .select('id, conversation_id, sender_type, content, content_type, attachments, is_private, created_at')
+      .in('conversation_id', convIds)
+      .eq('is_private', false)
+      .order('created_at', { ascending: true })
+
+    if (msgErr) throw msgErr
+
+    const byConv = {}
+    for (const m of messages || []) {
+      if (!byConv[m.conversation_id]) byConv[m.conversation_id] = []
+      byConv[m.conversation_id].push(m)
+    }
+
+    const sessions = (conversations || []).map(c => ({
+      id: c.id,
+      channel: c.channel,
+      status: c.status,
+      ai_disabled: c.ai_disabled,
+      created_at: c.created_at,
+      last_message_at: c.last_message_at,
+      inbox: c.chat_inboxes || null,
+      messages: byConv[c.id] || [],
+    }))
+
+    res.json({ sessions })
+  } catch (err) {
+    console.error('[lead-chat-sessions]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
 // POST /api/leads — UPSERT: merge by normalized phone + user_id
 router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
@@ -745,50 +797,19 @@ async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPh
       .maybeSingle()
     if (!inbox) return null
 
-    // Le lead virtuel representant la branche (idempotent par phone). On passe par
-    // normalizePhone (digits-only puis re-prefix) pour absorber espaces/tirets cote
-    // branches.whatsapp_phone — sinon "+972 50-858-8168" ne matchera jamais le
-    // "+972508588168" qu'Unipile renverra dans le webhook reply.
-    const normalizedPhone = normalizePhone(branchPhone) || (branchPhone.startsWith('+') ? branchPhone : `+${branchPhone}`)
-    let { data: branchLead } = await supabase
-      .from('leads')
-      .select('id, metadata')
-      .eq('user_id', userId)
-      .eq('phone', normalizedPhone)
-      .limit(1)
-      .maybeSingle()
-    if (!branchLead) {
-      const r = await supabase
-        .from('leads')
-        .insert({
-          user_id: userId,
-          name: branchName || normalizedPhone,
-          phone: normalizedPhone,
-          source: 'dispatch',
-          lead_channel: 'whatsapp',
-          status: 'new',
-          metadata: { is_branch: true, branch_id: branchId },
-        })
-        .select('id, metadata')
-        .single()
-      if (r.error) throw r.error
-      branchLead = r.data
-    } else if (!branchLead.metadata?.is_branch) {
-      // Tag the existing lead so the UI can filter
-      await supabase
-        .from('leads')
-        .update({ metadata: { ...(branchLead.metadata || {}), is_branch: true, branch_id: branchId } })
-        .eq('id', branchLead.id)
-    }
+    // Branches are first-class chat contacts (cf. migration 041) — no more
+    // stub leads tagged metadata.is_branch=true. The conversation is anchored
+    // by branch_id directly. The earlier path maintained a leads row purely to
+    // satisfy chat_conversations.contact_id NOT NULL FK; that's gone.
 
-    // Find or create conversation
+    // Find existing conversation for this branch on this inbox (any status —
+    // un thread continu par branche).
     let { data: conv } = await supabase
       .from('chat_conversations')
       .select('id')
       .eq('user_id', inbox.user_id)
       .eq('inbox_id', inbox.id)
-      .eq('contact_id', branchLead.id)
-      .in('status', ['open', 'pending'])
+      .eq('branch_id', branchId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -798,7 +819,8 @@ async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPh
         .insert({
           user_id: inbox.user_id,
           inbox_id: inbox.id,
-          contact_id: branchLead.id,
+          contact_id: null,
+          branch_id: branchId,
           channel: 'whatsapp_unipile',
           status: 'open',
           // ai_disabled=true: la conversation dispatch sert a tracker les replies
