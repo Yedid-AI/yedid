@@ -22,10 +22,11 @@ import { useDateRange } from '../hooks/use-date-range'
 import { fr as frLocale } from 'date-fns/locale/fr'
 import { enUS } from 'date-fns/locale/en-US'
 import { he as heLocale } from 'date-fns/locale/he'
-import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Clock, Timer, RefreshCw, Loader2, UserCheck, MessageCircle, Bot, CheckCircle, Send, XCircle, SkipForward, Activity, AlertTriangle, Building2, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Phone, PhoneIncoming, PhoneOutgoing, PhoneMissed, Search, CalendarDays, ChevronLeft, ChevronRight, X, Play, Clock, Timer, RefreshCw, Loader2, UserCheck, MessageCircle, Bot, CheckCircle, Send, XCircle, SkipForward, Activity, AlertTriangle, Building2, Plus, Pencil, Trash2, Sparkles } from 'lucide-react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useNavigate } from 'react-router-dom'
 import { RecordingPlayer } from '@/components/RecordingPlayer'
+import { api } from '@/lib/api'
 
 const calendarLocales = { fr: frLocale, en: enUS, he: heLocale }
 
@@ -968,6 +969,19 @@ function CallDetailPanel({ call, onClose, t }) {
   const { data: metadata, isLoading: loadingMeta } = useCallMetadata(uuid)
   const sc = getCallStatusConfig(call.call_status)
 
+  // Audio pipeline manual trigger state
+  const [audioState, setAudioState] = useState({ status: 'idle', result: null, error: null })
+  const alreadyProcessed = !!call.audio_processed_at
+  async function runAudioPipeline(force = false) {
+    setAudioState({ status: 'loading', result: null, error: null })
+    try {
+      const result = await api.post(`/calls/${call.id}/process-audio`, { force })
+      setAudioState({ status: 'done', result, error: null })
+    } catch (err) {
+      setAudioState({ status: 'error', result: null, error: err.message || 'Erreur' })
+    }
+  }
+
   // Build a flat list of all fields from the call data
   const allFields = Object.entries(call).filter(([key]) =>
     !['id'].includes(key)
@@ -1005,6 +1019,70 @@ function CallDetailPanel({ call, onClose, t }) {
             <CardContent className="pt-3 pb-3">
               <div className="text-xs text-muted-foreground mb-2">{t('calls.recording')}</div>
               <RecordingPlayer uuid={uuid} t={t} />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Audio pipeline — manual trigger */}
+        {uuid && call.call_status?.toUpperCase().includes('ANSWER') && (
+          <Card>
+            <CardContent className="pt-3 pb-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-muted-foreground">Pipeline audio (transcription + IA)</div>
+                {alreadyProcessed && (
+                  <Badge variant="outline" className="text-[10px]">déjà traité</Badge>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => runAudioPipeline(alreadyProcessed)}
+                disabled={audioState.status === 'loading'}
+                className="w-full gap-2"
+              >
+                {audioState.status === 'loading'
+                  ? <><Loader2 size={14} className="animate-spin" /> Traitement…</>
+                  : <><Sparkles size={14} /> {alreadyProcessed ? 'Re-traiter cet appel' : 'Lancer le pipeline'}</>
+                }
+              </Button>
+              {audioState.status === 'error' && (
+                <div className="text-xs text-red-600 dark:text-red-400 mt-1">{audioState.error}</div>
+              )}
+              {audioState.status === 'done' && audioState.result && (
+                <div className="space-y-2 pt-2 border-t mt-2">
+                  {audioState.result.analysis && (
+                    <>
+                      <div className="text-[11px] text-muted-foreground uppercase tracking-wider">Analyse</div>
+                      <div className="text-xs grid grid-cols-2 gap-x-3 gap-y-1">
+                        <span className="text-muted-foreground">Pertinent</span>
+                        <span>{audioState.result.analysis.is_relevant ? 'oui' : 'non'}</span>
+                        {audioState.result.analysis.name && (<><span className="text-muted-foreground">Nom</span><span>{audioState.result.analysis.name}</span></>)}
+                        {audioState.result.analysis.city && (<><span className="text-muted-foreground">Ville</span><span>{audioState.result.analysis.city}</span></>)}
+                        {audioState.result.analysis.service_requested && (<><span className="text-muted-foreground">Service</span><span>{audioState.result.analysis.service_requested}</span></>)}
+                        {audioState.result.analysis.confidence && (<><span className="text-muted-foreground">Confiance</span><span>{audioState.result.analysis.confidence}</span></>)}
+                      </div>
+                      {audioState.result.analysis.summary && (
+                        <div className="text-xs italic text-muted-foreground border-l-2 pl-2">
+                          {audioState.result.analysis.summary}
+                        </div>
+                      )}
+                      {audioState.result.lead_id && (
+                        <div className="text-xs text-emerald-600 dark:text-emerald-400">
+                          ✓ Lead créé/enrichi (id {audioState.result.lead_id})
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {audioState.result.transcript && (
+                    <details className="text-xs">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">Voir le transcript</summary>
+                      <div className="mt-2 p-2 bg-muted rounded text-[11px] whitespace-pre-wrap" dir="auto">
+                        {audioState.result.transcript}
+                      </div>
+                    </details>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
