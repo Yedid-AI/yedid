@@ -99,22 +99,50 @@ export async function sendNativeMessage({
  * @param {object} msg     - row chat_messages (avec metadata.tts_voice si TTS demande)
  */
 async function relayToChannel(supabase, conv, msg, content) {
+  // Helper: toujours set delivery_status pour eviter les "en attente" fantomes
+  // dans l'UI. Avant ce fix, plusieurs early-return laissaient delivery_status=NULL
+  // indefiniment (1 cas observe en prod sur 7j).
+  const markDelivery = (status, extraMeta = {}) =>
+    supabase
+      .from('chat_messages')
+      .update({
+        delivery_status: status,
+        metadata: { ...(msg.metadata || {}), ...extraMeta },
+      })
+      .eq('id', msg.id)
+
   const inbox = conv.chat_inboxes
-  if (!inbox) return
+  if (!inbox) {
+    await markDelivery('failed', { relay_error: 'no_inbox' })
+    return
+  }
+
+  // Channels in-DB-only: pas de relais externe, le message est deja "delivered"
+  // des qu'il existe dans chat_messages. On marque 'sent' pour fermer le cycle.
+  if (inbox.channel_type === 'website' || inbox.channel_type === 'api') {
+    await markDelivery('sent', { relay_skip_reason: 'in_db_channel' })
+    return
+  }
 
   const { data: lead } = await supabase
     .from('leads')
     .select('phone, email')
     .eq('id', conv.contact_id)
     .single()
-  if (!lead) return
+  if (!lead) {
+    await markDelivery('failed', { relay_error: 'lead_not_found' })
+    return
+  }
 
   let delivered = false
   try {
     if (inbox.channel_type === 'whatsapp_unipile') {
       const accountId = inbox.unipile_account_id
       const phone = lead.phone
-      if (!accountId || !phone) return
+      if (!accountId || !phone) {
+        await markDelivery('failed', { relay_error: !accountId ? 'inbox_no_unipile_account' : 'lead_no_phone' })
+        return
+      }
 
       // (a) TTS: si metadata.tts_voice (bot reply en mode vocal)
       if (msg.metadata?.tts_voice && content) {
@@ -158,27 +186,27 @@ async function relayToChannel(supabase, conv, msg, content) {
       else if (content) {
         await unipileSendMessage(accountId, phone, content)
         delivered = true
+      } else {
+        // Pas de content, pas d'attachments, pas de TTS — rien a relayer
+        await markDelivery('failed', { relay_error: 'empty_outbound_message' })
+        return
       }
+    } else {
+      // Channel non encore supporte (whatsapp_business_manual, gmail) — ne pas
+      // laisser le message en limbo
+      await markDelivery('failed', { relay_error: `unsupported_channel:${inbox.channel_type}` })
+      return
     }
-    // TODO: whatsapp_business_manual (Meta Cloud API)
-    // TODO: gmail
-    // 'website' et 'api' n'ont pas de relais externe (live in DB)
   } catch (err) {
-    await supabase
-      .from('chat_messages')
-      .update({
-        delivery_status: 'failed',
-        metadata: { ...(msg.metadata || {}), relay_error: err.message },
-      })
-      .eq('id', msg.id)
+    await markDelivery('failed', { relay_error: err.message })
     throw err
   }
 
   if (delivered) {
-    await supabase
-      .from('chat_messages')
-      .update({ delivery_status: 'sent' })
-      .eq('id', msg.id)
+    await markDelivery('sent')
+  } else {
+    // Aucune branche n'a tire (cas theorique mais defensive)
+    await markDelivery('failed', { relay_error: 'no_relay_branch_matched' })
   }
 }
 

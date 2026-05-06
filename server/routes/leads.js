@@ -745,8 +745,11 @@ async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPh
       .maybeSingle()
     if (!inbox) return null
 
-    // Le lead virtuel representant la branche (idempotent par phone)
-    const normalizedPhone = branchPhone.startsWith('+') ? branchPhone : `+${branchPhone.replace(/^\+?/, '')}`
+    // Le lead virtuel representant la branche (idempotent par phone). On passe par
+    // normalizePhone (digits-only puis re-prefix) pour absorber espaces/tirets cote
+    // branches.whatsapp_phone — sinon "+972 50-858-8168" ne matchera jamais le
+    // "+972508588168" qu'Unipile renverra dans le webhook reply.
+    const normalizedPhone = normalizePhone(branchPhone) || (branchPhone.startsWith('+') ? branchPhone : `+${branchPhone}`)
     let { data: branchLead } = await supabase
       .from('leads')
       .select('id, metadata')
@@ -798,6 +801,11 @@ async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPh
           contact_id: branchLead.id,
           channel: 'whatsapp_unipile',
           status: 'open',
+          // ai_disabled=true: la conversation dispatch sert a tracker les replies
+          // du coordinateur de branche, pas a discuter avec lui. Sans ce flag,
+          // handleNativeMessage va lancer Shira sur le coordinateur des qu'il
+          // repond (ex: "OK on l'a appele") -> spam d'un humain non-client.
+          ai_disabled: true,
           subject: `Dispatch ${branchName}`,
           metadata: { is_dispatch: true, branch_id: branchId },
         })

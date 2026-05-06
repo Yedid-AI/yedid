@@ -217,6 +217,49 @@ export async function runClosingCycle(supabase) {
   if (closedCount > 0) {
     console.log(`[Closing] Cycle complete — closed ${closedCount} sessions`)
   }
+
+  // Native chat_conversations: marquer 'resolved' celles inactives depuis N
+  // heures. Sans ca, /chat accumule indefiniment des conversations open vides
+  // (5 cas observes en 7j de prod). Le trigger on_chat_new_message rouvre
+  // automatiquement si le contact reecrit, donc resolve est non-destructif.
+  await resolveStaleChatConversations(supabase)
+}
+
+async function resolveStaleChatConversations(supabase) {
+  const hoursStr = getSetting('NATIVE_CHAT_RESOLVE_HOURS')
+  const hours = parseInt(hoursStr) || 72
+  if (hours <= 0) return // 0/negatif desactive le cleanup
+
+  const cutoff = new Date(Date.now() - hours * 3600 * 1000).toISOString()
+
+  // On utilise last_message_at; pour les conversations sans aucun message
+  // (created mais jamais ecrite), on tombe sur created_at via le OR ci-dessous.
+  // Limite a 200 par cycle pour ne pas ecraser un backlog en un coup.
+  const { data: stale, error } = await supabase
+    .from('chat_conversations')
+    .select('id, last_message_at, created_at')
+    .in('status', ['open', 'pending'])
+    .or(`last_message_at.lt.${cutoff},and(last_message_at.is.null,created_at.lt.${cutoff})`)
+    .limit(200)
+  if (error) {
+    console.error('[Closing/Native] Stale query error:', error.message)
+    return
+  }
+  if (!stale?.length) return
+
+  const ids = stale.map(c => c.id)
+  const { error: updErr } = await supabase
+    .from('chat_conversations')
+    .update({
+      status: 'resolved',
+      resolved_at: new Date().toISOString(),
+    })
+    .in('id', ids)
+  if (updErr) {
+    console.error('[Closing/Native] Stale update error:', updErr.message)
+    return
+  }
+  console.log(`[Closing/Native] Resolved ${ids.length} stale conversations (>${hours}h inactives)`)
 }
 
 /**

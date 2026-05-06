@@ -6,22 +6,77 @@ import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } 
  * context = { supabase, userId }
  */
 
+// Hardcoded enterprise → user_id map. The DB lookup we used to do at every save
+// is fine for cold paths (closing-cron) but here we hit saveLead from inside the
+// chat hot path — caching is overkill and a 2-row map is unambiguous.
+// If you add a new enterprise, update this and `resolveEnterpriseUserId`.
+const ENTERPRISE_USER_IDS = { babait: 2, aviezer: 3 }
+function resolveEnterpriseUserId(company) {
+  return ENTERPRISE_USER_IDS[company] || null
+}
+
 /**
  * Log bot conversation transcript as a lead activity.
+ *
+ * Two sources, mutually exclusive:
+ *  - sessionId: legacy Chatwoot path → reads conversation_messages.
+ *  - conversationId: native chat path → reads chat_messages.
+ *
+ * Idempotent within ~1h: if a recent transcript activity exists for the same
+ * source on this lead, we update it instead of inserting a duplicate. This
+ * matters because the escalation flow now logs a transcript on every escalation
+ * turn; without dedup the lead timeline would balloon with near-identical entries.
  */
-async function logBotTranscript(supabase, leadId, userId, sessionId) {
-  if (!sessionId) return
+export async function logBotTranscript(supabase, leadId, userId, { sessionId = null, conversationId = null } = {}) {
+  if (!leadId || (!sessionId && !conversationId)) return
   try {
-    const { data: msgs } = await supabase
-      .from('conversation_messages')
-      .select('role, content, created_at')
-      .eq('session_id', sessionId)
-      .order('created_at', { ascending: true })
+    let msgs = null
+    if (sessionId) {
+      const { data } = await supabase
+        .from('conversation_messages')
+        .select('role, content, created_at')
+        .eq('session_id', sessionId)
+        .order('created_at', { ascending: true })
+      msgs = (data || []).map(m => ({ role: m.role, content: m.content }))
+    } else {
+      const { data } = await supabase
+        .from('chat_messages')
+        .select('sender_type, content, is_private, created_at')
+        .eq('conversation_id', conversationId)
+        .eq('is_private', false)
+        .order('created_at', { ascending: true })
+      msgs = (data || []).map(m => ({ role: m.sender_type === 'contact' ? 'user' : 'assistant', content: m.content || '' }))
+    }
     if (!msgs?.length) return
     const transcript = msgs.map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content}`).join('\n')
+
+    // Find a recent transcript activity for the same source to update in place.
+    const oneHourAgo = new Date(Date.now() - 3600 * 1000).toISOString()
+    const sourceKey = sessionId ? 'session_id' : 'conversation_id'
+    const sourceVal = sessionId || conversationId
+    const { data: recent } = await supabase
+      .from('lead_activities')
+      .select('id, metadata')
+      .eq('lead_id', leadId)
+      .eq('action', 'bot_transcript')
+      .gte('created_at', oneHourAgo)
+      .order('created_at', { ascending: false })
+      .limit(5)
+    const match = (recent || []).find(a => a.metadata?.[sourceKey] === sourceVal)
+    if (match) {
+      await supabase.from('lead_activities')
+        .update({ metadata: { ...match.metadata, message_count: msgs.length, transcript } })
+        .eq('id', match.id)
+      return
+    }
+
     await supabase.from('lead_activities').insert({
       lead_id: leadId, user_id: userId, action: 'bot_transcript',
-      metadata: { session_id: sessionId, message_count: msgs.length, transcript },
+      metadata: {
+        ...(sessionId ? { session_id: sessionId } : {}),
+        ...(conversationId ? { conversation_id: conversationId } : {}),
+        message_count: msgs.length, transcript,
+      },
       actor: 'chatbot',
     })
   } catch (e) {
@@ -37,7 +92,7 @@ async function logBotTranscript(supabase, leadId, userId, sessionId) {
  * structured form with an `instruction` field that tells the LLM exactly what to do
  * next so it cannot rationalize past the failure.
  */
-export async function saveLead(params, { supabase, userId, sessionId, enterpriseUserId }) {
+export async function saveLead(params, { supabase, userId, sessionId, conversationId, enterpriseUserId }) {
   const body = params?.body || params || {}
 
   const fail = (error, instruction, missing) => JSON.stringify({
@@ -98,10 +153,12 @@ export async function saveLead(params, { supabase, userId, sessionId, enterprise
   // Branches and city_branch_index are owned by the enterprise tenant
   // (babait=user_id 2, aviezer=user_id 3), not the inbox owner (admin=1).
   // Fall back to the inbox userId so legacy single-tenant setups still resolve.
-  const branchUserId = enterpriseUserId || userId
+  const branchUserId = enterpriseUserId || resolveEnterpriseUserId(company) || userId
   let branch = body.branch || resolveFixedBranch(serviceNorm) || null
   let branchId = null
-  if (!branch && body.city && company === 'babait') {
+  // city → branch_id via index (works for any company that has entries — aviezer
+  // currently has zero, but as soon as someone seeds them the lookup will fire).
+  if (!branch && body.city) {
     const { data: idx } = await supabase
       .from('city_branch_index')
       .select('branch_id, branches(name)')
@@ -112,8 +169,26 @@ export async function saveLead(params, { supabase, userId, sessionId, enterprise
       branchId = idx[0].branch_id
       branch = idx[0].branches?.name || branch
     }
-  } else if (branch) {
-    // If branch was supplied as text, resolve to id for FK linkage
+  }
+  if (!branch && branchId === null) {
+    // Aviezer single-branch fallback: enterprise has exactly one active branch
+    // ("elyahou") and zero city_branch_index entries — without this, every
+    // foreign-worker lead lands branch=NULL and dispatch can't route.
+    if (company === 'aviezer') {
+      const { data: only } = await supabase
+        .from('branches')
+        .select('id, name')
+        .eq('user_id', branchUserId)
+        .eq('is_active', true)
+        .order('id')
+      if (only?.length === 1) {
+        branchId = only[0].id
+        branch = only[0].name
+      }
+    }
+  }
+  if (branch && !branchId) {
+    // If branch was supplied as text (or resolved by name above), resolve to id for FK linkage
     const { data: br } = await supabase
       .from('branches')
       .select('id')
@@ -136,9 +211,17 @@ export async function saveLead(params, { supabase, userId, sessionId, enterprise
     // Enrich existing lead — only update fields that are newly provided and currently empty
     const lead = existing[0]
     const updates = { updated_at: new Date().toISOString() }
-    if (name && !lead.name) updates.name = name
+    // Stub leads created by followup-cron / native-unipile pre-fix could have
+    // name=phone or name=''. Treat those as empty so the new real name lands.
+    const existingNameLooksStubby = !lead.name
+      || lead.name.trim() === ''
+      || normalizePhone(lead.name) === lead.phone
+      || /^\+?\d[\d\s\-]{5,}$/.test(lead.name)
+    if (name && existingNameLooksStubby) updates.name = name
     if (body.email) updates.email = body.email
-    if (body.city && !lead.city) updates.city = body.city
+    // Treat empty-string city as missing (admin sometimes saves city='' instead of null).
+    const existingCityEmpty = !lead.city || lead.city.trim() === ''
+    if (body.city && existingCityEmpty) updates.city = body.city
     if (branch && !lead.branch) updates.branch = branch
     if (branchId && !lead.branch_id) updates.branch_id = branchId
     if (body.service_requested && !lead.service_requested) updates.service_requested = normalizeService(body.service_requested)
@@ -182,7 +265,7 @@ export async function saveLead(params, { supabase, userId, sessionId, enterprise
     }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
 
     // Log bot conversation transcript
-    logBotTranscript(supabase, data.id, userId, sessionId)
+    logBotTranscript(supabase, data.id, userId, { sessionId, conversationId })
 
     return JSON.stringify({ success: true, lead_id: data.id, updated: true, message: `Lead enriched: ${data.name} (${data.phone})` })
   }
@@ -234,7 +317,7 @@ export async function saveLead(params, { supabase, userId, sessionId, enterprise
   }).then(() => {}).catch(e => console.error('[lead-activity]', e.message))
 
   // Log bot conversation transcript
-  logBotTranscript(supabase, data.id, userId, sessionId)
+  logBotTranscript(supabase, data.id, userId, { sessionId, conversationId })
 
   return JSON.stringify({ success: true, lead_id: data.id, message: `Lead saved: ${data.name} (${data.phone})` })
 }

@@ -71,12 +71,19 @@ async function findOrCreateLead(supabase, userId, phone, name) {
 
   if (lead) return lead
 
-  // Create lead — minimal fields
+  // Create lead — minimal fields. NEVER fall back to name=phone: the AI's
+  // contactContext now treats name=phone as "no name" so the bot will ask for
+  // it, but storing the placeholder also pollutes the leads list UI ("contacts"
+  // become a wall of phone numbers). leads.name is NOT NULL → use '' (UI shows
+  // '—' fallback) and let the AI fill in the real name on the first turn.
+  const cleanName = (name || '').trim()
+  const finalName = cleanName && cleanName !== normalizedPhone && cleanName !== normalizedPhone.replace(/^\+/, '')
+    ? cleanName : ''
   const { data: created, error } = await supabase
     .from('leads')
     .insert({
       user_id: userId,
-      name: name || normalizedPhone,
+      name: finalName,
       phone: normalizedPhone,
       source: 'whatsapp_native',
       lead_channel: 'whatsapp',
@@ -91,6 +98,11 @@ async function findOrCreateLead(supabase, userId, phone, name) {
 /**
  * Trouve une conversation native ouverte/pending pour un lead+inbox,
  * ou en cree une nouvelle.
+ *
+ * Si le lead est un branch lead (metadata.is_branch=true), la nouvelle
+ * conversation est creee avec ai_disabled=true + metadata.is_dispatch=true.
+ * Sans ca, un coordinateur de branche qui ecrit inbound (avant qu'un dispatch
+ * vers lui ait deja cree la conv) declenche Shira -> spam d'un humain non-client.
  */
 async function findOrCreateConversation(supabase, userId, inboxId, leadId) {
   const { data: existing } = await supabase
@@ -106,15 +118,40 @@ async function findOrCreateConversation(supabase, userId, inboxId, leadId) {
 
   if (existing) return existing
 
+  // Inspect the lead to see if it's a branch coordinator — if so, mute the AI
+  // on the brand-new conversation. Cheap (single-row by id) and fail-open if
+  // the lookup errors (creation still proceeds with default flags).
+  let isBranchLead = false
+  let branchIdForMeta = null
+  try {
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('metadata')
+      .eq('id', leadId)
+      .maybeSingle()
+    if (lead?.metadata?.is_branch) {
+      isBranchLead = true
+      branchIdForMeta = lead.metadata?.branch_id || null
+    }
+  } catch (err) {
+    console.error('[native-unipile] branch-lead probe failed:', err.message)
+  }
+
+  const insert = {
+    user_id: userId,
+    inbox_id: inboxId,
+    contact_id: leadId,
+    channel: 'whatsapp_unipile',
+    status: 'open',
+  }
+  if (isBranchLead) {
+    insert.ai_disabled = true
+    insert.metadata = { is_dispatch: true, branch_id: branchIdForMeta }
+  }
+
   const { data: created, error } = await supabase
     .from('chat_conversations')
-    .insert({
-      user_id: userId,
-      inbox_id: inboxId,
-      contact_id: leadId,
-      channel: 'whatsapp_unipile',
-      status: 'open',
-    })
+    .insert(insert)
     .select('id, status')
     .single()
   if (error) throw error
@@ -252,7 +289,19 @@ export async function handleUnipileNativeInbound({
     }
   }
 
-  // 5. Determine content_type for the message row
+  // 5. Skip insert if everything ended up empty (eg Unipile event with attachments
+  // qui ont tous echoue au download + pas de transcription audio). Le guard initial
+  // (l.188) ne couvre que le cas content+attachments tous deux absents AVANT le
+  // download — si attachments etait non vide mais persistAttachment a renvoye null
+  // pour chacun, on aurait insere un message contact totalement vide. Resultat
+  // observe: handleNativeMessage skip car userMessage vide -> faux "lead bloque
+  // sans reponse" dans l'UI.
+  if (!finalContent && persistedAttachments.length === 0 && !transcribed) {
+    console.log(`[native-unipile] Empty after attachment processing (ext=${externalId}) — skipping insert`)
+    return
+  }
+
+  // 6. Determine content_type for the message row
   let contentType = 'text'
   if (persistedAttachments.length > 0) {
     contentType = persistedAttachments[0].type === 'audio' ? 'audio'
@@ -261,7 +310,7 @@ export async function handleUnipileNativeInbound({
       : 'file'
   }
 
-  // 6. INSERT chat_messages (sender_type='contact')
+  // 7. INSERT chat_messages (sender_type='contact')
   const { data: msg, error: msgErr } = await supabase
     .from('chat_messages')
     .insert({
@@ -288,7 +337,7 @@ export async function handleUnipileNativeInbound({
 
   console.log(`[native-unipile] Inserted message ${msg.id} on conv ${conv.id}`)
 
-  // 7. Trigger AI (handleNativeMessage)
+  // 8. Trigger AI (handleNativeMessage)
   handleNativeMessage(supabase, conv.id, msg.id).catch(err => {
     console.error('[native-unipile] handleNativeMessage error:', err.message)
   })
