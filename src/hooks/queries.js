@@ -624,6 +624,20 @@ export function useLeads(filters) {
   })
 }
 
+export function useLeadsStats(filters) {
+  return useQuery({
+    queryKey: queryKeys.leadsStats(filters),
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (filters?.date_from) params.set('date_from', filters.date_from)
+      if (filters?.date_to) params.set('date_to', filters.date_to)
+      const qs = params.toString()
+      return api.get(`/leads/stats${qs ? '?' + qs : ''}`)
+    },
+    staleTime: 30_000,
+  })
+}
+
 export function useLead(id) {
   return useQuery({
     queryKey: queryKeys.lead(id),
@@ -648,6 +662,16 @@ export function useLeadActivities(leadId) {
     queryKey: ['leads', 'activities', leadId],
     queryFn: () => api.get(`/leads/${leadId}/activities`),
     select: (data) => data.activities,
+    enabled: !!leadId,
+    staleTime: 30_000,
+  })
+}
+
+export function useLeadChatSessions(leadId) {
+  return useQuery({
+    queryKey: ['leads', 'chat-sessions', leadId],
+    queryFn: () => api.get(`/leads/${leadId}/chat-sessions`),
+    select: (data) => data.sessions,
     enabled: !!leadId,
     staleTime: 30_000,
   })

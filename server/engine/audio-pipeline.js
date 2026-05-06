@@ -146,6 +146,91 @@ export async function processAudioPipeline(supabase) {
   }
 }
 
+/**
+ * Manually trigger the audio pipeline on a single call. Used by the UI
+ * button and the test scripts. Bypasses the eligibility filters (duration,
+ * source match, lead-existence, age) — the operator decides.
+ *
+ * @param {Object} supabase
+ * @param {number} callId
+ * @param {Object} [options]
+ * @param {boolean} [options.force] - re-process even if already processed
+ * @param {number} [options.fallbackUserId] - tenant to attribute the lead
+ *   to when no followup_config source matches the call
+ * @returns {Promise<{ transcript: string, analysis: Object, lead_id: number|null }>}
+ */
+export async function runPipelineOnCall(supabase, callId, options = {}) {
+  const { data: call, error } = await supabase
+    .from('calls')
+    .select('id, cdr_uniqueid, cdr_ani, cdr_ddi, user_name, start_call, call_duration, audio_processed_at')
+    .eq('id', callId)
+    .maybeSingle()
+
+  if (error) throw new Error(`call lookup failed: ${error.message}`)
+  if (!call) throw new Error(`call ${callId} not found`)
+  if (call.audio_processed_at && !options.force) {
+    throw new Error('call already processed (pass force=true to re-run)')
+  }
+
+  const phone = normalizePhone(call.cdr_ani)
+  if (!phone) throw new Error('call has no caller phone (cdr_ani)')
+
+  // Resolve which tenant should own the lead. Try matching the call's source
+  // against an active followup_config first; fall back to options.fallbackUserId.
+  let resolvedConfig = null
+  const { data: configs } = await supabase
+    .from('followup_config')
+    .select('user_id, org_id, sources')
+    .eq('is_active', true)
+
+  for (const cfg of configs || []) {
+    let lines = []
+    if (cfg.org_id) {
+      const { data: orgLines } = await supabase
+        .from('maskyoo_lines')
+        .select('user_name, cdr_ddi')
+        .eq('org_id', cfg.org_id)
+      lines = orgLines || []
+    } else if (cfg.sources?.length) {
+      lines = cfg.sources
+    }
+    if (lines.some(s => s.user_name === call.user_name && s.cdr_ddi === call.cdr_ddi)) {
+      resolvedConfig = cfg
+      break
+    }
+  }
+
+  if (!resolvedConfig) {
+    if (!options.fallbackUserId) {
+      throw new Error('no followup_config matches this call source — provide fallbackUserId')
+    }
+    resolvedConfig = { user_id: options.fallbackUserId, org_id: null }
+  }
+
+  // If forcing a re-run, clear the prior processed marker so processSingleCall
+  // can write the new result without conflict.
+  if (options.force && call.audio_processed_at) {
+    await supabase.from('calls')
+      .update({ audio_processed_at: null, transcript: null, transcript_analysis: null })
+      .eq('id', call.id)
+  }
+
+  await processSingleCall(supabase, call, phone, resolvedConfig)
+
+  // Re-read so the caller sees the persisted result
+  const { data: updated } = await supabase
+    .from('calls')
+    .select('transcript, transcript_analysis')
+    .eq('id', call.id)
+    .single()
+
+  return {
+    transcript: updated?.transcript || '',
+    analysis: updated?.transcript_analysis || null,
+    lead_id: updated?.transcript_analysis?.lead_id || null,
+  }
+}
+
 async function processSingleCall(supabase, call, phone, config) {
   if (!call.cdr_uniqueid) throw new Error('missing cdr_uniqueid')
 

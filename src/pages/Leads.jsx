@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useLeads, useLead, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls, useLeadActivities, useAddLeadComment, useLeadDocuments, useUploadLeadDocument, useDeleteLeadDocument, useLeadAffiliations, useAddLeadAffiliation, useRemoveLeadAffiliation, useUsers, useCityIndex, useServiceConfig } from '../hooks/queries'
+import { useLeads, useLead, useCreateLead, useUpdateLead, useDeleteLead, useImportLeads, useDispatchLead, useBranches, useLeadFields, useCreateLeadField, useUpdateLeadField, useDeleteLeadField, useLeadCalls, useLeadActivities, useLeadChatSessions, useAddLeadComment, useLeadDocuments, useUploadLeadDocument, useDeleteLeadDocument, useLeadAffiliations, useAddLeadAffiliation, useRemoveLeadAffiliation, useUsers, useCityIndex, useServiceConfig } from '../hooks/queries'
 import { useSearchParams } from 'react-router-dom'
 import { RecordingPlayer } from '@/components/RecordingPlayer'
 import { useAuth } from '../lib/auth'
@@ -1515,6 +1515,7 @@ const ACTION_CONFIG = {
   bot: { icon: Bot, color: 'text-violet-500', bg: 'bg-violet-500', labelKey: 'leads.action_bot' },
   comment: { icon: MessageSquare, color: 'text-amber-600', bg: 'bg-amber-500', labelKey: 'leads.action_comment' },
   bot_transcript: { icon: Bot, color: 'text-violet-500', bg: 'bg-violet-500', labelKey: 'leads.action_bot_transcript' },
+  chat_session: { icon: MessageSquare, color: 'text-violet-500', bg: 'bg-violet-500', labelKey: 'leads.action_chat_session' },
 }
 
 function StatusFlowStepper({ lead, t, onStepClick }) {
@@ -1765,6 +1766,7 @@ export function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
   const sc = STATUS_CONFIG[lead.status] || STATUS_CONFIG.new
   const { data: maskyooCalls } = useLeadCalls(lead.id)
   const { data: activities } = useLeadActivities(lead.id)
+  const { data: chatSessions } = useLeadChatSessions(lead.id)
   const [statusDialogOpen, setStatusDialogOpen] = useState(false)
   const [statusDialogNext, setStatusDialogNext] = useState(null)
 
@@ -1780,10 +1782,33 @@ export function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
     const items = []
 
     // DB activities (created, updated, status_changed, dispatched, enriched)
+    // bot_transcript is hidden when we already have native chat sessions to render
+    const hasChatSessions = (chatSessions?.length || 0) > 0
     if (activities?.length) {
       for (const a of activities) {
+        if (a.action === 'bot_transcript' && hasChatSessions) continue
         const type = isBot(a.actor) && a.action === 'created' ? 'created' : a.action
         items.push({ type, date: a.created_at, actor: a.actor, changes: a.changes, metadata: a.metadata, id: a.id, isBot: isBot(a.actor) })
+      }
+    }
+
+    // Native chat sessions (one timeline entry per conversation, with full Q&A)
+    if (chatSessions?.length) {
+      for (const s of chatSessions) {
+        if (!s.messages || s.messages.length === 0) continue
+        items.push({
+          type: 'chat_session',
+          date: s.created_at,
+          id: `chat-${s.id}`,
+          actor: s.inbox?.name || s.channel || 'chat',
+          metadata: {
+            conversation_id: s.id,
+            channel: s.channel,
+            inbox_name: s.inbox?.name,
+            messages: s.messages,
+            last_message_at: s.last_message_at,
+          },
+        })
       }
     }
 
@@ -1817,7 +1842,7 @@ export function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
     // Sort oldest first (chronological)
     items.sort((a, b) => new Date(a.date) - new Date(b.date))
     return items
-  }, [activities, maskyooCalls, lead])
+  }, [activities, maskyooCalls, chatSessions, lead])
 
   const formatDate = (dt) => {
     if (!dt) return '-'
@@ -2057,6 +2082,11 @@ export function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
                       </div>
                     )}
 
+                    {/* Chat session — full Q&A bubbles */}
+                    {item.type === 'chat_session' && item.metadata?.messages && (
+                      <ChatSessionTranscript messages={item.metadata.messages} channel={item.metadata.channel} t={t} />
+                    )}
+
                     {/* Created metadata */}
                     {item.type === 'created' && item.metadata && (
                       <div className="mt-1 flex gap-1">
@@ -2087,6 +2117,44 @@ export function LeadDetail({ lead, t, leadFields, isSuperAdmin, userRole }) {
         nextStatus={statusDialogNext}
         t={t}
       />
+    </div>
+  )
+}
+
+function ChatSessionTranscript({ messages, channel, t }) {
+  const visible = (messages || []).filter(m => m.content || (Array.isArray(m.attachments) && m.attachments.length))
+  if (visible.length === 0) return null
+  const fmtTime = (dt) => {
+    const d = new Date(dt)
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  }
+  return (
+    <div className="mt-2 rounded-lg border bg-violet-50/40 dark:bg-violet-950/20 px-2 py-2 max-h-72 overflow-y-auto space-y-1.5">
+      <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mb-1 px-1">
+        <MessageSquare size={10} className="text-violet-500" />
+        <span>{visible.length} {t('leads.messages')}</span>
+        {channel && <span className="opacity-70">· {channel}</span>}
+      </div>
+      {visible.map((m) => {
+        const isContact = m.sender_type === 'contact'
+        return (
+          <div key={m.id} className={`flex ${isContact ? 'justify-start' : 'justify-end'}`}>
+            <div className={`max-w-[78%] rounded-2xl px-2.5 py-1.5 text-[11px] leading-snug whitespace-pre-wrap break-words ${
+              isContact
+                ? 'bg-card border'
+                : m.sender_type === 'bot'
+                  ? 'bg-violet-500/15 border border-violet-500/30 text-foreground'
+                  : 'bg-primary text-primary-foreground'
+            }`}>
+              {m.content}
+              <div className={`text-[9px] mt-0.5 ${isContact ? 'text-muted-foreground' : 'opacity-70'}`}>
+                {fmtTime(m.created_at)}
+              </div>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
