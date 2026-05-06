@@ -98,6 +98,11 @@ async function findOrCreateLead(supabase, userId, phone, name) {
 /**
  * Trouve une conversation native ouverte/pending pour un lead+inbox,
  * ou en cree une nouvelle.
+ *
+ * Si le lead est un branch lead (metadata.is_branch=true), la nouvelle
+ * conversation est creee avec ai_disabled=true + metadata.is_dispatch=true.
+ * Sans ca, un coordinateur de branche qui ecrit inbound (avant qu'un dispatch
+ * vers lui ait deja cree la conv) declenche Shira -> spam d'un humain non-client.
  */
 async function findOrCreateConversation(supabase, userId, inboxId, leadId) {
   const { data: existing } = await supabase
@@ -113,15 +118,40 @@ async function findOrCreateConversation(supabase, userId, inboxId, leadId) {
 
   if (existing) return existing
 
+  // Inspect the lead to see if it's a branch coordinator — if so, mute the AI
+  // on the brand-new conversation. Cheap (single-row by id) and fail-open if
+  // the lookup errors (creation still proceeds with default flags).
+  let isBranchLead = false
+  let branchIdForMeta = null
+  try {
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('metadata')
+      .eq('id', leadId)
+      .maybeSingle()
+    if (lead?.metadata?.is_branch) {
+      isBranchLead = true
+      branchIdForMeta = lead.metadata?.branch_id || null
+    }
+  } catch (err) {
+    console.error('[native-unipile] branch-lead probe failed:', err.message)
+  }
+
+  const insert = {
+    user_id: userId,
+    inbox_id: inboxId,
+    contact_id: leadId,
+    channel: 'whatsapp_unipile',
+    status: 'open',
+  }
+  if (isBranchLead) {
+    insert.ai_disabled = true
+    insert.metadata = { is_dispatch: true, branch_id: branchIdForMeta }
+  }
+
   const { data: created, error } = await supabase
     .from('chat_conversations')
-    .insert({
-      user_id: userId,
-      inbox_id: inboxId,
-      contact_id: leadId,
-      channel: 'whatsapp_unipile',
-      status: 'open',
-    })
+    .insert(insert)
     .select('id, status')
     .single()
   if (error) throw error

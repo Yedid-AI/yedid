@@ -730,9 +730,30 @@ export async function handleNativeMessage(supabase, conversationId, messageId) {
   // as no-name so the AI properly collects the contact's actual name.
   const { data: lead } = await supabase
     .from('leads')
-    .select('id, name, phone, email, city, branch')
+    .select('id, name, phone, email, city, branch, metadata')
     .eq('id', conv.contact_id)
     .single()
+
+  // Skip AI when the contact is a branch coordinator (metadata.is_branch).
+  // Dispatch conversations are flagged with ai_disabled=true at creation time,
+  // but a coordinator writing inbound for the first time creates a fresh
+  // conversation without that flag — the lead-level marker is the durable
+  // signal. Auto-tag the conv so future replies short-circuit at the conv
+  // check above without re-loading the lead.
+  if (lead?.metadata?.is_branch) {
+    console.log(`[Engine/Native] Branch lead ${lead.id} — skipping AI on conv ${conversationId}`)
+    if (!conv.ai_disabled) {
+      await supabase
+        .from('chat_conversations')
+        .update({
+          ai_disabled: true,
+          metadata: { ...(conv.metadata || {}), is_dispatch: true, branch_id: lead.metadata?.branch_id || null },
+        })
+        .eq('id', conversationId)
+    }
+    return
+  }
+
   const stubName = looksLikePhonePlaceholder(lead?.name)
   const contactContext = {
     phone: lead?.phone || null,
