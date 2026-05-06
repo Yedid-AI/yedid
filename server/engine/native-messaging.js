@@ -42,11 +42,14 @@ export async function sendNativeMessage({
   metadata = {},
   isPrivate = false,
 }) {
-  // 1. Verify conversation belongs to user, and load channel info
+  // 1. Verify conversation belongs to user, and load channel info.
+  // branch_id is needed alongside contact_id for the relay to resolve the
+  // recipient phone on branch dispatch convs (post-migration 041: pure-branch
+  // convs have contact_id=null; the relay resolves phone from branches.whatsapp_phone).
   const { data: conv, error: convErr } = await supabase
     .from('chat_conversations')
     .select(`
-      id, user_id, channel, contact_id, inbox_id,
+      id, user_id, channel, contact_id, branch_id, inbox_id,
       chat_inboxes (id, channel_type, unipile_account_id, phone_number)
     `)
     .eq('id', conversationId)
@@ -124,15 +127,39 @@ async function relayToChannel(supabase, conv, msg, content) {
     return
   }
 
-  const { data: lead } = await supabase
-    .from('leads')
-    .select('phone, email')
-    .eq('id', conv.contact_id)
-    .single()
-  if (!lead) {
-    await markDelivery('failed', { relay_error: 'lead_not_found' })
+  // Resolve recipient: lead phone for customer convs, branch whatsapp_phone/mobile
+  // for branch dispatch convs (post-migration 041 these have contact_id=null).
+  // Hybrid convs (both contact_id AND branch_id set, e.g. Aaron) prefer the
+  // lead's phone — that's the "customer" routing identity even though the
+  // ai_disabled+is_dispatch flags keep the bot out.
+  let recipient = { phone: null, email: null }
+  if (conv.contact_id) {
+    const { data: lead } = await supabase
+      .from('leads')
+      .select('phone, email')
+      .eq('id', conv.contact_id)
+      .single()
+    if (lead) recipient = { phone: lead.phone, email: lead.email }
+  }
+  if (!recipient.phone && conv.branch_id) {
+    const { data: branch } = await supabase
+      .from('branches')
+      .select('whatsapp_phone, mobile, phone')
+      .eq('id', conv.branch_id)
+      .single()
+    if (branch) {
+      recipient = {
+        phone: branch.whatsapp_phone || branch.mobile || branch.phone || null,
+        email: null,
+      }
+    }
+  }
+  if (!recipient.phone) {
+    await markDelivery('failed', { relay_error: conv.contact_id ? 'lead_no_phone' : (conv.branch_id ? 'branch_no_phone' : 'no_recipient_anchor') })
     return
   }
+  // Keep variable name `lead` minimal-touch downstream:
+  const lead = recipient
 
   let delivered = false
   try {
