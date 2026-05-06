@@ -344,6 +344,58 @@ router.get('/leads/:id/activities', checkRole('admin', 'marketeur', 'branch'), a
   }
 })
 
+// GET /api/leads/:id/chat-sessions — chat conversations + their messages for a lead
+router.get('/leads/:id/chat-sessions', checkRole('admin', 'marketeur', 'branch'), async (req, res) => {
+  try {
+    if (!await canAccessLead(req, req.params.id)) return res.status(404).json({ error: 'Lead introuvable' })
+
+    const { data: conversations, error: convErr } = await req.supabaseAdmin
+      .from('chat_conversations')
+      .select(`
+        id, channel, status, ai_disabled, created_at, last_message_at,
+        chat_inboxes (id, name, channel_type)
+      `)
+      .eq('contact_id', req.params.id)
+      .order('created_at', { ascending: true })
+
+    if (convErr) throw convErr
+
+    const convIds = (conversations || []).map(c => c.id)
+    if (convIds.length === 0) return res.json({ sessions: [] })
+
+    const { data: messages, error: msgErr } = await req.supabaseAdmin
+      .from('chat_messages')
+      .select('id, conversation_id, sender_type, content, content_type, attachments, is_private, created_at')
+      .in('conversation_id', convIds)
+      .eq('is_private', false)
+      .order('created_at', { ascending: true })
+
+    if (msgErr) throw msgErr
+
+    const byConv = {}
+    for (const m of messages || []) {
+      if (!byConv[m.conversation_id]) byConv[m.conversation_id] = []
+      byConv[m.conversation_id].push(m)
+    }
+
+    const sessions = (conversations || []).map(c => ({
+      id: c.id,
+      channel: c.channel,
+      status: c.status,
+      ai_disabled: c.ai_disabled,
+      created_at: c.created_at,
+      last_message_at: c.last_message_at,
+      inbox: c.chat_inboxes || null,
+      messages: byConv[c.id] || [],
+    }))
+
+    res.json({ sessions })
+  } catch (err) {
+    console.error('[lead-chat-sessions]', err.message)
+    res.status(500).json({ error: 'Erreur interne' })
+  }
+})
+
 // POST /api/leads — UPSERT: merge by normalized phone + user_id
 router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
   try {
@@ -745,23 +797,57 @@ async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPh
       .maybeSingle()
     if (!inbox) return null
 
-    // Le lead virtuel representant la branche (idempotent par phone). On passe par
-    // normalizePhone (digits-only puis re-prefix) pour absorber espaces/tirets cote
-    // branches.whatsapp_phone — sinon "+972 50-858-8168" ne matchera jamais le
-    // "+972508588168" qu'Unipile renverra dans le webhook reply.
+    // Le lead virtuel representant la branche. Recherche idempotente par
+    // metadata.branch_id en priorite (1 lead par branche, peu importe qui
+    // dispatche), avec fallback sur (user_id, phone) pour les anciennes lignes
+    // qui n'avaient pas branch_id en meta. Sans cette dedup, chaque tenant qui
+    // dispatchait creait son propre stub (admin u=1 + Aviezer u=3 → 2 stubs
+    // pour la meme branche elyahou). Le tenant retenu pour les nouveaux stubs
+    // est branch.user_id — pas userId du dispatcher — pour qu'il y ait UNE
+    // seule branch lead canonique par branche.
     const normalizedPhone = normalizePhone(branchPhone) || (branchPhone.startsWith('+') ? branchPhone : `+${branchPhone}`)
+
+    // Resolve branch tenant (= branches.user_id) — fallback to dispatcher userId
+    // if branch lookup somehow fails (shouldn't, but stay defensive).
+    let branchTenantUserId = userId
+    {
+      const { data: brRow } = await supabase
+        .from('branches').select('user_id').eq('id', branchId).maybeSingle()
+      if (brRow?.user_id) branchTenantUserId = brRow.user_id
+    }
+
+    // Primary lookup: any lead already tagged with this branch_id (ignores user_id).
     let { data: branchLead } = await supabase
       .from('leads')
-      .select('id, metadata')
-      .eq('user_id', userId)
-      .eq('phone', normalizedPhone)
+      .select('id, user_id, metadata')
+      .eq('metadata->>is_branch', 'true')
+      .eq('metadata->>branch_id', String(branchId))
       .limit(1)
       .maybeSingle()
+
+    // Fallback: untagged legacy row matched by (tenant, phone). Tag it on the way.
+    if (!branchLead) {
+      const { data: legacy } = await supabase
+        .from('leads')
+        .select('id, user_id, metadata')
+        .eq('user_id', branchTenantUserId)
+        .eq('phone', normalizedPhone)
+        .limit(1)
+        .maybeSingle()
+      if (legacy) {
+        await supabase
+          .from('leads')
+          .update({ metadata: { ...(legacy.metadata || {}), is_branch: true, branch_id: branchId } })
+          .eq('id', legacy.id)
+        branchLead = legacy
+      }
+    }
+
     if (!branchLead) {
       const r = await supabase
         .from('leads')
         .insert({
-          user_id: userId,
+          user_id: branchTenantUserId,
           name: branchName || normalizedPhone,
           phone: normalizedPhone,
           source: 'dispatch',
@@ -769,12 +855,14 @@ async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPh
           status: 'new',
           metadata: { is_branch: true, branch_id: branchId },
         })
-        .select('id, metadata')
+        .select('id, user_id, metadata')
         .single()
       if (r.error) throw r.error
       branchLead = r.data
     } else if (!branchLead.metadata?.is_branch) {
-      // Tag the existing lead so the UI can filter
+      // Defensive: if primary lookup matched on branch_id, the row is already
+      // tagged. This branch only fires for the fallback path above which we
+      // already updated. Kept as belt-and-suspenders.
       await supabase
         .from('leads')
         .update({ metadata: { ...(branchLead.metadata || {}), is_branch: true, branch_id: branchId } })
