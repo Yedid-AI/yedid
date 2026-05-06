@@ -969,9 +969,15 @@ function CallDetailPanel({ call, onClose, t }) {
   const { data: metadata, isLoading: loadingMeta } = useCallMetadata(uuid)
   const sc = getCallStatusConfig(call.call_status)
 
-  // Audio pipeline manual trigger state
-  const [audioState, setAudioState] = useState({ status: 'idle', result: null, error: null })
+  // Audio pipeline manual trigger state. Pre-fill from the call row when an
+  // analysis already exists, so the operator sees the prior result without
+  // burning a fresh LLM call.
   const alreadyProcessed = !!call.audio_processed_at
+  const [audioState, setAudioState] = useState(() =>
+    alreadyProcessed && (call.transcript || call.transcript_analysis)
+      ? { status: 'done', result: { transcript: call.transcript || '', analysis: call.transcript_analysis || null, lead_id: call.transcript_analysis?.lead_id || null }, error: null }
+      : { status: 'idle', result: null, error: null },
+  )
   async function runAudioPipeline(force = false) {
     setAudioState({ status: 'loading', result: null, error: null })
     try {

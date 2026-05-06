@@ -67,6 +67,9 @@ router.get('/calls', checkRole('admin'), async (req, res) => {
       onetouch: row.onetouch,
       gclid: row.gclid,
       cdr_meta_data: row.cdr_meta_data,
+      audio_processed_at: row.audio_processed_at,
+      transcript: row.transcript,
+      transcript_analysis: row.transcript_analysis,
     }))
 
     // Enrich with lead info (match cdr_ani → leads.phone)
