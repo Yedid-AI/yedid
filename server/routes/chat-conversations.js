@@ -20,6 +20,7 @@ router.get('/chat/conversations', checkRole('admin', 'agent'), async (req, res) 
       .select(`
         *,
         leads:contact_id (${LEADS_SELECT}),
+        branches:branch_id (id, name, contact_name, mobile, whatsapp_phone, address, user_id),
         agent:assigned_agent_id (${AGENT_SELECT})
       `, { count: 'exact' })
       .eq('user_id', req.user.user_id)
@@ -87,6 +88,7 @@ router.get('/chat/conversations/:id', checkRole('admin', 'agent'), async (req, r
       .select(`
         *,
         leads:contact_id (${LEADS_SELECT}),
+        branches:branch_id (id, name, contact_name, mobile, whatsapp_phone, address, user_id),
         agent:assigned_agent_id (${AGENT_SELECT}),
         chat_inboxes (id, name, channel_type, config)
       `)
@@ -151,7 +153,8 @@ router.post('/chat/conversations', checkRole('admin', 'agent'), async (req, res)
     const { data, error } = await req.supabaseAdmin
       .from('chat_conversations')
       .insert(insertData)
-      .select(`*, leads:contact_id (${LEADS_SELECT}), agent:assigned_agent_id (${AGENT_SELECT})`)
+      .select(`*, leads:contact_id (${LEADS_SELECT}),
+        branches:branch_id (id, name, contact_name, mobile, whatsapp_phone, address, user_id), agent:assigned_agent_id (${AGENT_SELECT})`)
       .single()
 
     if (error) throw error

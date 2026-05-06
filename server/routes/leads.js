@@ -797,85 +797,19 @@ async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPh
       .maybeSingle()
     if (!inbox) return null
 
-    // Le lead virtuel representant la branche. Recherche idempotente par
-    // metadata.branch_id en priorite (1 lead par branche, peu importe qui
-    // dispatche), avec fallback sur (user_id, phone) pour les anciennes lignes
-    // qui n'avaient pas branch_id en meta. Sans cette dedup, chaque tenant qui
-    // dispatchait creait son propre stub (admin u=1 + Aviezer u=3 → 2 stubs
-    // pour la meme branche elyahou). Le tenant retenu pour les nouveaux stubs
-    // est branch.user_id — pas userId du dispatcher — pour qu'il y ait UNE
-    // seule branch lead canonique par branche.
-    const normalizedPhone = normalizePhone(branchPhone) || (branchPhone.startsWith('+') ? branchPhone : `+${branchPhone}`)
+    // Branches are first-class chat contacts (cf. migration 041) — no more
+    // stub leads tagged metadata.is_branch=true. The conversation is anchored
+    // by branch_id directly. The earlier path maintained a leads row purely to
+    // satisfy chat_conversations.contact_id NOT NULL FK; that's gone.
 
-    // Resolve branch tenant (= branches.user_id) — fallback to dispatcher userId
-    // if branch lookup somehow fails (shouldn't, but stay defensive).
-    let branchTenantUserId = userId
-    {
-      const { data: brRow } = await supabase
-        .from('branches').select('user_id').eq('id', branchId).maybeSingle()
-      if (brRow?.user_id) branchTenantUserId = brRow.user_id
-    }
-
-    // Primary lookup: any lead already tagged with this branch_id (ignores user_id).
-    let { data: branchLead } = await supabase
-      .from('leads')
-      .select('id, user_id, metadata')
-      .eq('metadata->>is_branch', 'true')
-      .eq('metadata->>branch_id', String(branchId))
-      .limit(1)
-      .maybeSingle()
-
-    // Fallback: untagged legacy row matched by (tenant, phone). Tag it on the way.
-    if (!branchLead) {
-      const { data: legacy } = await supabase
-        .from('leads')
-        .select('id, user_id, metadata')
-        .eq('user_id', branchTenantUserId)
-        .eq('phone', normalizedPhone)
-        .limit(1)
-        .maybeSingle()
-      if (legacy) {
-        await supabase
-          .from('leads')
-          .update({ metadata: { ...(legacy.metadata || {}), is_branch: true, branch_id: branchId } })
-          .eq('id', legacy.id)
-        branchLead = legacy
-      }
-    }
-
-    if (!branchLead) {
-      const r = await supabase
-        .from('leads')
-        .insert({
-          user_id: branchTenantUserId,
-          name: branchName || normalizedPhone,
-          phone: normalizedPhone,
-          source: 'dispatch',
-          lead_channel: 'whatsapp',
-          status: 'new',
-          metadata: { is_branch: true, branch_id: branchId },
-        })
-        .select('id, user_id, metadata')
-        .single()
-      if (r.error) throw r.error
-      branchLead = r.data
-    } else if (!branchLead.metadata?.is_branch) {
-      // Defensive: if primary lookup matched on branch_id, the row is already
-      // tagged. This branch only fires for the fallback path above which we
-      // already updated. Kept as belt-and-suspenders.
-      await supabase
-        .from('leads')
-        .update({ metadata: { ...(branchLead.metadata || {}), is_branch: true, branch_id: branchId } })
-        .eq('id', branchLead.id)
-    }
-
-    // Find or create conversation — pas de filtre status (un lead = un thread).
+    // Find existing conversation for this branch on this inbox (any status —
+    // un thread continu par branche).
     let { data: conv } = await supabase
       .from('chat_conversations')
       .select('id')
       .eq('user_id', inbox.user_id)
       .eq('inbox_id', inbox.id)
-      .eq('contact_id', branchLead.id)
+      .eq('branch_id', branchId)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
@@ -885,7 +819,8 @@ async function sendNativeDispatch(supabase, { userId, unipileAccountId, branchPh
         .insert({
           user_id: inbox.user_id,
           inbox_id: inbox.id,
-          contact_id: branchLead.id,
+          contact_id: null,
+          branch_id: branchId,
           channel: 'whatsapp_unipile',
           status: 'open',
           // ai_disabled=true: la conversation dispatch sert a tracker les replies
