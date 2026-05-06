@@ -43,7 +43,38 @@ function classifyAttachment(att) {
 }
 
 /**
+ * Cross-reference a phone with the `branches` table. Returns
+ * `{ branch_id }` when the phone matches an active branch's `mobile` or
+ * `whatsapp_phone`, otherwise null.
+ *
+ * Why: the `metadata.is_branch=true` flag on leads is only set by the
+ * dispatch-out flow (server/routes/leads.js — when sending a lead card TO a
+ * branch). A coordinator who hasn't yet received a dispatch (e.g. a freshly
+ * provisioned branch like the "test" branch with aaron's mobile) is invisible
+ * to the engine's branch guard. This lookup catches that case.
+ */
+async function lookupBranchByPhone(supabase, normalizedPhone) {
+  const noPlus = normalizedPhone.replace(/^\+/, '')
+  const variants = [normalizedPhone, noPlus, `+${noPlus}`]
+  // Build OR clause — Supabase doesn't support .in() across two columns.
+  const orClauses = variants.flatMap(p => [`mobile.eq.${p}`, `whatsapp_phone.eq.${p}`]).join(',')
+  const { data } = await supabase
+    .from('branches')
+    .select('id, name, user_id')
+    .eq('is_active', true)
+    .or(orClauses)
+    .limit(1)
+  return data?.[0] || null
+}
+
+/**
  * Trouve un lead par telephone pour un user, ou en cree un nouveau.
+ *
+ * Side effect: if the phone matches an active branch (mobile or whatsapp_phone),
+ * stamp `metadata.is_branch=true` + `metadata.branch_id` on the lead. This is
+ * what `handleNativeMessage`'s branch guard reads to skip the AI — without it,
+ * a coordinator writing inbound for the first time gets Shira treating them
+ * as a customer.
  */
 async function findOrCreateLead(supabase, userId, phone, name) {
   const normalizedPhone = phone.startsWith('+') ? phone : `+${phone}`
@@ -51,7 +82,7 @@ async function findOrCreateLead(supabase, userId, phone, name) {
   // Try with the +-prefixed form, then without
   let { data: lead } = await supabase
     .from('leads')
-    .select('id, name, phone, email')
+    .select('id, name, phone, email, metadata')
     .eq('user_id', userId)
     .eq('phone', normalizedPhone)
     .limit(1)
@@ -61,12 +92,24 @@ async function findOrCreateLead(supabase, userId, phone, name) {
     const noPlus = phone.replace(/^\+/, '')
     const r = await supabase
       .from('leads')
-      .select('id, name, phone, email')
+      .select('id, name, phone, email, metadata')
       .eq('user_id', userId)
       .eq('phone', noPlus)
       .limit(1)
       .maybeSingle()
     lead = r.data
+  }
+
+  // If we found an existing lead and it's not already tagged as branch,
+  // check `branches` and stamp it. Cheap (single row by phone) and idempotent.
+  if (lead && !lead.metadata?.is_branch) {
+    const branch = await lookupBranchByPhone(supabase, normalizedPhone)
+    if (branch) {
+      const newMeta = { ...(lead.metadata || {}), is_branch: true, branch_id: branch.id }
+      await supabase.from('leads').update({ metadata: newMeta }).eq('id', lead.id)
+      lead.metadata = newMeta
+      console.log(`[native-unipile] Lead ${lead.id} flagged as branch (${branch.name}) on inbound`)
+    }
   }
 
   if (lead) return lead
@@ -79,6 +122,14 @@ async function findOrCreateLead(supabase, userId, phone, name) {
   const cleanName = (name || '').trim()
   const finalName = cleanName && cleanName !== normalizedPhone && cleanName !== normalizedPhone.replace(/^\+/, '')
     ? cleanName : ''
+
+  // Same lookup as the existing-lead path, applied at creation time so brand-new
+  // contacts who happen to be branch coordinators are tagged from row 1.
+  const branchAtCreate = await lookupBranchByPhone(supabase, normalizedPhone)
+  const initialMeta = branchAtCreate
+    ? { is_branch: true, branch_id: branchAtCreate.id }
+    : null
+
   const { data: created, error } = await supabase
     .from('leads')
     .insert({
@@ -88,8 +139,9 @@ async function findOrCreateLead(supabase, userId, phone, name) {
       source: 'whatsapp_native',
       lead_channel: 'whatsapp',
       status: 'new',
+      metadata: initialMeta,
     })
-    .select('id, name, phone, email')
+    .select('id, name, phone, email, metadata')
     .single()
   if (error) throw error
   return created
