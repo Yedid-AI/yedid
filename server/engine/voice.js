@@ -18,18 +18,25 @@ export function extractAudioAttachment(message) {
 /**
  * Download audio from URL and transcribe using OpenAI Whisper.
  * @param {string} audioUrl
+ * @param {Object} [options]
+ * @param {Object} [options.headers] - extra headers to send (e.g. { Authorization: 'Bearer ...' })
  * @returns {Promise<{ transcription: string }>}
  */
-export async function transcribeAudio(audioUrl) {
-  // Download audio
-  const res = await fetch(audioUrl)
+export async function transcribeAudio(audioUrl, options = {}) {
+  // Download audio (Maskyoo recordings need a Bearer token; Chatwoot data_url doesn't).
+  const res = await fetch(audioUrl, options.headers ? { headers: options.headers } : undefined)
   if (!res.ok) throw new Error(`Failed to download audio (${res.status})`)
   const buffer = Buffer.from(await res.arrayBuffer())
   const contentType = res.headers.get('content-type') || 'audio/ogg'
 
-  // Transcribe with Whisper
+  // Transcribe with Whisper. Pick a sensible filename extension so Whisper
+  // routes the right decoder — mp3 from Maskyoo, ogg from WhatsApp voice notes.
+  const fileName = contentType.includes('mp3') || contentType.includes('mpeg') ? 'audio.mp3'
+    : contentType.includes('wav') ? 'audio.wav'
+    : 'audio.ogg'
+
   const openai = getOpenAIClient()
-  const file = await toFile(buffer, 'audio.ogg', { type: contentType })
+  const file = await toFile(buffer, fileName, { type: contentType })
   const result = await openai.audio.transcriptions.create({
     model: 'whisper-1',
     file,
