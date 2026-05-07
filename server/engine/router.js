@@ -44,16 +44,22 @@ export async function routeMessage({ agentConfig, playbooks, escalationRules, us
 
 Your task is to analyze the user's message WITH CONVERSATION CONTEXT and classify it into one of two categories:
 
-1. Escalation - if ANY escalation rule matches
-2. Scenario - if an existing playbook is appropriate
+1. Scenario - a playbook handles the request (THIS IS THE DEFAULT)
+2. Escalation - ONLY when an escalation rule's trigger is CLEARLY and EXPLICITLY met
 
 You must ALWAYS return a JSON object with the following structure:
 { "type": "escalation" | "scenario", "id": "<id>" }
 
+CRITICAL ROUTING PRINCIPLE — STRONG BIAS TOWARD SCENARIO:
+- A normal service request, lead inquiry, information question, or branch lookup is NEVER an escalation — it goes to the matching playbook.
+- Escalation is reserved for situations a playbook genuinely cannot handle: explicit request for a human, repeated frustration after the bot already failed, clear anger at the bot.
+- A first-time inquiry (even a complex or sensitive one) is a SCENARIO. The lead/info/branch playbooks exist precisely to handle these.
+- When in doubt, ALWAYS choose scenario. Escalation must be the exception, not the default.
+- Read each escalation rule's trigger as a strict filter: only escalate if the user's BEHAVIOR in this conversation matches it unambiguously. Do not infer frustration from topic, urgency, or sensitivity alone.
+
 RULES:
 - Use CONVERSATION HISTORY to understand context (e.g. if user says "oui" or gives an email, check what was asked before)
-- If ANY escalation rule matches the user message, return "type": "escalation" with the matching rule id
-- If NO escalation rule matches, select the MOST relevant playbook and return "type": "scenario" with id
+- Default to scenario. Only escalate if an escalation rule's trigger is unambiguously satisfied by what the user actually said or did (not by the topic of the request)
 - If multiple playbooks match, choose the MOST specific one for the user's CURRENT message
 - If the user is continuing the SAME topic as the active playbook, keep routing to that playbook
 - If the user changes topic or asks about something different, route to the playbook that best matches the NEW topic — do NOT stick to the previous playbook

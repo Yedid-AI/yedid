@@ -84,3 +84,20 @@ export async function resolveBranchId(supabaseAdmin, companyOwnerId, branchName)
     .maybeSingle()
   return data?.id || null
 }
+
+/**
+ * Default branch for a tenant — used as a last-resort fallback when no
+ * fixed-branch service and no city_branch_index match exists.
+ *
+ * Returns { id, name } or null if the tenant hasn't flagged any branch.
+ */
+export async function resolveDefaultBranch(supabaseAdmin, companyOwnerId) {
+  if (!companyOwnerId) return null
+  const { data } = await supabaseAdmin
+    .from('branches').select('id, name')
+    .eq('user_id', companyOwnerId)
+    .eq('is_default', true)
+    .eq('is_active', true)
+    .maybeSingle()
+  return data || null
+}

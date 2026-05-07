@@ -15,6 +15,7 @@ import { getSetting } from '../settings.js'
 import { normalizePhone } from '../normalize-service.js'
 import { sendNativeMessage } from './native-messaging.js'
 import { processAudioPipeline } from './audio-pipeline.js'
+import { getPhonesBlockedByExternalLead } from './lead-dedup.js'
 
 // Calls under this many seconds are considered "missed" — even if Maskyoo
 // reports them as 'answered' (typically a musical voicemail picking up).
@@ -81,6 +82,13 @@ export function expandTemplate(template, { source, callDate }) {
     .replace(/\{source\}/g, source || '')
     .replace(/\{topic\}/g, topicForSource(source))
     .replace(/\{time_ago\}/g, timeAgoLabel(callDate))
+}
+
+// Split a relance message on --- or em-dash with spaces so it's sent as
+// multiple WhatsApp bubbles (matches the chat engine's split logic). Always
+// returns at least one element when the input is non-empty.
+function splitMessage(msg) {
+  return msg.split(/\n?---\n?|\s+—\s+/).map(p => p.trim()).filter(Boolean)
 }
 
 let cronTask = null
@@ -239,11 +247,19 @@ async function enqueueNewCalls(supabase) {
 
     const alreadyQueued = new Set((existingQueue || []).map(q => q.phone))
 
+    // Cross-tenant external lead gate: if a website / biper / capture-link
+    // already created a lead for this phone recently, skip the relance —
+    // the webhook owns the lead.
+    const externalBlocked = await getPhonesBlockedByExternalLead(supabase, phones, 24)
+    if (externalBlocked.size) {
+      console.log(`[Followup Cron] ${externalBlocked.size} phone(s) gated by external lead, skipping`)
+    }
+
     // Insert new queue entries
     const toInsert = []
     for (const call of matchingCalls) {
       const phone = normalizePhone(call.cdr_ani)
-      if (!phone || alreadyQueued.has(phone)) continue
+      if (!phone || alreadyQueued.has(phone) || externalBlocked.has(phone)) continue
       alreadyQueued.add(phone) // dedup within this batch
 
       toInsert.push({
@@ -412,6 +428,11 @@ async function processQueue(supabase) {
           callDate,
         })
 
+        // Split into bubbles on --- or em-dash with spaces (mimics human chat).
+        // Always at least one part when message is non-empty.
+        const messageParts = splitMessage(message)
+        if (!messageParts.length) messageParts.push(message)
+
         const callMeta = {
           source: item.source_user_name || null,
           maskyoo_number: item.source_cdr_ddi || null,
@@ -429,7 +450,7 @@ async function processQueue(supabase) {
             userId,
             unipileAccountId: config.whatsapp_account_id,
             phone: item.phone,
-            message,
+            messageParts,
             callMeta,
           })
         }
@@ -448,14 +469,17 @@ async function processQueue(supabase) {
           // Fallback Chatwoot (kill-switch off uniquement)
           if (chatwootAccountId && chatwootInboxId && accessToken) {
             chatwootConversationId = await createChatwootConversation(
-              chatwootAccountId, chatwootInboxId, accessToken, item.phone, message, callMeta,
+              chatwootAccountId, chatwootInboxId, accessToken, item.phone, messageParts, callMeta,
             )
           } else {
             // Last resort fire-and-forget — uniquement quand useNative=false ET
             // pas de Chatwoot configure. Trace minimaliste mais au moins le
             // message part (legacy preserve).
             console.warn(`[Followup Cron] Fire-and-forget Unipile pour ${item.phone} (ni native, ni Chatwoot) — pas de tracking`)
-            await sendMessage(config.whatsapp_account_id, item.phone, message)
+            for (let i = 0; i < messageParts.length; i++) {
+              if (i > 0) await new Promise(r => setTimeout(r, 800 + Math.random() * 700))
+              await sendMessage(config.whatsapp_account_id, item.phone, messageParts[i])
+            }
           }
         }
 
@@ -487,7 +511,10 @@ async function processQueue(supabase) {
  * Create or find a Chatwoot contact + conversation and post the initial outgoing message.
  * This ensures the conversation appears in Chatwoot for agent tracking.
  */
-async function createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, phone, message, callMeta = {}) {
+async function createChatwootConversation(chatwootAccountId, chatwootInboxId, accessToken, phone, messageParts, callMeta = {}) {
+  // Back-compat: tolerate a string passed by older callers.
+  const parts = Array.isArray(messageParts) ? messageParts : [messageParts].filter(Boolean)
+  if (!parts.length) return null
   const searchQuery = phone.replace('+', '')
   let contactId = null
   let conversationId = null
@@ -576,15 +603,19 @@ async function createChatwootConversation(chatwootAccountId, chatwootInboxId, ac
     conversationId = conv?.id
   }
 
-  // Post the outgoing message to Chatwoot
+  // Post each bubble as its own outgoing message. Small delay between bubbles
+  // so the agent UI / WhatsApp render them as separate deliveries.
   if (conversationId) {
-    await accountApi(
-      `/api/v1/accounts/${chatwootAccountId}/conversations/${conversationId}/messages`,
-      'POST',
-      { content: message, message_type: 'outgoing' },
-      accessToken
-    )
-    console.log(`[Followup Cron] Chatwoot conversation ${conversationId} created for ${phone}`)
+    for (let i = 0; i < parts.length; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 800 + Math.random() * 700))
+      await accountApi(
+        `/api/v1/accounts/${chatwootAccountId}/conversations/${conversationId}/messages`,
+        'POST',
+        { content: parts[i], message_type: 'outgoing' },
+        accessToken
+      )
+    }
+    console.log(`[Followup Cron] Chatwoot conversation ${conversationId} created for ${phone} (${parts.length} bubble${parts.length > 1 ? 's' : ''})`)
   }
   return conversationId
 }
@@ -780,8 +811,9 @@ export async function queueContextualSecondAttempt(supabase, { userId, orgId, ph
  *
  * @returns {Promise<string|null>} chat_conversations.id ou null si rien ne s'est passe.
  */
-async function sendNativeFollowup(supabase, { userId, unipileAccountId, phone, message, callMeta }) {
+async function sendNativeFollowup(supabase, { userId, unipileAccountId, phone, messageParts, callMeta }) {
   try {
+    if (!messageParts?.length) return null
     // 1. Find the chat_inbox bound to this Unipile account
     const { data: inbox } = await supabase
       .from('chat_inboxes')
@@ -856,19 +888,26 @@ async function sendNativeFollowup(supabase, { userId, unipileAccountId, phone, m
       conv = r.data
     }
 
-    // 4. Send the followup message — relay handled by native-messaging
-    const result = await sendNativeMessage({
-      supabase,
-      userId: inbox.user_id,
-      conversationId: conv.id,
-      senderType: 'bot',
-      content: message,
-      contentType: 'text',
-      metadata: { ...callMeta, source_kind: 'followup' },
-    })
-    if (result?.error) {
-      console.error('[Followup Cron] sendNativeMessage error:', result.error)
-      return null
+    // 4. Send each bubble — relay handled by native-messaging. We send the
+    // first eagerly; subsequent bubbles get a small human-like delay so
+    // WhatsApp surfaces them as distinct deliveries.
+    for (let i = 0; i < messageParts.length; i++) {
+      if (i > 0) await new Promise(r => setTimeout(r, 800 + Math.random() * 700))
+      const result = await sendNativeMessage({
+        supabase,
+        userId: inbox.user_id,
+        conversationId: conv.id,
+        senderType: 'bot',
+        content: messageParts[i],
+        contentType: 'text',
+        metadata: { ...callMeta, source_kind: 'followup' },
+      })
+      if (result?.error) {
+        console.error('[Followup Cron] sendNativeMessage error:', result.error)
+        // Bubble 1 already inserted? Conv exists, return it so the queue marks
+        // sent rather than re-firing. Otherwise null = let outer fallback try.
+        return i > 0 ? conv.id : null
+      }
     }
 
     return conv.id

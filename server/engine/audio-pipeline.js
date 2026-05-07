@@ -12,7 +12,9 @@ import { getRecordingUrl } from '../maskyoo.js'
 import { transcribeAudio } from './voice.js'
 import { createCompletion } from './llm.js'
 import { getSetting } from '../settings.js'
-import { normalizePhone } from '../normalize-service.js'
+import { normalizePhone, normalizeService, resolveCompany, resolveFixedBranch, listServices } from '../normalize-service.js'
+import { resolveCompanyOwnerId, resolveBranchId, resolveDefaultBranch } from '../lead-scope.js'
+import { getPhonesBlockedByExternalLead } from './lead-dedup.js'
 
 // Per-cycle limit. STT + LLM is ~15s per call; the cron runs every minute, so
 // keep this small enough to leave headroom for the rest of the followup cycle.
@@ -35,9 +37,25 @@ function llmConfig() {
   }
 }
 
-const SYSTEM_PROMPT = `Tu es un assistant qui analyse des transcripts d'appels téléphoniques en hébreu reçus par une centrale d'aide aux personnes âgées et à leurs familles (services de soins à domicile, employés étrangers, garde à l'hôpital, etc.).
+/**
+ * Builds the system prompt and embeds the active service list so the LLM
+ * picks one of these canonical names rather than free-text. Free-text
+ * service_requested broke routing (e.g. "עובדת זר" feminine typo or
+ * "ברור סכום הפרשה לפנסיה" → fell back to babait when it should have been
+ * aviezer or null).
+ */
+function buildSystemPrompt() {
+  const services = listServices() // active rows from service_config cache
+  const serviceLines = services.length
+    ? services.map(s => `  - "${s.name}" (${s.company || '?'})`).join('\n')
+    : '  (aucun service configuré — utilise "service_requested": null)'
+
+  return `Tu es un assistant qui analyse des transcripts d'appels téléphoniques en hébreu reçus par une centrale d'aide aux personnes âgées et à leurs familles (services de soins à domicile, employés étrangers, garde à l'hôpital, etc.).
 
 Tu reçois un transcript brut (Whisper, donc parfois bruité) et tu dois extraire les informations utiles pour créer un lead dans le CRM.
+
+Services disponibles (tu DOIS choisir parmi cette liste pour "service_requested"):
+${serviceLines}
 
 Réponds UNIQUEMENT avec un JSON valide, sans markdown ni commentaire, au format exact suivant:
 {
@@ -53,9 +71,10 @@ Règles:
 - "is_relevant" = true uniquement si c'est un vrai prospect intéressé par un service. false pour: démarchage, mauvais numéro, test, appel raccroché immédiatement, message vocal sans contenu utile, conversation hors sujet.
 - "name" = nom du contact uniquement s'il est clairement énoncé. Null sinon (ne devine pas).
 - "city" = ville uniquement si clairement énoncée. Null sinon.
-- "service_requested" = en quelques mots en hébreu, le service demandé (ex: "עובד זר", "מטפלת פרטית", "השגחה בבית חולים", "ליווי לקשיש"). Null si pas clair.
+- "service_requested" = OBLIGATOIREMENT l'une des valeurs exactes de la liste ci-dessus, recopiée à l'identique. Si aucune ne correspond, utilise null. Pas de paraphrase, pas d'ajout de mots.
 - "summary" = 1-2 phrases en hébreu résumant ce que le prospect veut.
 - "confidence" = "low" si transcript trop bruité ou court, "high" si infos claires.`
+}
 
 /**
  * Main entry called every minute from the followup-cron cycle.
@@ -110,7 +129,10 @@ export async function processAudioPipeline(supabase) {
     ))
     if (!matching.length) continue
 
-    // Skip phones that already have a lead recently — coordinator did log it.
+    // Skip phones that already have a lead recently — either because the
+    // coordinator logged one for *this* tenant, or because a webhook (biper /
+    // capture link / site form) created one cross-tenant. The webhook is
+    // authoritative; running the pipeline would just create a duplicate.
     const phones = [...new Set(matching.map(c => normalizePhone(c.cdr_ani)).filter(Boolean))]
     const recentLeadCutoff = new Date(Date.now() - LOOKBACK_HOURS * 3600 * 1000).toISOString()
     const { data: recentLeads } = phones.length ? await supabase
@@ -120,12 +142,16 @@ export async function processAudioPipeline(supabase) {
       .in('phone', phones)
       .gte('updated_at', recentLeadCutoff) : { data: [] }
     const skipPhones = new Set((recentLeads || []).map(l => l.phone))
+    const externalBlocked = await getPhonesBlockedByExternalLead(supabase, phones, LOOKBACK_HOURS)
+    for (const p of externalBlocked) skipPhones.add(p)
 
     for (const call of matching) {
       if (processedCount >= MAX_PER_CYCLE) break
       const phone = normalizePhone(call.cdr_ani)
       if (!phone || skipPhones.has(phone)) {
-        await markProcessed(supabase, call.id, null, { skipped: 'lead_exists_recent' })
+        await markProcessed(supabase, call.id, null, {
+          skipped: externalBlocked.has(phone) ? 'external_lead_exists' : 'lead_exists_recent',
+        })
         continue
       }
 
@@ -258,7 +284,7 @@ ${transcription}`
   const { content } = await createCompletion({
     provider,
     model,
-    systemPrompt: SYSTEM_PROMPT,
+    systemPrompt: buildSystemPrompt(),
     messages: [{ role: 'user', content: userMessage }],
     responseFormat: { type: 'json_object' },
   })
@@ -282,6 +308,21 @@ ${transcription}`
       transcript: transcription,
       sourceUserName: call.user_name,
     })
+
+    // System context (no human actor) — platform-flag-only auto-dispatch.
+    // No-op until the lead has a branch resolved (cf. branch resolution TODO).
+    if (leadId) {
+      try {
+        const { data: leadRow } = await supabase
+          .from('leads').select('*').eq('id', leadId).maybeSingle()
+        if (leadRow) {
+          const { tryAutoDispatch } = await import('../routes/leads.js')
+          tryAutoDispatch(supabase, leadRow, null)
+        }
+      } catch (err) {
+        console.warn('[Audio Pipeline] auto-dispatch hook failed:', err.message)
+      }
+    }
   }
 
   await markProcessed(supabase, call.id, transcription, { ...analysis, lead_id: leadId })
@@ -292,15 +333,58 @@ function stripJsonFence(text) {
   return text.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
 }
 
-async function upsertLeadFromAnalysis(supabase, { userId, orgId, phone, callId, analysis, transcript, sourceUserName }) {
-  const { data: existing } = await supabase
-    .from('leads')
-    .select('id, name, city, service_requested, details, metadata')
-    .eq('user_id', userId)
-    .eq('phone', phone)
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+async function upsertLeadFromAnalysis(supabase, { userId: _ignoredFollowupUserId, orgId, phone, callId, analysis, transcript, sourceUserName }) {
+  // Step 1 — service normalization. The LLM is now constrained to pick from
+  // service_config.list, but be defensive: if the value isn't in our alias
+  // map, treat it as null (don't let typos like "עובדת זר" slip through and
+  // mis-route to the default company).
+  const rawService = analysis.service_requested || null
+  const candidate = rawService ? normalizeService(rawService) : null
+  // normalizeService returns the input passthrough on miss — verify the
+  // result is actually a known canonical name.
+  const known = listServices().some(s => s.name === candidate)
+  const normalizedService = known ? candidate : null
+
+  // Step 2 — company + tenant resolution from the (validated) service.
+  // עובד זר → aviezer, others mostly → babait. Falls back to babait when
+  // service is null/unknown — same behavior as POST /api/leads.
+  const company = resolveCompany(normalizedService)
+  const companyOwnerId = await resolveCompanyOwnerId(supabase, company)
+  if (!companyOwnerId) throw new Error(`no admin user for company "${company}"`)
+
+  // Step 3 — branch resolution: fixed → city_branch_index → tenant default.
+  let branchName = resolveFixedBranch(normalizedService) || null
+  let branchId = null
+  if (!branchName && analysis.city) {
+    const { data: idx } = await supabase
+      .from('city_branch_index')
+      .select('branch_name')
+      .eq('user_id', companyOwnerId)
+      .eq('city', analysis.city)
+      .limit(1)
+    if (idx?.length) branchName = idx[0].branch_name
+  }
+  if (!branchName) {
+    const def = await resolveDefaultBranch(supabase, companyOwnerId)
+    if (def) { branchName = def.name; branchId = def.id }
+  }
+  if (branchName && !branchId) {
+    branchId = await resolveBranchId(supabase, companyOwnerId, branchName)
+  }
+
+  // Step 4 — find an existing lead. Prefer same-tenant match on phone; fall
+  // back to cross-tenant (the dedup gate already excluded webhooks, so a
+  // cross-tenant hit here is from a previous internal cron run).
+  let existing = null
+  {
+    const { data } = await supabase
+      .from('leads')
+      .select('id, user_id, name, city, service_requested, details, metadata, branch, branch_id')
+      .eq('phone', phone)
+      .order('created_at', { ascending: false })
+      .limit(5)
+    existing = (data || []).find(l => l.user_id === companyOwnerId) || (data || [])[0] || null
+  }
 
   const detailsLine = analysis.summary ? analysis.summary : null
   const audioMeta = {
@@ -309,6 +393,8 @@ async function upsertLeadFromAnalysis(supabase, { userId, orgId, phone, callId, 
       call_id: callId,
       confidence: analysis.confidence || null,
       source_branch: sourceUserName || null,
+      resolved_company: company,
+      resolved_service: normalizedService,
     },
   }
 
@@ -317,10 +403,10 @@ async function upsertLeadFromAnalysis(supabase, { userId, orgId, phone, callId, 
     const updates = { updated_at: new Date().toISOString() }
     if (analysis.name && !existing.name) updates.name = analysis.name
     if (analysis.city && !existing.city) updates.city = analysis.city
-    if (analysis.service_requested && !existing.service_requested) updates.service_requested = analysis.service_requested
+    if (normalizedService && !existing.service_requested) updates.service_requested = normalizedService
+    if (branchName && !existing.branch) updates.branch = branchName
+    if (branchId && !existing.branch_id) updates.branch_id = branchId
 
-    // Append summary to details rather than overwriting (existing details may
-    // be human notes).
     if (detailsLine) {
       const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
       const tag = `[${stamp} appel transcrit]`
@@ -341,18 +427,22 @@ async function upsertLeadFromAnalysis(supabase, { userId, orgId, phone, callId, 
     const { error } = await supabase.from('leads').update(updates).eq('id', existing.id)
     if (error) throw new Error(`lead update failed: ${error.message}`)
 
-    await logActivity(supabase, existing.id, userId, 'enriched_from_audio', { call_id: callId, summary: analysis.summary })
+    await logActivity(supabase, existing.id, existing.user_id, 'enriched_from_audio', {
+      call_id: callId, summary: analysis.summary, resolved_company: company,
+    })
     return existing.id
   }
 
-  // New lead — name is NOT NULL on the leads table, so use the LLM name or
-  // an empty string fallback (UI renders '—').
+  // Step 5 — create a new lead under the resolved tenant.
   const insert = {
-    user_id: userId,
+    user_id: companyOwnerId,
+    company,
     name: analysis.name || '',
     phone,
     city: analysis.city || null,
-    service_requested: analysis.service_requested || null,
+    branch: branchName,
+    branch_id: branchId,
+    service_requested: normalizedService,
     details: detailsLine ? `[appel transcrit] ${detailsLine}` : null,
     source: 'audio_pipeline',
     lead_channel: 'phone',
@@ -372,7 +462,9 @@ async function upsertLeadFromAnalysis(supabase, { userId, orgId, phone, callId, 
     .single()
   if (error) throw new Error(`lead insert failed: ${error.message}`)
 
-  await logActivity(supabase, data.id, userId, 'created_from_audio', { call_id: callId, summary: analysis.summary })
+  await logActivity(supabase, data.id, companyOwnerId, 'created_from_audio', {
+    call_id: callId, summary: analysis.summary, resolved_company: company,
+  })
   return data.id
 }
 

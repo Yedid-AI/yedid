@@ -29,6 +29,8 @@ const CONFIGURABLE_KEYS = [
   'CLOSING_BILLING_PROMPT',
   // Follow-up
   'FOLLOWUP_SECOND_ATTEMPT_HOURS',
+  // Auto-dispatch (platform flag — see leads.js tryAutoDispatch)
+  'AUTO_DISPATCH_ENABLED',
 ]
 
 // In-memory cache

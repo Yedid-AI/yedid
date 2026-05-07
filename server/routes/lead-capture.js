@@ -146,23 +146,13 @@ router.post('/public/capture/:token', async (req, res) => {
       source: 'capture_link',
     }, { onConflict: 'lead_id,user_id' }).catch(() => {})
 
-    // Auto-dispatch if configured
+    // Auto-dispatch — capture link is a webhook-style context (no actor role) →
+    // platform flag only.
     if (branch) {
-      try {
-        const { data: config } = await req.supabaseAdmin
-          .from('dispatch_config')
-          .select('auto_dispatch')
-          .eq('user_id', user.id)
-          .limit(1)
-          .maybeSingle()
-
-        if (config?.auto_dispatch) {
-          const { dispatchLead } = await import('./leads.js')
-          const { data: lead } = await req.supabaseAdmin.from('leads').select('*').eq('id', leadId).single()
-          if (lead) await dispatchLead(req.supabaseAdmin, lead)
-        }
-      } catch (e) {
-        console.log('[capture/auto-dispatch]', e.message)
+      const { data: lead } = await req.supabaseAdmin.from('leads').select('*').eq('id', leadId).single()
+      if (lead) {
+        const { tryAutoDispatch } = await import('./leads.js')
+        tryAutoDispatch(req.supabaseAdmin, lead, null)
       }
     }
 

@@ -152,25 +152,9 @@ router.post('/public/leads', async (req, res) => {
     }
     if (error) throw error
 
-    // Auto-dispatch if configured
-    if (data.branch) {
-      try {
-        const { data: config } = await req.supabaseAdmin
-          .from('dispatch_config')
-          .select('auto_dispatch')
-          .eq('user_id', userId)
-          .limit(1)
-          .maybeSingle()
-
-        if (config?.auto_dispatch) {
-          // Import dispatchLead dynamically to avoid circular deps
-          const { dispatchLead } = await import('./leads.js')
-          await dispatchLead(req.supabaseAdmin, data)
-        }
-      } catch (dispatchErr) {
-        console.log('[public-leads/auto-dispatch]', dispatchErr.message)
-      }
-    }
+    // Auto-dispatch — webhook context (no actor role) → platform flag only.
+    const { tryAutoDispatch } = await import('./leads.js')
+    tryAutoDispatch(req.supabaseAdmin, data, null)
 
     res.status(201).json({ success: true, lead_id: data.id })
   } catch (err) {

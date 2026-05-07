@@ -2,8 +2,9 @@ import { Router } from 'express'
 import { checkRole } from '../middleware.js'
 import { sendMessage } from '../unipile.js'
 import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
-import { getLeadScope, applyLeadScope, canAccessLead, resolveCompanyOwnerId, resolveBranchId } from '../lead-scope.js'
+import { getLeadScope, applyLeadScope, canAccessLead, resolveCompanyOwnerId, resolveBranchId, resolveDefaultBranch } from '../lead-scope.js'
 import { sendNativeMessage } from '../engine/native-messaging.js'
+import { getSetting } from '../settings.js'
 import multer from 'multer'
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } })
@@ -17,6 +18,39 @@ function isNativeChatEnabledFor(unipileAccountId) {
   const whitelist = (process.env.NATIVE_CHAT_INBOXES || '').split(',').map(s => s.trim()).filter(Boolean)
   if (whitelist.length === 0) return true
   return whitelist.includes(unipileAccountId)
+}
+
+/**
+ * Auto-dispatch gate — platform-level, not per-tenant.
+ *
+ * Fires only when:
+ *   1. AUTO_DISPATCH_ENABLED setting is 'true'
+ *   2. The actor is either a system context (no role / webhook / cron) or
+ *      a super_admin/admin. Marketeur/branch coordinators must dispatch
+ *      manually via POST /leads/:id/dispatch.
+ *   3. The lead has a branch resolved (else dispatchLead errors anyway).
+ *
+ * Returns immediately without awaiting — auto-dispatch is fire-and-forget.
+ */
+export function tryAutoDispatch(supabase, lead, actorRole) {
+  if (!lead?.branch && !lead?.branch_id) return
+  if (getSetting('AUTO_DISPATCH_ENABLED') !== 'true') return
+  if (actorRole && !['super_admin', 'admin'].includes(actorRole)) return
+
+  Promise.resolve().then(async () => {
+    try {
+      const result = await dispatchLead(supabase, lead)
+      if (result?.error) {
+        console.warn(`[auto-dispatch] lead=${lead.id} error: ${result.error}`)
+      } else if (result?.queued) {
+        console.log(`[auto-dispatch] lead=${lead.id} queued (out of schedule)`)
+      } else if (result?.success) {
+        console.log(`[auto-dispatch] lead=${lead.id} dispatched to ${lead.branch}`)
+      }
+    } catch (err) {
+      console.error('[auto-dispatch]', err.message)
+    }
+  })
 }
 
 // ─── Leads CRUD ──────────────────────────────────────────
@@ -411,7 +445,8 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
       return res.status(403).json({ error: `Impossible de creer un lead ${company} (vous etes ${req.user.enterprise})` })
     }
 
-    // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index
+    // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index,
+    // then fall back to the tenant's default branch (e.g. aviezer's single snif).
     let branch = req.body.branch || resolveFixedBranch(serviceNormalized) || null
     if (!branch && req.body.city && company === 'babait') {
       const { data: idx } = await req.supabase
@@ -424,6 +459,10 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
 
     // Resolve branch_id from (company owner, branch name) — keep branch text for legacy compat
     const companyOwnerId = await resolveCompanyOwnerId(req.supabaseAdmin, company)
+    if (!branch && companyOwnerId) {
+      const def = await resolveDefaultBranch(req.supabaseAdmin, companyOwnerId)
+      if (def) branch = def.name
+    }
     const branchId = branch ? await resolveBranchId(req.supabaseAdmin, companyOwnerId, branch) : null
 
     // Check for existing lead by normalized phone + user_id
@@ -558,28 +597,10 @@ router.post('/leads', checkRole('admin', 'marketeur'), async (req, res) => {
     // Respond immediately — don't block on auto-dispatch
     res.status(201).json({ lead: data })
 
-    // Auto-dispatch in background (fire-and-forget). We log the actual outcome
-    // so silent failures (no whatsapp account, branch disabled, etc.) are visible.
-    if (data.branch) {
-      req.supabase
-        .from('dispatch_config')
-        .select('auto_dispatch')
-        .eq('user_id', req.user.user_id)
-        .limit(1)
-        .maybeSingle()
-        .then(async ({ data: config }) => {
-          if (!config?.auto_dispatch) return
-          const result = await dispatchLead(req.supabaseAdmin || req.supabase, data)
-          if (result?.error) {
-            console.warn(`[leads/auto-dispatch] lead=${data.id} error: ${result.error}`)
-          } else if (result?.queued) {
-            console.log(`[leads/auto-dispatch] lead=${data.id} queued (out of schedule)`)
-          } else if (result?.success) {
-            console.log(`[leads/auto-dispatch] lead=${data.id} dispatched to ${data.branch}`)
-          }
-        })
-        .catch(err => console.error('[leads/auto-dispatch]', err.message))
-    }
+    // Auto-dispatch is platform-level (AUTO_DISPATCH_ENABLED) and gated by
+    // actor role (only super_admin/admin trigger it; marketeur/branch must
+    // dispatch manually).
+    tryAutoDispatch(req.supabaseAdmin || req.supabase, data, req.user.role)
   } catch (err) {
     console.error('[leads]', err.message)
     res.status(500).json({ error: 'Erreur interne' })

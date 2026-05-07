@@ -462,8 +462,8 @@ async function handleScenario({ config, playbooks, route, userMessage, conversat
 
   const { content: response, metadata: agentMetadata } = result
 
-  // Split on --- for multi-message support (human-like chat bubbles)
-  const messageParts = response.split(/\n?---\n?/).map(p => p.trim()).filter(Boolean)
+  // Split on --- or em-dash with spaces for multi-message support (human-like chat bubbles)
+  const messageParts = response.split(/\n?---\n?|\s+—\s+/).map(p => p.trim()).filter(Boolean)
 
   // Send each part as a separate message with a small delay
   for (let i = 0; i < messageParts.length; i++) {
@@ -827,7 +827,7 @@ async function handleNativeScenario({ config, route, userMessage, conversationHi
 
   if (!result || !result.content) return
 
-  const messageParts = result.content.split(/\n?---\n?/).map(p => p.trim()).filter(Boolean)
+  const messageParts = result.content.split(/\n?---\n?|\s+—\s+/).map(p => p.trim()).filter(Boolean)
   for (let i = 0; i < messageParts.length; i++) {
     if (i > 0) await new Promise(r => setTimeout(r, 800 + Math.random() * 700))
     await sendNativeMessage({
