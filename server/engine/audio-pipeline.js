@@ -372,18 +372,24 @@ async function upsertLeadFromAnalysis(supabase, { userId: _ignoredFollowupUserId
     branchId = await resolveBranchId(supabase, companyOwnerId, branchName)
   }
 
-  // Step 4 — find an existing lead. Prefer same-tenant match on phone; fall
-  // back to cross-tenant (the dedup gate already excluded webhooks, so a
-  // cross-tenant hit here is from a previous internal cron run).
+  // Step 4 — find an existing lead at the *resolved* tenant. We deliberately
+  // ignore cross-tenant matches: enriching a babait-owned lead with an aviezer
+  // branch_id (or vice-versa) leaves an inconsistent row that dispatch can't
+  // route (branch belongs to a different user_id). Webhooks are already
+  // dedup'd cross-tenant earlier (getPhonesBlockedByExternalLead), so any
+  // cross-tenant ghost here is from a previous audio-pipeline run on the
+  // wrong tenant — leaving it alone and creating fresh on the correct tenant
+  // is the right call.
   let existing = null
   {
     const { data } = await supabase
       .from('leads')
       .select('id, user_id, name, city, service_requested, details, metadata, branch, branch_id')
       .eq('phone', phone)
+      .eq('user_id', companyOwnerId)
       .order('created_at', { ascending: false })
-      .limit(5)
-    existing = (data || []).find(l => l.user_id === companyOwnerId) || (data || [])[0] || null
+      .limit(1)
+    existing = (data || [])[0] || null
   }
 
   const detailsLine = analysis.summary ? analysis.summary : null

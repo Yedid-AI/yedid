@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone, listServices } from '../normalize-service.js'
-import { resolveBranchId } from '../lead-scope.js'
+import { resolveBranchId, resolveDefaultBranch } from '../lead-scope.js'
 
 const router = Router()
 
@@ -61,16 +61,26 @@ router.post('/public/capture/:token', async (req, res) => {
     const company = req.body.company || resolveCompany(serviceNormalized)
 
     let branch = req.body.branch || resolveFixedBranch(serviceNormalized) || null
-    if (!branch && req.body.city && company === 'babait') {
+    let branchId = null
+    if (!branch && req.body.city) {
       const { data: idx } = await req.supabaseAdmin
         .from('city_branch_index')
-        .select('branch_name')
+        .select('branch_id, branch_name')
+        .eq('user_id', user.id)
         .eq('city', req.body.city)
         .limit(1)
-      if (idx?.length) branch = idx[0].branch_name
+      if (idx?.length) {
+        branch = idx[0].branch_name
+        branchId = idx[0].branch_id || null
+      }
     }
-
-    const branchId = branch ? await resolveBranchId(req.supabaseAdmin, user.id, branch) : null
+    if (!branch) {
+      const def = await resolveDefaultBranch(req.supabaseAdmin, user.id)
+      if (def) { branch = def.name; branchId = def.id }
+    }
+    if (branch && !branchId) {
+      branchId = await resolveBranchId(req.supabaseAdmin, user.id, branch)
+    }
 
     // Check for existing lead by phone + user_id
     const { data: existing } = await req.supabaseAdmin

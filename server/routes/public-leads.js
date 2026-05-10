@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { getSetting } from '../settings.js'
 import { normalizeService, resolveCompany, resolveFixedBranch, normalizePhone } from '../normalize-service.js'
-import { resolveCompanyOwnerId, resolveBranchId } from '../lead-scope.js'
+import { resolveCompanyOwnerId, resolveBranchId, resolveDefaultBranch } from '../lead-scope.js'
 
 const router = Router()
 
@@ -45,18 +45,29 @@ router.post('/public/leads', async (req, res) => {
     }
     if (!userId) return res.status(400).json({ error: 'Impossible de determiner le user_id' })
 
-    // Auto-resolve branch: fixed branch (Udi services → אודי) or city→branch index
+    // Auto-resolve branch: fixed branch (Udi services → אודי), city→branch index,
+    // then tenant default (e.g. aviezer's single elyahou branch — migration 042).
     let branch = req.body.branch || resolveFixedBranch(serviceNormalized) || null
-    if (!branch && req.body.city && company === 'babait') {
+    let branchId = null
+    if (!branch && req.body.city) {
       const { data: idx } = await req.supabaseAdmin
         .from('city_branch_index')
-        .select('branch_name')
+        .select('branch_id, branch_name')
+        .eq('user_id', userId)
         .eq('city', req.body.city)
         .limit(1)
-      if (idx?.length) branch = idx[0].branch_name
+      if (idx?.length) {
+        branch = idx[0].branch_name
+        branchId = idx[0].branch_id || null
+      }
     }
-
-    const branchId = branch ? await resolveBranchId(req.supabaseAdmin, userId, branch) : null
+    if (!branch) {
+      const def = await resolveDefaultBranch(req.supabaseAdmin, userId)
+      if (def) { branch = def.name; branchId = def.id }
+    }
+    if (branch && !branchId) {
+      branchId = await resolveBranchId(req.supabaseAdmin, userId, branch)
+    }
 
     // Check for existing lead by normalized phone + user_id
     const { data: existing } = await req.supabaseAdmin

@@ -267,6 +267,21 @@ export async function saveLead(params, { supabase, userId, sessionId, conversati
     // Log bot conversation transcript
     logBotTranscript(supabase, data.id, userId, { sessionId, conversationId })
 
+    // Auto-dispatch — chatbot is a system context (no human role). Only fire
+    // when this enrichment actually resolved a branch (avoids re-trying every
+    // turn for leads still missing routing info).
+    if (updates.branch_id || updates.branch) {
+      try {
+        const { data: full } = await supabase.from('leads').select('*').eq('id', data.id).maybeSingle()
+        if (full) {
+          const { tryAutoDispatch } = await import('../routes/leads.js')
+          tryAutoDispatch(supabase, full, null)
+        }
+      } catch (e) {
+        console.warn('[internal-tools/save_lead] auto-dispatch hook failed:', e.message)
+      }
+    }
+
     return JSON.stringify({ success: true, lead_id: data.id, updated: true, message: `Lead enriched: ${data.name} (${data.phone})` })
   }
 
@@ -318,6 +333,20 @@ export async function saveLead(params, { supabase, userId, sessionId, conversati
 
   // Log bot conversation transcript
   logBotTranscript(supabase, data.id, userId, { sessionId, conversationId })
+
+  // Auto-dispatch — chatbot is a system context (no human role). Only when a
+  // branch was resolved at create time (otherwise dispatchLead errors anyway).
+  if (branchId || branch) {
+    try {
+      const { data: full } = await supabase.from('leads').select('*').eq('id', data.id).maybeSingle()
+      if (full) {
+        const { tryAutoDispatch } = await import('../routes/leads.js')
+        tryAutoDispatch(supabase, full, null)
+      }
+    } catch (e) {
+      console.warn('[internal-tools/save_lead] auto-dispatch hook failed:', e.message)
+    }
+  }
 
   return JSON.stringify({ success: true, lead_id: data.id, message: `Lead saved: ${data.name} (${data.phone})` })
 }
