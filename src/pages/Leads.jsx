@@ -846,7 +846,7 @@ export default function Leads() {
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                  {selectedLead.branch && (
+                  {(selectedLead.branch || selectedLead.branch_id) && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={dispatchLead.isPending}>
@@ -858,7 +858,7 @@ export default function Leads() {
                         <AlertDialogHeader>
                           <AlertDialogTitle>{t('leads.dispatchConfirmTitle')}</AlertDialogTitle>
                           <AlertDialogDescription>
-                            {t('leads.dispatchConfirmDesc', { name: selectedLead.name, branch: selectedLead.branch })}
+                            {t('leads.dispatchConfirmDesc', { name: selectedLead.name, branch: selectedLead.branch || branches.find(b => b.id === selectedLead.branch_id)?.name || '' })}
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
