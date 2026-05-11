@@ -846,7 +846,7 @@ export default function Leads() {
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
-                  {selectedLead.branch && selectedLead.status !== 'sent_to_branch' && (
+                  {selectedLead.branch && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
                         <Button variant="outline" size="sm" className="h-7 text-xs gap-1" disabled={dispatchLead.isPending}>
